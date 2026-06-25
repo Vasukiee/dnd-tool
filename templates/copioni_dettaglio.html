@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% set numeri = sessioni | map(attribute='numero') | list %}
+{% set idx = numeri.index(numero_sessione) %}
+{% set precedente = sessioni[idx + 1] if idx + 1 < sessioni|length else None %}
+{% set successiva = sessioni[idx - 1] if idx > 0 else None %}
+
+<div class="page-header">
+    <p class="page-eyebrow">
+        {% if is_template %}Showcase{% else %}Sessione {{ numero_sessione }}{% endif %}
+    </p>
+    <h1 class="page-title">{{ titolo }}</h1>
+</div>
+
+<div class="actions-row" style="margin-bottom:32px; justify-content:space-between;">
+    <div class="actions-row">
+        {% if precedente %}
+        <a href="{{ url_for('copioni_dettaglio', numero_sessione=precedente.numero) }}" class="btn btn--ghost">
+            ← Sessione {{ precedente.numero }}
+        </a>
+        {% endif %}
+        <a href="{{ url_for('copioni_indice') }}" class="btn btn--ghost">Indice</a>
+        {% if successiva %}
+        <a href="{{ url_for('copioni_dettaglio', numero_sessione=successiva.numero) }}" class="btn btn--ghost">
+            Sessione {{ successiva.numero }} →
+        </a>
+        {% endif %}
+    </div>
+
+    {% if not is_template %}
+    <form method="post" action="{{ url_for('copioni_toggle_completata', numero_sessione=numero_sessione) }}">
+        <button type="submit" class="completata-toggle {% if completata %}completata-toggle--attivo{% endif %}">
+            <span class="completata-toggle__check">{% if completata %}✓{% endif %}</span>
+            {{ 'Completata, mostrabile alla giocatrice' if completata else 'Segna come completata' }}
+        </button>
+    </form>
+    {% endif %}
+</div>
+
+<div class="copione-layout">
+    <div class="copione-corpo">
+        {{ contenuto_html | safe }}
+    </div>
+
+    {% if heading_list %}
+    <nav class="copione-outline" id="copione-outline" aria-label="Indice scene">
+        {% for h in heading_list %}
+        <a href="#{{ h.id }}" class="copione-outline__item" data-heading-id="{{ h.id }}">
+            {{ h.testo }}
+        </a>
+        {% endfor %}
+    </nav>
+    {% endif %}
+</div>
+
+{% if heading_list %}
+<script>
+    (function () {
+        const outline = document.getElementById('copione-outline');
+        if (!outline) return;
+
+        const items = Array.from(outline.querySelectorAll('.copione-outline__item'));
+        const targets = items
+            .map(item => document.getElementById(item.dataset.headingId))
+            .filter(Boolean);
+
+        if (targets.length === 0) return;
+
+        function impostaAttivo(idAttivo) {
+            items.forEach(item => {
+                const distanza = Math.abs(items.indexOf(item) - items.findIndex(i => i.dataset.headingId === idAttivo));
+                item.classList.toggle('copione-outline__item--attivo', item.dataset.headingId === idAttivo);
+                const scala = Math.max(1 - distanza * 0.13, 0.62);
+                item.style.fontSize = (0.85 * scala) + 'rem';
+                item.style.opacity = Math.max(1 - distanza * 0.18, 0.38);
+            });
+        }
+
+        let idCorrente = targets[0].id;
+        const observer = new IntersectionObserver((entries) => {
+            const visibili = entries.filter(e => e.isIntersecting).map(e => e.target.id);
+            if (visibili.length > 0) {
+                const primoVisibile = targets.find(t => visibili.includes(t.id));
+                if (primoVisibile) {
+                    idCorrente = primoVisibile.id;
+                    impostaAttivo(idCorrente);
+                }
+            }
+        }, {
+            rootMargin: '-10% 0px -70% 0px',
+            threshold: 0,
+        });
+
+        targets.forEach(t => observer.observe(t));
+        impostaAttivo(idCorrente);
+    })();
+</script>
+{% endif %}
+
+{% endblock %}

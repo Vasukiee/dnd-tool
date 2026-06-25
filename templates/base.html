@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Il Registro{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="shell">
+    <nav class="sidebar">
+        <p class="sidebar__title">Il Registro</p>
+        <p class="sidebar__subtitle">Sorveglianza di campagna</p>
+        <div class="nav">
+            <a class="nav__item {% if active == 'home' %}active{% endif %}" href="{{ url_for('home') }}">
+                <span>Sommario</span>
+            </a>
+            <a class="nav__item {% if active == 'npc' %}active{% endif %}" href="{{ url_for('lista_npc') }}">
+                <span>Personaggi</span>
+            </a>
+            <a class="nav__item {% if active == 'fazioni' %}active{% endif %}" href="{{ url_for('lista_fazioni') }}">
+                <span>Fazioni</span>
+            </a>
+            <a class="nav__item {% if active == 'locations' %}active{% endif %}" href="{{ url_for('lista_locations') }}">
+                <span>Luoghi</span>
+            </a>
+            <a class="nav__item {% if active == 'quest' %}active{% endif %}" href="{{ url_for('lista_quest') }}">
+                <span>Incarichi</span>
+            </a>
+            <a class="nav__item {% if active == 'eventi' %}active{% endif %}" href="{{ url_for('lista_eventi') }}">
+                <span>Cronaca</span>
+            </a>
+            <a class="nav__item {% if active == 'fatti' %}active{% endif %}" href="{{ url_for('lista_fatti') }}">
+                <span>Verità accertate</span>
+            </a>
+            <a class="nav__item {% if active == 'pg' %}active{% endif %}" href="{{ url_for('pg_stato_page') }}">
+                <span>Il Soggetto</span>
+            </a>
+            <a href="{{ url_for('copioni_indice') }}"
+               class="nav__item {% if active=='copioni' %}active{% endif %}">
+                <span>Copioni</span>
+            </a>
+            <a href="{{ url_for('audio_lista') }}"
+               class="nav__item {% if active=='audio' %}active{% endif %}">
+                Audio
+            </a>
+            {% if not modalita_giocatrice %}
+            <a href="{{ url_for('genera_prompt_page') }}" class="nav__item {% if active=='genera' %}active{% endif %}">
+                Genera prompt
+            </a>
+            {% endif %}
+        </div>
+        <form method="post" action="{{ url_for('toggle_modalita_giocatrice') }}" class="modalita-toggle" data-attiva="{{ 'true' if modalita_giocatrice else 'false' }}">
+            <button type="submit" class="modalita-toggle__btn" title="{{ 'Mostra sezioni da master' if modalita_giocatrice else 'Nascondi sezioni da master' }}">
+                {% if modalita_giocatrice %}
+                <!-- icona: occhio chiuso/barrato -->
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                </svg>
+                {% else %}
+                <!-- icona: occhio aperto -->
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                </svg>
+                {% endif %}
+            </button>
+        </form>
+    </nav>
+    <main class="main">
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        {% for message in messages %}
+        <div class="flash">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </main>
+</div>
+<script>
+(function () {
+    var form = document.querySelector(".modalita-toggle");
+    if (!form) return;
+    form.addEventListener("submit", function (e) {
+        if (form.dataset.attiva !== "true") return;
+        if (sessionStorage.getItem("sbloccato") === "1") {
+            var inp = document.createElement("input");
+            inp.type = "hidden";
+            inp.name = "sbloccato_tab";
+            inp.value = "1";
+            form.appendChild(inp);
+        } else {
+            e.preventDefault();
+            window.location.href = "{{ url_for('sblocca_modalita') }}?next=" + encodeURIComponent(window.location.pathname);
+        }
+    });
+})();
+</script>
+</body>
+</html>

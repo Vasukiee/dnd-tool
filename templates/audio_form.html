@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">Colonna sonora</p>
+    <h1 class="page-title">Nuova traccia</h1>
+</div>
+
+<form method="post" class="form-grid">
+    <div class="form-field">
+        <label>Nome</label>
+        <input type="text" name="nome" required placeholder="es. Fonderia / Acciaieria">
+    </div>
+
+    <div class="form-field">
+        <label>Categoria</label>
+        <input type="text" name="categoria" required list="categorie-esistenti"
+               placeholder="es. industriale, tensione, intimo, orrore">
+        <datalist id="categorie-esistenti">
+            {% for cat in categorie %}
+            <option value="{{ cat }}">
+                {% endfor %}
+        </datalist>
+    </div>
+
+    <div class="form-field">
+        <label>ID video YouTube</label>
+        <input type="text" name="youtube_id" required
+               placeholder="es. P1rgc5FBPOM (solo l'ID, non l'URL intero)">
+        <p class="page-meta">
+            Si trova nell'URL dopo "watch?v=" — es. da
+            youtube.com/watch?v=<strong>P1rgc5FBPOM</strong>&amp;t=1350s copi solo P1rgc5FBPOM
+        </p>
+    </div>
+
+    <div class="form-field">
+        <label>Timestamp di partenza (secondi, opzionale)</label>
+        <input type="number" name="timestamp_inizio" value="0" min="0">
+    </div>
+
+    <div class="form-field">
+        <label>Note</label>
+        <textarea name="note" placeholder="es. buono per scene in miniera, loop lungo"></textarea>
+    </div>
+
+    <div class="form-field">
+        <label>Location associata (opzionale)</label>
+        <select name="location_id">
+            <option value="">— nessuna —</option>
+            {% for loc in locations %}
+            <option value="{{ loc.id }}">{{ loc.nome }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-field">
+        <label>Quest associata (opzionale)</label>
+        <select name="quest_id">
+            <option value="">— nessuna —</option>
+            {% for q in quest %}
+            <option value="{{ q.id }}">{{ q.nome }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="actions-row">
+        <button type="submit" class="btn">Salva traccia</button>
+        <a href="{{ url_for('audio_lista') }}" class="btn btn--ghost">Annulla</a>
+    </div>
+</form>
+
+{% endblock %}

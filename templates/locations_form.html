@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{% if location %}Modifica {{ location.nome }}{% else %}Nuovo luogo{% endif %} — Il Registro{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">{% if location %}Modifica scheda{% else %}Nuova scheda{% endif %}</p>
+    <h1 class="page-title">{% if location %}{{ location.nome }}{% else %}Nuovo luogo{% endif %}</h1>
+</div>
+
+<form method="POST" class="form-grid">
+    <div class="form-field">
+        <label for="nome">Nome</label>
+        <input type="text" id="nome" name="nome" value="{{ location.nome if location else '' }}" required>
+    </div>
+
+    <div class="form-field">
+        <label for="tipo">Tipo</label>
+        <input type="text" id="tipo" name="tipo" value="{{ location.tipo if location else '' }}" placeholder="es. città, quartiere, dungeon, regione">
+    </div>
+
+    <div class="form-field">
+        <label for="fazione_controllante_id">Fazione controllante</label>
+        <select id="fazione_controllante_id" name="fazione_controllante_id">
+            <option value="">— nessuna —</option>
+            {% for f in fazioni %}
+            <option value="{{ f.id }}" {% if location and location.fazione_controllante_id == f.id %}selected{% endif %}>{{ f.nome }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-field">
+        <label for="descrizione_breve">Descrizione breve</label>
+        <textarea id="descrizione_breve" name="descrizione_breve">{{ location.descrizione_breve if location else '' }}</textarea>
+    </div>
+
+    <div class="form-field">
+        <label for="stato_attuale">Stato attuale</label>
+        <input type="text" id="stato_attuale" name="stato_attuale" value="{{ location.stato_attuale if location else '' }}" placeholder="es. 'in rovina dopo l'attacco'">
+    </div>
+
+    <div class="form-field">
+        <label for="note">Note libere</label>
+        <textarea id="note" name="note">{{ location.note if location else '' }}</textarea>
+    </div>
+
+    <div class="actions-row">
+        <button type="submit" class="btn">Salva</button>
+        <a class="btn btn--ghost" href="{{ url_for('lista_locations') }}">Annulla</a>
+    </div>
+</form>
+
+{% endblock %}

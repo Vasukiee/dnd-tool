@@ -1,0 +1,6 @@
+flask
+gunicorn
+psycopg2-binary
+markdown
+beautifulsoup4
+python-dotenv
