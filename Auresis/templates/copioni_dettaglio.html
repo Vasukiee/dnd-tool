@@ -1,4 +1,125 @@
 {% extends "base.html" %}
+
+{% block extra_head %}
+<style>
+    html { scroll-behavior: smooth; }
+
+    /* Rimuoviamo il limite di larghezza della main area solo per questa pagina */
+    .main {
+        max-width: none !important;
+    }
+    
+    /* Layout a 3 colonne usando flexbox */
+    .copione-flex-layout {
+        display: flex;
+        justify-content: center;
+        gap: 40px;
+        width: 100%;
+    }
+
+    /* Override header per integrare i bottoni nella stessa griglia a 3 colonne */
+    .page-header {
+        display: flex;
+        justify-content: center;
+        gap: 40px;
+        width: 100%;
+        max-width: none;
+        margin: 0 0 40px 0;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--ink-line);
+        align-items: flex-end; /* Allinea bottoni e titolo alla base */
+    }
+
+    /* Colonna sinistra: Navigazione */
+    .copione-col-left {
+        flex: 1 1 220px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end; /* allinea a destra, verso il testo */
+    }
+
+    /* Colonna centrale: Titolo (nell'header) o Testo (nel corpo) */
+    .copione-col-center {
+        flex: 0 1 680px;
+        min-width: 0;
+    }
+    
+    .page-header .copione-col-center {
+        text-align: center;
+    }
+
+    .copione-col-center .copione-corpo {
+        max-width: none;
+    }
+
+    /* Colonna destra: Azioni (nell'header) o Outline (nel corpo) */
+    .copione-col-right {
+        flex: 1 1 220px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start; /* allinea a sinistra, verso il testo */
+    }
+
+    /* Regole specifiche per l'header: togliamo ogni limite per non far impilare i bottoni */
+    .page-header .copione-col-left, 
+    .page-header .copione-col-right {
+        max-width: none;
+        flex-direction: row; /* Forza layout orizzontale */
+        align-items: flex-end; /* Appoggiati alla linea inferiore */
+    }
+
+    .page-header .copione-col-left {
+        justify-content: flex-end; /* spinge i bottoni verso il titolo */
+    }
+
+    /* Contenitori bottoni per la riga header: rigidi e in linea */
+    .copione-nav-buttons, .copione-action-buttons {
+        display: flex;
+        flex-direction: row;
+        gap: 12px;
+        flex-wrap: nowrap; /* IMPEDISCE DI ANDARE A CAPO */
+        white-space: nowrap; /* TESTO SU UNA RIGA */
+        margin-bottom: 6px; /* offset per allineamento ottico col titolo */
+    }
+
+    
+    .copione-nav-buttons {
+        justify-content: flex-end;
+    }
+
+    /* Stili override per outline */
+    .copione-outline {
+        position: sticky;
+        top: 40px; /* Offset quando l'utente scrolla */
+        max-height: calc(100vh - 80px);
+        overflow-y: auto;
+        border-left: 2px solid var(--ink-line);
+        padding-left: 16px;
+        gap: 12px;
+        margin: 95px 0 0 0; /* Allineamento con la prima linea separatrice */
+        display: flex;
+        flex-direction: column;
+        scrollbar-width: none;
+    }
+    .copione-outline::-webkit-scrollbar { display: none; }
+
+    /* Fallback responsivo per schermi medi e piccoli */
+    @media (max-width: 1100px) {
+        .page-header { flex-wrap: wrap; align-items: center; }
+        .copione-col-left { display: none; }
+        .copione-flex-layout { justify-content: flex-start; }
+    }
+    
+    @media (max-width: 800px) {
+        .copione-flex-layout { flex-direction: column; gap: 20px; }
+        .copione-col-right { position: static; max-width: 100%; }
+        .copione-outline { border-left: none; padding-left: 0; position: static; max-height: none; }
+        .page-header { flex-direction: column; border-bottom: none; }
+        .copione-action-buttons { justify-content: center; width: 100%; margin-top: 20px; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 
 {% set numeri = sessioni | map(attribute='numero') | list %}
@@ -6,55 +127,75 @@
 {% set precedente = sessioni[idx + 1] if idx + 1 < sessioni|length else None %}
 {% set successiva = sessioni[idx - 1] if idx > 0 else None %}
 
+<!-- HEADER UNIFICATO: Pulsanti sx | Titolo centro | Pulsanti dx -->
 <div class="page-header">
-    <p class="page-eyebrow">
-        {% if is_template %}Showcase{% else %}Sessione {{ numero_sessione }}{% endif %}
-    </p>
-    <h1 class="page-title">{{ titolo }}</h1>
+    
+    <!-- Pulsanti di Navigazione a sinistra -->
+    <div class="copione-col-left">
+        <div class="copione-nav-buttons">
+            {% if precedente %}
+            <a href="{{ url_for('copioni_dettaglio', numero_sessione=precedente.numero) }}" class="btn btn--ghost">
+                ← Sessione {{ precedente.numero }}
+            </a>
+            {% endif %}
+            <a href="{{ url_for('copioni_indice') }}" class="btn btn--ghost">Indice</a>
+            {% if successiva %}
+            <a href="{{ url_for('copioni_dettaglio', numero_sessione=successiva.numero) }}" class="btn btn--ghost">
+                Sessione {{ successiva.numero }} →
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Titolo al centro -->
+    <div class="copione-col-center">
+        <p class="page-eyebrow">
+            {% if is_template %}Showcase{% else %}Sessione {{ numero_sessione }}{% endif %}
+        </p>
+        <h1 class="page-title">{{ titolo }}</h1>
+    </div>
+
+    <!-- Pulsanti d'Azione a destra -->
+    <div class="copione-col-right">
+        <div class="copione-action-buttons">
+            {% if not is_template %}
+            <form method="post" action="{{ url_for('copioni_toggle_completata', numero_sessione=numero_sessione) }}" style="margin: 0; display: inline-flex;">
+                <button type="submit" class="completata-toggle {% if completata %}completata-toggle--attivo{% endif %}">
+                    <span class="completata-toggle__check">{% if completata %}✓{% endif %}</span>
+                    {{ 'Completata' if completata else 'Segna come completata' }}
+                </button>
+            </form>
+            {% endif %}
+            <a href="{{ url_for('copioni_modifica', numero_sessione=numero_sessione) }}" class="btn btn--ghost">✎ Modifica</a>
+        </div>
+    </div>
+
 </div>
 
-<div class="actions-row" style="margin-bottom:32px; justify-content:space-between;">
-    <div class="actions-row">
-        {% if precedente %}
-        <a href="{{ url_for('copioni_dettaglio', numero_sessione=precedente.numero) }}" class="btn btn--ghost">
-            ← Sessione {{ precedente.numero }}
-        </a>
-        {% endif %}
-        <a href="{{ url_for('copioni_indice') }}" class="btn btn--ghost">Indice</a>
-        {% if successiva %}
-        <a href="{{ url_for('copioni_dettaglio', numero_sessione=successiva.numero) }}" class="btn btn--ghost">
-            Sessione {{ successiva.numero }} →
-        </a>
-        {% endif %}
+<!-- CORPO E OUTLINE -->
+<div class="copione-flex-layout">
+    <!-- Bilanciamento vuoto a sx -->
+    <div class="copione-col-left"></div>
+
+    <!-- Corpo del Copione -->
+    <div class="copione-col-center">
+        <div class="copione-corpo">
+            {{ contenuto_html | safe }}
+        </div>
     </div>
 
-    <div class="actions-row">
-        {% if not is_template %}
-        <form method="post" action="{{ url_for('copioni_toggle_completata', numero_sessione=numero_sessione) }}">
-            <button type="submit" class="completata-toggle {% if completata %}completata-toggle--attivo{% endif %}">
-                <span class="completata-toggle__check">{% if completata %}✓{% endif %}</span>
-                {{ 'Completata' if completata else 'Segna come completata' }}
-            </button>
-        </form>
+    <!-- Outline a dx -->
+    <div class="copione-col-right">
+        {% if heading_list %}
+        <nav class="copione-outline" id="copione-outline" aria-label="Indice scene">
+            {% for h in heading_list %}
+            <a href="#{{ h.id }}" class="copione-outline__item" data-heading-id="{{ h.id }}">
+                {{ h.testo }}
+            </a>
+            {% endfor %}
+        </nav>
         {% endif %}
-        <a href="{{ url_for('copioni_modifica', numero_sessione=numero_sessione) }}" class="btn btn--ghost">✎ Modifica</a>
     </div>
-</div>
-
-<div class="copione-layout">
-    <div class="copione-corpo">
-        {{ contenuto_html | safe }}
-    </div>
-
-    {% if heading_list %}
-    <nav class="copione-outline" id="copione-outline" aria-label="Indice scene">
-        {% for h in heading_list %}
-        <a href="#{{ h.id }}" class="copione-outline__item" data-heading-id="{{ h.id }}">
-            {{ h.testo }}
-        </a>
-        {% endfor %}
-    </nav>
-    {% endif %}
 </div>
 
 {% if heading_list %}
