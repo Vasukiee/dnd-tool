@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Indagini — Il Registro{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">Strumento da master</p>
+    <h1 class="page-title">Indagini</h1>
+</div>
+
+<div class="actions-row" style="margin-bottom: 28px;">
+    <a class="btn" href="{{ url_for('nuova_indagine') }}">+ Nuova indagine</a>
+</div>
+
+{% if indagini %}
+<div class="related-list">
+    {% for ind in indagini %}
+    <div class="related-item" style="align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+        <div style="flex: 1; min-width: 0;">
+            <p style="margin: 0 0 4px 0; font-family: var(--font-display); font-size: 1.05rem;">{{ ind.titolo }}</p>
+            {% if ind.descrizione %}
+            <p style="margin: 0 0 6px 0; color: var(--bone-dim); font-size: 0.85rem;">{{ ind.descrizione }}</p>
+            {% endif %}
+            <span class="tag" style="{% if ind.attiva %}color: var(--verdigris-bright); border-color: var(--verdigris);{% else %}color: var(--bone-dim); border-color: var(--ink-line);{% endif %}">
+                {{ 'attiva' if ind.attiva else 'archiviata' }}
+            </span>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <a class="btn" href="{{ url_for('indagini_editor', indagine_id=ind.id) }}">Editor</a>
+            <a class="btn" href="{{ url_for('indagini_live', indagine_id=ind.id) }}" style="border-color: var(--gold); color: var(--gold-bright);">Vista live</a>
+            <a class="btn" href="{{ url_for('edita_indagine', indagine_id=ind.id) }}" style="font-size: 0.75rem; padding: 5px 10px;">Modifica</a>
+            <form method="POST" action="{{ url_for('elimina_indagine', indagine_id=ind.id) }}" onsubmit="return confirm('Eliminare l\'indagine e tutti i suoi nodi?');">
+                <button type="submit" class="btn btn--danger" style="font-size: 0.75rem; padding: 5px 10px;">Elimina</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <p class="empty-state__title">Nessuna indagine ancora.</p>
+    <p style="color: var(--bone-dim); font-size: 0.85rem;">Crea la prima per iniziare a costruire la mappa degli indizi.</p>
+</div>
+{% endif %}
+
+{% endblock %}

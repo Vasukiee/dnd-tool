@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Fazioni — Il Registro{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">Poteri in campo</p>
+    <h1 class="page-title">Fazioni</h1>
+</div>
+
+<div class="actions-row" style="margin-bottom: 28px;">
+    <a class="btn" href="{{ url_for('nuova_fazione') }}">+ Nuova fazione</a>
+</div>
+
+{% if fazioni_list %}
+<div class="entry-grid">
+    {% for f in fazioni_list %}
+    <div class="card">
+        <h3 class="card__title"><a href="{{ url_for('dettaglio_fazione', fazione_id=f.id) }}">{{ f.nome }}</a></h3>
+        <p class="card__subtitle">{{ f.nome_popolare or '' }} {% if f.territorio %}· {{ f.territorio }}{% endif %}</p>
+        {% if f.ideologia %}<p class="card__desc">{{ f.ideologia }}</p>{% endif %}
+        <div class="card__footer">
+            <span class="tag tag--{{ f.relazione_pg }}">{{ f.relazione_pg }}</span>
+            {% if not f.attiva %}<span class="tag tag--morto">disciolta</span>{% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <p class="empty-state__title">Nessuna fazione ancora registrata.</p>
+</div>
+{% endif %}
+
+{% endblock %}

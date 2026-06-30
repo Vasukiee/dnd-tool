@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">Colonna sonora</p>
+    <h1 class="page-title">{% if traccia %}Modifica traccia{% else %}Nuova traccia{% endif %}</h1>
+</div>
+
+<form method="post" class="form-grid"
+      action="{{ url_for('audio_modifica', traccia_id=traccia.id) if traccia else url_for('audio_nuova') }}">
+    <div class="form-field">
+        <label>Nome</label>
+        <input type="text" name="nome" required placeholder="es. Fonderia / Acciaieria"
+               value="{{ traccia.nome if traccia else '' }}">
+    </div>
+
+    <div class="form-field">
+        <label>Tag (separati da virgola)</label>
+        <input type="text" name="tag" list="tag-esistenti"
+               placeholder="es. industriale, tensione"
+               value="{{ tag_attuali }}">
+        <datalist id="tag-esistenti">
+            {% for t in tag_disponibili %}
+            <option value="{{ t }}"></option>
+            {% endfor %}
+        </datalist>
+        <p class="form__hint">Scrivi più tag separati da virgola. I tag già usati appaiono come suggerimento.</p>
+    </div>
+
+    <div class="form-field">
+        <label>Tipo di sorgente</label>
+        <div style="display:flex; gap:24px; margin-top:4px;">
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                <input type="radio" name="tipo_sorgente" value="youtube"
+                       {% if not traccia or traccia.tipo_sorgente == 'youtube' %}checked{% endif %}
+                       onchange="aggiornaSorgente(this.value)"> YouTube
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                <input type="radio" name="tipo_sorgente" value="file"
+                       {% if traccia and traccia.tipo_sorgente == 'file' %}checked{% endif %}
+                       onchange="aggiornaSorgente(this.value)"> File audio (static/audio/)
+            </label>
+        </div>
+    </div>
+
+    <div id="blocco-youtube" {% if traccia and traccia.tipo_sorgente == 'file' %}style="display:none;"{% endif %}>
+        <div class="form-field">
+            <label>ID video YouTube</label>
+            <input type="text" name="youtube_id" id="youtube_id"
+                   placeholder="es. P1rgc5FBPOM (solo l'ID, non l'URL intero)"
+                   value="{{ traccia.youtube_id if traccia and traccia.youtube_id else '' }}">
+            <p class="page-meta">
+                Si trova nell'URL dopo "watch?v=" — es. da
+                youtube.com/watch?v=<strong>P1rgc5FBPOM</strong>&amp;t=1350s copi solo P1rgc5FBPOM
+            </p>
+        </div>
+
+        <div class="form-field">
+            <label>Timestamp di partenza (secondi, opzionale)</label>
+            <input type="number" name="timestamp_inizio" min="0"
+                   value="{{ traccia.timestamp_inizio if traccia else 0 }}">
+        </div>
+    </div>
+
+    <div id="blocco-file" {% if not traccia or traccia.tipo_sorgente != 'file' %}style="display:none;"{% endif %}>
+        <div class="form-field">
+            <label>File audio</label>
+            {% if file_audio_disponibili %}
+            <select name="file_path">
+                <option value="">— scegli un file —</option>
+                {% for f in file_audio_disponibili %}
+                <option value="{{ f }}" {% if traccia and traccia.file_path == f %}selected{% endif %}>{{ f }}</option>
+                {% endfor %}
+            </select>
+            {% else %}
+            <select name="file_path" disabled>
+                <option value="">— nessun file disponibile —</option>
+            </select>
+            <p class="page-meta">Nessun file trovato in static/audio/ — aggiungi un file lì e ricarica la pagina.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="form-field">
+        <label>Note</label>
+        <textarea name="note" placeholder="es. buono per scene in miniera, loop lungo">{{ traccia.note if traccia and traccia.note else '' }}</textarea>
+    </div>
+
+    <div class="form-field">
+        <label>Location associata (opzionale)</label>
+        <select name="location_id">
+            <option value="">— nessuna —</option>
+            {% for loc in locations %}
+            <option value="{{ loc.id }}" {% if traccia and traccia.location_id == loc.id %}selected{% endif %}>{{ loc.nome }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-field">
+        <label>Quest associata (opzionale)</label>
+        <select name="quest_id">
+            <option value="">— nessuna —</option>
+            {% for q in quest %}
+            <option value="{{ q.id }}" {% if traccia and traccia.quest_id == q.id %}selected{% endif %}>{{ q.nome }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="actions-row">
+        <button type="submit" class="btn">{% if traccia %}Salva modifiche{% else %}Salva traccia{% endif %}</button>
+        <a href="{{ url_for('audio_lista') }}" class="btn btn--ghost">Annulla</a>
+    </div>
+</form>
+
+<script>
+function aggiornaSorgente(valore) {
+    var youtube = document.getElementById('blocco-youtube');
+    var file = document.getElementById('blocco-file');
+    var ytInput = document.getElementById('youtube_id');
+    if (valore === 'file') {
+        youtube.style.display = 'none';
+        file.style.display = 'block';
+        ytInput.removeAttribute('required');
+    } else {
+        youtube.style.display = 'block';
+        file.style.display = 'none';
+        ytInput.setAttribute('required', '');
+    }
+}
+// Inizializza required correttamente in base alla sorgente attiva
+(function() {
+    var ytInput = document.getElementById('youtube_id');
+    var checkedRadio = document.querySelector('input[name="tipo_sorgente"]:checked');
+    if (checkedRadio && checkedRadio.value === 'file') {
+        ytInput.removeAttribute('required');
+    } else {
+        ytInput.setAttribute('required', '');
+    }
+})();
+
+// Suggerimento automatico tag (match esatto case-insensitive su nome + note)
+(function() {
+    var TAG_ESISTENTI = {{ tag_disponibili | tojson }};
+    if (!TAG_ESISTENTI.length) return;
+
+    var campoNome = document.querySelector('[name="nome"]');
+    var campoNote = document.querySelector('[name="note"]');
+    var campoTag  = document.querySelector('[name="tag"]');
+    var timer = null;
+
+    function suggerisciTag() {
+        var testo = (campoNome.value + ' ' + campoNote.value).toLowerCase();
+
+        var tagsAttuali = campoTag.value.split(',')
+            .map(function(t) { return t.trim(); })
+            .filter(function(t) { return t.length > 0; });
+        var tagsLower = tagsAttuali.map(function(t) { return t.toLowerCase(); });
+
+        var aggiunti = [];
+        TAG_ESISTENTI.forEach(function(tag) {
+            if (testo.includes(tag.toLowerCase()) && !tagsLower.includes(tag.toLowerCase())) {
+                tagsAttuali.push(tag);
+                tagsLower.push(tag.toLowerCase());
+                aggiunti.push(tag);
+            }
+        });
+
+        if (aggiunti.length) {
+            campoTag.value = tagsAttuali.join(', ');
+            // Feedback visivo: bordo oro per 500ms
+            campoTag.style.transition = 'border-color 0.15s';
+            campoTag.style.borderColor = 'var(--gold-bright)';
+            setTimeout(function() { campoTag.style.borderColor = ''; }, 500);
+        }
+    }
+
+    function onInput() {
+        clearTimeout(timer);
+        timer = setTimeout(suggerisciTag, 300);
+    }
+
+    campoNome.addEventListener('input', onInput);
+    campoNote.addEventListener('input', onInput);
+})();
+</script>
+
+{% endblock %}

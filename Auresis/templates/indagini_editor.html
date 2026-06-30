@@ -1,0 +1,385 @@
+{% extends "base.html" %}
+{% block title %}Editor — {{ indagine.titolo }} — Il Registro{% endblock %}
+{% block content %}
+
+<style>
+.indagini-layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 0;
+    height: calc(100vh - 48px);
+    overflow: hidden;
+}
+.graph-area {
+    overflow: auto;
+    background: var(--ink);
+    border-right: 1px solid var(--ink-line);
+    position: relative;
+}
+.graph-svg {
+    display: block;
+}
+.sidebar-panel {
+    overflow-y: auto;
+    padding: 20px;
+    background: var(--ink-raised);
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+.panel-section {
+    border-bottom: 1px solid var(--ink-line);
+    padding-bottom: 20px;
+}
+.panel-section:last-child { border-bottom: none; }
+.panel-title {
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    color: var(--gold-bright);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin: 0 0 12px 0;
+}
+.node-editor { display: none; }
+.node-editor.visible { display: block; }
+
+/* SVG nodi */
+.g-node rect {
+    cursor: pointer;
+    transition: filter 0.15s;
+}
+.g-node rect:hover { filter: brightness(1.3); }
+.g-node.selected rect { stroke: var(--gold-bright) !important; stroke-width: 2px !important; }
+.g-edge path { fill: none; stroke: var(--bone-dim); stroke-width: 1.5px; }
+.g-edge polygon { fill: var(--bone-dim); }
+</style>
+
+<div style="padding: 16px 20px; border-bottom: 1px solid var(--ink-line); display: flex; align-items: center; gap: 16px; background: var(--ink-raised);">
+    <a href="{{ url_for('lista_indagini') }}" style="color: var(--bone-dim); font-size: 0.85rem;">← Indagini</a>
+    <h1 style="margin: 0; font-family: var(--font-display); font-size: 1.1rem; color: var(--gold-bright);">{{ indagine.titolo }}</h1>
+    <span style="font-size: 0.75rem; color: var(--bone-dim); font-family: var(--font-mono);">editor</span>
+    <a href="{{ url_for('indagini_live', indagine_id=indagine.id) }}" class="btn" style="margin-left: auto; font-size: 0.78rem; padding: 5px 12px; border-color: var(--gold); color: var(--gold-bright);">Vista live →</a>
+</div>
+
+<div class="indagini-layout">
+    <!-- GRAFO -->
+    <div class="graph-area" id="graphArea">
+        <svg class="graph-svg" id="graphSvg">
+            <defs>
+                <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                    <polygon points="0 0, 8 3, 0 6" fill="var(--bone-dim)"/>
+                </marker>
+            </defs>
+            <g id="graphG"></g>
+        </svg>
+    </div>
+
+    <!-- PANNELLO LATERALE -->
+    <div class="sidebar-panel">
+        <!-- Nodo selezionato: modifica -->
+        <div class="panel-section" id="nodeEditorSection" style="display:none;">
+            <p class="panel-title">Modifica nodo</p>
+            <form id="nodeEditForm" method="POST" class="form-grid" style="gap: 8px;">
+                <div class="form-field">
+                    <label>Numero nodo</label>
+                    <input type="number" name="numero_nodo" id="edit_numero_nodo">
+                </div>
+                <div class="form-field">
+                    <label>Titolo *</label>
+                    <input type="text" name="titolo" id="edit_titolo" required>
+                </div>
+                <div class="form-field">
+                    <label>Descrizione</label>
+                    <textarea name="descrizione" id="edit_descrizione" rows="3"></textarea>
+                </div>
+                <div class="form-field">
+                    <label>URL immagine</label>
+                    <input type="url" name="immagine_url" id="edit_immagine_url" placeholder="https://…">
+                </div>
+                <div class="form-field">
+                    <label>Regola sblocco</label>
+                    <select name="regola_sblocco" id="edit_regola_sblocco">
+                        <option value="TUTTI">TUTTI i genitori scoperti</option>
+                        <option value="ALMENO_UNO">ALMENO UN genitore scoperto</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label>Tipo speciale</label>
+                    <select name="tipo_speciale" id="edit_tipo_speciale">
+                        <option value="">— nessuno —</option>
+                        <option value="rivelazione">rivelazione (colpo di scena)</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label>Livello SFX</label>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <select name="livello_sfx" id="edit_livello_sfx" style="flex:1;">
+                            <option value="1">1 — primo piano</option>
+                            <option value="2">2 — rivelazione media</option>
+                            <option value="3">3 — colpo grosso</option>
+                        </select>
+                        <span id="sfx_status_badge" style="font-family:var(--font-mono);font-size:0.65rem;color:var(--bone-dim);white-space:nowrap;"></span>
+                    </div>
+                </div>
+                <div class="actions-row" style="margin-top: 4px;">
+                    <button type="submit" class="btn" style="font-size:0.78rem; padding: 5px 12px;">Salva</button>
+                    <button type="button" class="btn btn--danger" id="btnEliminaNodo" style="font-size:0.78rem; padding: 5px 12px;">Elimina</button>
+                </div>
+            </form>
+            <form id="nodeDeleteForm" method="POST" style="display:none;"></form>
+            <form id="ricalcolaSfxForm" method="POST" style="margin-top:8px;">
+                <button type="submit" class="btn btn--ghost" style="font-size:0.72rem; padding:4px 10px; width:100%;">↺ Ricalcola SFX automaticamente</button>
+            </form>
+        </div>
+
+        <!-- Nuovo nodo -->
+        <div class="panel-section">
+            <p class="panel-title">Aggiungi nodo</p>
+            <form method="POST" action="{{ url_for('indagini_nuovo_nodo', indagine_id=indagine.id) }}"
+                  class="form-grid" style="gap: 8px;">
+                <div class="form-field">
+                    <label>Numero nodo</label>
+                    <input type="number" name="numero_nodo" value="{{ (nodi | length) + 1 }}">
+                </div>
+                <div class="form-field">
+                    <label>Titolo *</label>
+                    <input type="text" name="titolo" required placeholder="Nome indizio…">
+                </div>
+                <div class="form-field">
+                    <label>Descrizione</label>
+                    <textarea name="descrizione" rows="2"></textarea>
+                </div>
+                <div class="form-field">
+                    <label>URL immagine</label>
+                    <input type="url" name="immagine_url" placeholder="https://…">
+                </div>
+                <div class="form-field">
+                    <label>Regola sblocco</label>
+                    <select name="regola_sblocco">
+                        <option value="TUTTI">TUTTI i genitori scoperti</option>
+                        <option value="ALMENO_UNO">ALMENO UN genitore scoperto</option>
+                    </select>
+                </div>
+                <div class="actions-row">
+                    <button type="submit" class="btn" style="font-size:0.78rem; padding: 5px 12px;">+ Aggiungi</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Nuovo collegamento -->
+        {% if nodi | length >= 2 %}
+        <div class="panel-section">
+            <p class="panel-title">Aggiungi collegamento</p>
+            <form method="POST" action="{{ url_for('indagini_nuovo_collegamento', indagine_id=indagine.id) }}"
+                  class="form-grid" style="gap: 8px;">
+                <div class="form-field">
+                    <label>Da (genitore)</label>
+                    <select name="nodo_genitore_id">
+                        {% for n in nodi %}
+                        <option value="{{ n.id }}">[{{ n.numero_nodo }}] {{ n.titolo }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label>A (figlio)</label>
+                    <select name="nodo_figlio_id">
+                        {% for n in nodi %}
+                        <option value="{{ n.id }}">[{{ n.numero_nodo }}] {{ n.titolo }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="actions-row">
+                    <button type="submit" class="btn" style="font-size:0.78rem; padding: 5px 12px;">Collega →</button>
+                </div>
+            </form>
+        </div>
+        {% endif %}
+
+        <!-- Lista collegamenti esistenti -->
+        {% if collegamenti %}
+        <div class="panel-section">
+            <p class="panel-title">Collegamenti</p>
+            {% set nodi_map = {} %}
+            {% for n in nodi %}{% set _ = nodi_map.update({n.id: n}) %}{% endfor %}
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+                {% for c in collegamenti %}
+                {% set gen = nodi_map.get(c.nodo_genitore_id) %}
+                {% set fig = nodi_map.get(c.nodo_figlio_id) %}
+                <div style="display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--bone-dim);">
+                    <span style="flex:1;">[{{ gen.numero_nodo if gen }}] {{ gen.titolo if gen }} → [{{ fig.numero_nodo if fig }}] {{ fig.titolo if fig }}</span>
+                    <form method="POST" action="{{ url_for('indagini_elimina_collegamento', indagine_id=indagine.id, collegamento_id=c.id) }}">
+                        <button type="submit" class="btn btn--danger" style="font-size:0.65rem; padding: 3px 7px;">✕</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+<script>
+(function () {
+    const RAW = {{ graph_data | safe }};
+    const NODI = RAW.nodi;
+    const COLL = RAW.collegamenti;
+
+    const NODE_W = 160;
+    const NODE_H = 70;
+    const PAD = 28;
+
+    // --- Dagre layout ---
+    const g = new dagre.graphlib.Graph();
+    g.setGraph({ rankdir: "LR", nodesep: 24, ranksep: 60, marginx: 40, marginy: 40 });
+    g.setDefaultEdgeLabel(() => ({}));
+
+    NODI.forEach(n => {
+        g.setNode(String(n.id), { width: NODE_W, height: NODE_H });
+    });
+    COLL.forEach(c => {
+        g.setEdge(String(c.nodo_genitore_id), String(c.nodo_figlio_id), { id: c.id });
+    });
+    dagre.layout(g);
+
+    const gg = g.graph();
+    const svgW = (gg.width || 400) + PAD * 2;
+    const svgH = (gg.height || 300) + PAD * 2;
+
+    const svg = document.getElementById("graphSvg");
+    svg.setAttribute("width", svgW);
+    svg.setAttribute("height", svgH);
+    const root = document.getElementById("graphG");
+
+    const nodoById = {};
+    NODI.forEach(n => { nodoById[n.id] = n; });
+
+    // --- Disegna archi ---
+    COLL.forEach(c => {
+        const edge = g.edge(String(c.nodo_genitore_id), String(c.nodo_figlio_id));
+        if (!edge || !edge.points) return;
+        const pts = edge.points.map(p => `${p.x},${p.y}`).join(" L ");
+        const gEl = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        gEl.classList.add("g-edge");
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", `M ${pts}`);
+        path.setAttribute("marker-end", "url(#arrowhead)");
+        gEl.appendChild(path);
+        root.appendChild(gEl);
+    });
+
+    // --- Disegna nodi ---
+    let selectedId = null;
+    NODI.forEach(n => {
+        const pos = g.node(String(n.id));
+        if (!pos) return;
+        const x = pos.x - NODE_W / 2;
+        const y = pos.y - NODE_H / 2;
+
+        const gEl = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        gEl.classList.add("g-node");
+        gEl.dataset.id = n.id;
+
+        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        rect.setAttribute("x", x);
+        rect.setAttribute("y", y);
+        rect.setAttribute("width", NODE_W);
+        rect.setAttribute("height", NODE_H);
+        rect.setAttribute("rx", 4);
+        rect.setAttribute("fill", "#1E1A14");
+        rect.setAttribute("stroke", n.tipo_speciale === "rivelazione" ? "#5A1F1F" : "#3D3520");
+        rect.setAttribute("stroke-width", n.tipo_speciale === "rivelazione" ? "2" : "1");
+        gEl.appendChild(rect);
+
+        // numero nodo
+        const tNum = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        tNum.setAttribute("x", x + 8);
+        tNum.setAttribute("y", y + 14);
+        tNum.setAttribute("font-family", "JetBrains Mono, monospace");
+        tNum.setAttribute("font-size", "10");
+        tNum.setAttribute("fill", "#9C7A3C");
+        tNum.textContent = `#${n.numero_nodo}`;
+        gEl.appendChild(tNum);
+
+        // titolo (tronca se lungo)
+        const titolo = n.titolo.length > 20 ? n.titolo.slice(0, 18) + "…" : n.titolo;
+        const tTit = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        tTit.setAttribute("x", x + NODE_W / 2);
+        tTit.setAttribute("y", y + 36);
+        tTit.setAttribute("text-anchor", "middle");
+        tTit.setAttribute("font-family", "IBM Plex Sans, sans-serif");
+        tTit.setAttribute("font-size", "13");
+        tTit.setAttribute("font-weight", "500");
+        tTit.setAttribute("fill", "#E8E2D5");
+        tTit.textContent = titolo;
+        gEl.appendChild(tTit);
+
+        // regola sblocco
+        const tRegola = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        tRegola.setAttribute("x", x + NODE_W / 2);
+        tRegola.setAttribute("y", y + NODE_H - 8);
+        tRegola.setAttribute("text-anchor", "middle");
+        tRegola.setAttribute("font-family", "JetBrains Mono, monospace");
+        tRegola.setAttribute("font-size", "9");
+        tRegola.setAttribute("fill", "#6B6050");
+        tRegola.textContent = n.regola_sblocco === "ALMENO_UNO" ? "≥1 genitore" : "tutti genitori";
+        gEl.appendChild(tRegola);
+
+        // badge scoperto
+        if (n.scoperto) {
+            const badge = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            badge.setAttribute("cx", x + NODE_W - 8);
+            badge.setAttribute("cy", y + 8);
+            badge.setAttribute("r", 5);
+            badge.setAttribute("fill", "#5C8A71");
+            gEl.appendChild(badge);
+        }
+
+        gEl.addEventListener("click", () => selectNode(n.id));
+        root.appendChild(gEl);
+    });
+
+    // --- Selezione nodo e pannello modifica ---
+    const editorSection = document.getElementById("nodeEditorSection");
+    const editForm = document.getElementById("nodeEditForm");
+    const deleteForm = document.getElementById("nodeDeleteForm");
+    const btnElimina = document.getElementById("btnEliminaNodo");
+
+    function selectNode(id) {
+        // deseleziona precedente
+        document.querySelectorAll(".g-node.selected").forEach(el => el.classList.remove("selected"));
+        const nEl = document.querySelector(`.g-node[data-id="${id}"]`);
+        if (nEl) nEl.classList.add("selected");
+        selectedId = id;
+
+        const n = nodoById[id];
+        if (!n) return;
+
+        document.getElementById("edit_numero_nodo").value = n.numero_nodo;
+        document.getElementById("edit_titolo").value = n.titolo;
+        document.getElementById("edit_descrizione").value = n.descrizione || "";
+        document.getElementById("edit_immagine_url").value = n.immagine_url || "";
+        document.getElementById("edit_regola_sblocco").value = n.regola_sblocco;
+        document.getElementById("edit_tipo_speciale").value = n.tipo_speciale || "";
+        document.getElementById("edit_livello_sfx").value = n.livello_sfx || 1;
+        document.getElementById("sfx_status_badge").textContent =
+            n.livello_sfx_manuale ? "🔒 manuale" : "🔄 automatico";
+
+        editForm.action = `/indagini/{{ indagine.id }}/nodi/${id}/edita`;
+        deleteForm.action = `/indagini/{{ indagine.id }}/nodi/${id}/elimina`;
+        document.getElementById("ricalcolaSfxForm").action = `/indagini/{{ indagine.id }}/nodi/${id}/ricalcola-sfx`;
+
+        editorSection.style.display = "block";
+        editorSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    btnElimina.addEventListener("click", () => {
+        if (confirm("Eliminare questo nodo e i suoi collegamenti?")) {
+            deleteForm.method = "POST";
+            deleteForm.submit();
+        }
+    });
+})();
+</script>
+
+{% endblock %}

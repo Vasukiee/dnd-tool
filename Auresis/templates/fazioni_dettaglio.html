@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ fazione.nome }} — Il Registro{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">Fazione {% if fazione.nome_popolare %}· {{ fazione.nome_popolare }}{% endif %}</p>
+    <h1 class="page-title">{{ fazione.nome }}</h1>
+    <p class="page-meta">
+        <span class="tag tag--{{ fazione.relazione_pg }}">{{ fazione.relazione_pg }}</span>
+        {% if not fazione.attiva %}<span class="tag tag--morto" style="margin-left:6px;">disciolta</span>{% endif %}
+    </p>
+</div>
+
+<div class="detail-section">
+    <p class="detail-section__label">Dati</p>
+    <div class="field-row"><span class="field-row__label">Territorio</span><span>{{ fazione.territorio or '—' }}</span></div>
+    <div class="field-row"><span class="field-row__label">Stato attuale</span><span>{{ fazione.stato_attuale or '—' }}</span></div>
+</div>
+
+{% if fazione.ideologia %}
+<div class="detail-section">
+    <p class="detail-section__label">Ideologia</p>
+    <p>{{ fazione.ideologia }}</p>
+</div>
+{% endif %}
+
+{% if fazione.membri %}
+<div class="detail-section">
+    <p class="detail-section__label">Membri noti</p>
+    <div class="related-list">
+        {% for m in fazione.membri %}
+        <a class="related-item" href="{{ url_for('dettaglio_npc', npc_id=m.id) }}">
+            <span>{{ m.nome }}</span>
+            <span class="tag tag--{{ m.stato }}">{{ m.stato }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if fazione.territori %}
+<div class="detail-section">
+    <p class="detail-section__label">Territori controllati</p>
+    <div class="related-list">
+        {% for t in fazione.territori %}
+        <a class="related-item" href="{{ url_for('dettaglio_location', location_id=t.id) }}">
+            <span>{{ t.nome }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if fazione.note %}
+<div class="detail-section">
+    <p class="detail-section__label">Note libere</p>
+    <p>{{ fazione.note }}</p>
+</div>
+{% endif %}
+
+<div class="actions-row">
+    <a class="btn btn--ghost" href="{{ url_for('edita_fazione', fazione_id=fazione.id) }}">Modifica</a>
+    <form method="POST" action="{{ url_for('elimina_fazione', fazione_id=fazione.id) }}" onsubmit="return confirm('Eliminare definitivamente questa fazione dal registro?');" style="display:inline;">
+        <button type="submit" class="btn btn--danger">Elimina</button>
+    </form>
+</div>
+
+{% endblock %}

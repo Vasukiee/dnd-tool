@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Il Registro — Sommario{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">Sommario della campagna</p>
+    <h1 class="page-title">Stato del Registro</h1>
+    <p class="page-meta">Sessione corrente: {{ stats.sessioni_giocate }}</p>
+</div>
+
+<div class="stat-grid">
+    <div class="stat-cell">
+        <div class="stat-cell__value">{{ stats.npc_vivi }}</div>
+        <div class="stat-cell__label">Soggetti vivi / {{ stats.npc_totali }} totali</div>
+    </div>
+    <div class="stat-cell">
+        <div class="stat-cell__value">{{ stats.quest_attive }}</div>
+        <div class="stat-cell__label">Incarichi attivi</div>
+    </div>
+    <div class="stat-cell">
+        <div class="stat-cell__value">{{ stats.fazioni_totali }}</div>
+        <div class="stat-cell__label">Fazioni registrate</div>
+    </div>
+    <div class="stat-cell">
+        <div class="stat-cell__value">{{ stats.locations_totali }}</div>
+        <div class="stat-cell__label">Luoghi catalogati</div>
+    </div>
+</div>
+
+<div class="detail-section">
+    <p class="detail-section__label">Ultimi eventi della cronaca</p>
+    {% if eventi_recenti %}
+        <div class="timeline">
+            {% for e in eventi_recenti %}
+            <div class="timeline-item">
+                <div class="timeline-item__session">Sess. {{ e.sessione }}</div>
+                <div class="timeline-item__body">
+                    <p>{{ e.riassunto }}</p>
+                    {% if e.conseguenze_attive %}
+                    <p class="timeline-item__consequence">↳ {{ e.conseguenze_attive }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <p class="empty-state__title">Il registro è ancora vuoto.</p>
+            <p>Nessun evento registrato. Inizia ad aggiungere personaggi, luoghi e incarichi dalle voci nel menu, oppure registra il primo evento dopo la tua prossima sessione.</p>
+        </div>
+    {% endif %}
+</div>
+
+{% endblock %}

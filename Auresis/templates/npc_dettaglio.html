@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ npc.nome }} — Il Registro{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">Soggetto · {{ npc.ruolo or 'ruolo non specificato' }}</p>
+    <h1 class="page-title">{{ npc.nome }}</h1>
+    <p class="page-meta">
+        <span class="tag tag--{{ npc.stato }}">{{ npc.stato }}</span>
+        {% if npc.livello_contaminazione and npc.livello_contaminazione > 0 %}
+        <span class="tag" style="color: var(--gold-bright); border-color: var(--gold); margin-left: 6px;">Auris Cancer — livello {{ npc.livello_contaminazione }}/5</span>
+        {% endif %}
+    </p>
+</div>
+
+<div class="detail-section">
+    <p class="detail-section__label">Dati</p>
+    <div class="field-row"><span class="field-row__label">Fazione</span><span>{{ npc.fazione_nome or '—' }}</span></div>
+    <div class="field-row"><span class="field-row__label">Location attuale</span><span>{{ npc.location_nome or '—' }}</span></div>
+    <div class="field-row"><span class="field-row__label">Relazione col PG</span><span>{{ npc.relazione_pg or '—' }}</span></div>
+    <div class="field-row"><span class="field-row__label">Ultima apparizione</span><span>{{ npc.ultima_apparizione_sessione or '—' }}</span></div>
+</div>
+
+{% if npc.descrizione_breve %}
+<div class="detail-section">
+    <p class="detail-section__label">Descrizione</p>
+    <p>{{ npc.descrizione_breve }}</p>
+</div>
+{% endif %}
+
+{% if npc.note_caratteriali %}
+<div class="detail-section">
+    <p class="detail-section__label">Tratti caratteriali</p>
+    <p>{{ npc.note_caratteriali }}</p>
+</div>
+{% endif %}
+
+{% if npc.quest_collegate %}
+<div class="detail-section">
+    <p class="detail-section__label">Incarichi collegati</p>
+    <div class="related-list">
+        {% for q in npc.quest_collegate %}
+        <a class="related-item" href="{{ url_for('dettaglio_quest', quest_id=q.id) }}">
+            <span>{{ q.nome }} {% if q.ruolo_nella_quest %}<span style="color: var(--bone-dim);">({{ q.ruolo_nella_quest }})</span>{% endif %}</span>
+            <span class="tag tag--{{ q.stato }}">{{ q.stato }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if npc.note %}
+<div class="detail-section">
+    <p class="detail-section__label">Note libere</p>
+    <p>{{ npc.note }}</p>
+</div>
+{% endif %}
+
+<div class="actions-row">
+    <a class="btn btn--ghost" href="{{ url_for('edita_npc', npc_id=npc.id) }}">Modifica</a>
+    <form method="POST" action="{{ url_for('elimina_npc', npc_id=npc.id) }}" onsubmit="return confirm('Eliminare definitivamente questo personaggio dal registro?');" style="display:inline;">
+        <button type="submit" class="btn btn--danger">Elimina</button>
+    </form>
+</div>
+
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Verità accertate — Il Registro{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">Canon scoperto in gioco</p>
+    <h1 class="page-title">Verità accertate</h1>
+</div>
+
+<div class="actions-row" style="margin-bottom: 28px;">
+    <a class="btn" href="{{ url_for('nuovo_fatto') }}">+ Aggiungi verità</a>
+</div>
+
+{% if fatti_list %}
+<div class="related-list">
+    {% for f in fatti_list %}
+    <div class="related-item" style="align-items: flex-start;">
+        <div>
+            <p style="margin: 0 0 4px 0;">{{ f.descrizione }}</p>
+            <p style="margin: 0; font-size: 0.78rem; color: var(--bone-dim); font-family: var(--font-mono);">
+                {% if f.sessione %}Sessione {{ f.sessione }}{% endif %}
+            </p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="tag" style="{% if f.rilevanza == 'alta' %}color: var(--rust-bright); border-color: var(--rust);{% elif f.rilevanza == 'media' %}color: var(--gold-bright); border-color: var(--gold);{% endif %}">{{ f.rilevanza }}</span>
+            <form method="POST" action="{{ url_for('elimina_fatto', fatto_id=f.id) }}" onsubmit="return confirm('Eliminare questa verità accertata?');">
+                <button type="submit" class="btn btn--danger" style="font-size: 0.68rem; padding: 5px 10px;">Elimina</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <p class="empty-state__title">Nessuna verità accertata ancora.</p>
+</div>
+{% endif %}
+
+{% endblock %}

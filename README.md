@@ -1,93 +1,101 @@
-# Campaign Tool — Gestionale per campagne RPG single-player
+# Strumento Campagna DnD — Guida d'uso
 
-Strumento locale per gestire lo stato di una campagna di gioco di ruolo
-single-player: NPC, location, fazioni, quest, log di sessione e copioni.
-Gira interamente sul tuo computer, senza connessioni esterne.
+Questo strumento gestisce in locale (gratis, nessun costo cloud) lo stato della
+tua campagna. Hai **due modi equivalenti** di usarlo: una dashboard web con
+interfaccia grafica (consigliata, "Il Registro") oppure due script da terminale.
+Entrambi leggono e scrivono lo stesso database, quindi puoi alternarli liberamente.
 
-## Requisiti
+## Cosa contiene la cartella
 
-- Python 3.8+
-- Nessuna dipendenza esterna: il database è SQLite, incluso nella libreria standard di Python.
+```
+dnd_tool/
+├── schema.sql              ← struttura del database (non serve toccarlo)
+├── db.py                   ← funzioni di accesso al database (non serve toccarlo)
+├── prompt_builder.py        ← logica di costruzione del prompt (non serve toccarlo)
+├── campagna.db               ← il tuo database vero, si crea/aggiorna da solo
+│
+├── app.py                   ← DASHBOARD WEB: lancia questo per l'interfaccia grafica
+├── templates/                ← le pagine HTML della dashboard (non serve toccarle)
+├── static/style.css          ← lo stile visivo della dashboard (non serve toccarlo)
+│
+├── genera_prompt.py          ← ALTERNATIVA DA TERMINALE: genera il prompt a domande
+├── aggiorna_sessione.py      ← ALTERNATIVA DA TERMINALE: registra eventi a menu
+│
+├── documenti_statici/
+│   ├── bible_universo.md     ← la Bible di Aetheleon (da popolare tu)
+│   ├── bible_pianeta.md      ← la Bible del nuovo pianeta (da popolare tu)
+│   └── regole_risoluzione.md  ← le regole di combattimento/risoluzione (da popolare tu)
+└── prompt_generati/          ← qui finiscono i prompt salvati dallo script da terminale
+```
 
-## Installazione
+## Setup iniziale (una volta sola)
 
-1. Estrai il progetto in una cartella locale.
-
-2. Installa le dipendenze Python:
+1. Assicurati di avere Python 3 installato.
+2. Installa le librerie necessarie:
    ```
    pip install -r requirements.txt
    ```
+3. Apri i tre file in `documenti_statici/` e sostituisci il contenuto attuale con il
+   contenuto che ti interessa. Questi vengono inclusi
+   **integralmente** in ogni prompt generato — aggiornali quando la lore
+   cambia in modo strutturale (gli eventi di sessione vanno nel database, non qui).
 
-3. Inizializza il database (crea il file `campagna.db` con tutte le tabelle):
-   ```
-   python3 db.py
-   ```
-
-4. (Opzionale) Popola il database con dati demo di esempio:
-   ```
-   python3 popola_iniziale.py
-   ```
-   Puoi usare lo script come punto di partenza e modificarlo con i dati
-   della tua campagna, oppure inserire tutto direttamente dalla dashboard.
-
-## Avvio
+## Uso: la dashboard web (consigliata)
 
 ```
 python3 app.py
 ```
 
-Apri il browser su **http://127.0.0.1:5000**. Lascia il terminale aperto
-finché usi la dashboard; per chiuderla, `Ctrl+C`.
+Poi apri il browser su **http://127.0.0.1:5000**. Lascia il terminale aperto
+in background mentre usi la dashboard (è il server che la fa funzionare, se chiudi il terminale si chiude la app); per
+chiuderla, torna al terminale e premi `Ctrl+C`. NOTA: Al momento la app non usa un db locale ma si basa su Supabase.
 
-Il file `campagna.db` viene creato nella stessa cartella di `app.py` e
-contiene tutti i dati: fanne un backup periodico prima delle sessioni
-importanti.
+La sidebar a sinistra ti porta tra:
+- **Sommario** — i numeri della campagna a colpo d'occhio (NPC vivi, quest attive, sessioni giocate) e gli ultimi eventi.
+- **Personaggi** — schede NPC. Il bordo dorato a sinistra di ogni card si allarga in base al livello di Auris Cancer registrato.
+- **Fazioni**, **Luoghi**, **Incarichi** — cataloghi con dettaglio e form di modifica.
+- **Cronaca** — il log delle sessioni giocate (eventi).
+- **Indagini** — pagina dinamica per vedere il progresso dell'indagine.
+- **Il Soggetto** — la scheda del tuo personaggio.
+- **→ Genera prompt sessione** — la pagina più importante: scegli location, quest da includere, tipo di scena, tono e intento, poi premi "Genera prompt". Il testo pronto compare sotto, con un bottone "Copia negli appunti" per incollarlo direttamente in Gemini.
 
-## Struttura della cartella
+Tutte le liste hanno un bottone "+" per aggiungere nuove voci, e ogni pagina di
+dettaglio ha "Modifica" ed "Elimina".
 
-```
-campaign_tool/
-├── schema.sql           ← struttura del database (SQLite)
-├── db.py                ← accesso al database
-│
-├── app.py               ← dashboard web (lancia questo)
-├── templates/           ← pagine HTML della dashboard
-├── static/style.css     ← stile visivo
-│
-├── aggiorna_sessione.py ← alternativa da terminale: aggiorna dati post-sessione
-│
-└── copioni/             ← script delle sessioni in markdown
-```
+## Uso: gli script da terminale (alternativa)
 
-## Usare la dashboard
-
-La sidebar sinistra dà accesso a:
-
-- **Sommario** — statistiche rapide e ultimi eventi
-- **Personaggi** — schede NPC con tutti i campi (incluso livello Oripatia)
-- **Fazioni**, **Luoghi**, **Incarichi** — cataloghi con form di modifica
-- **Cronaca** — log delle sessioni
-- **Verità accertate** — fatti di lore scoperti, slegati da una singola quest
-- **Il Soggetto** — scheda del personaggio giocante
-- **Copioni** — script delle sessioni in markdown
-- **Audio** — tracce YouTube collegate a location e quest
-
-## Usare lo script da terminale
-
-Se preferisci non aprire il browser per aggiornare il database dopo una sessione:
+Se preferisci non aprire il browser, gli script originali restano disponibili
+e fanno esattamente le stesse cose:
 
 ```
-python3 aggiorna_sessione.py
+python3 genera_prompt.py      # genera il prompt a domande, salva un file .md
+python3 aggiorna_sessione.py  # menu per registrare eventi/NPC/quest dopo aver giocato
 ```
 
-## Note
+## Note pratiche
 
-- **Backup**: il database è il file `campagna.db`. Copialo prima di ogni
-  sessione per avere un punto di ripristino.
-- **Modalità giocatrice**: la dashboard ha un toggle che nasconde NPC, location
-  e quest non ancora sbloccate — utile se la giocatrice può vedere lo schermo.
-  Imposta la password master con `python3 imposta_password.py`.
-- **Personalizzazione colori**: usa il tasto tavolozza in basso a sinistra
-  nella sidebar per cambiare la palette. I colori vengono salvati nel database.
-- **Copioni**: i file `.md` in `copioni/` seguono una formattazione specifica;
-  apri `copioni/sessione_00_showcase.md` per vedere il formato.
+- **Il database è un singolo file** (`campagna.db`). Fanne periodicamente una
+  copia di backup prima di sessioni importanti.
+- **Se vuoi vedere/modificare i dati a colpo d'occhio in modo grezzo** (tipo
+  foglio di calcolo, utile per correzioni puntuali), puoi anche scaricare
+  gratuitamente "DB Browser for SQLite" e aprire `campagna.db` con quello.
+- **Niente di tutto questo consuma credito API o costa soldi**: dashboard e
+  script girano interamente in locale sul tuo computer. L'unico posto dove
+  "spendi" è la chat con Gemini Pro via abbonamento normale, non a consumo.
+- **Livello di contaminazione (Auris Cancer)**: ogni NPC ha un campo numerico
+  da 0 a 5. È puramente per tracciamento/visualizzazione — sta a te (o a
+  Gemini, se gli dai le regole nel documento delle Regole di Risoluzione)
+  decidere quando e come un personaggio avanza in quella scala.
+
+## Se qualcosa non funziona
+
+- **La dashboard non si apre**: verifica che il terminale mostri `Running on
+  http://127.0.0.1:5000` senza errori sopra. Se manca Flask, installalo come
+  indicato nel setup.
+- **Una pagina dà errore**: il messaggio nel terminale (dove hai lanciato
+  `app.py`) di solito indica la riga e il problema.
+- **Hai scritto un nome con un typo** diverso da come era stato salvato la
+  prima volta: aprilo dalla dashboard (è più facile cercarlo visivamente) e
+  correggilo da lì.
+- **Il file `campagna.db` non esiste ancora**: lancia `python3 db.py` una volta.
+
