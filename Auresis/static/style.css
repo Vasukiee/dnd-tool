@@ -1393,7 +1393,6 @@ details[open] .filtri-section__toggle::before {
     overflow-y: auto;
     overflow-wrap: break-word;
     word-break: break-all;
-    scroll-behavior: smooth;
 }
 
 .editor-preview-body img {
