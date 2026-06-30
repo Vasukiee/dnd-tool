@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Modifica indagine' if indagine else 'Nuova indagine' }} — Il Registro{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">Indagini</p>
+    <h1 class="page-title">{{ 'Modifica indagine' if indagine else 'Nuova indagine' }}</h1>
+</div>
+
+<form method="POST" class="form-grid" style="max-width: 560px;">
+    <div class="form-field">
+        <label for="titolo">Titolo *</label>
+        <input type="text" id="titolo" name="titolo"
+               value="{{ indagine.titolo if indagine else '' }}" required>
+    </div>
+    <div class="form-field">
+        <label for="descrizione">Descrizione</label>
+        <textarea id="descrizione" name="descrizione" rows="3">{{ indagine.descrizione if indagine else '' }}</textarea>
+    </div>
+    <div class="form-field">
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" name="attiva" value="1"
+                   {% if not indagine or indagine.attiva %}checked{% endif %}>
+            Indagine attiva
+        </label>
+    </div>
+    <div class="actions-row">
+        <button type="submit" class="btn">{{ 'Salva modifiche' if indagine else 'Crea indagine' }}</button>
+        <a class="btn btn--ghost" href="{{ url_for('lista_indagini') }}">Annulla</a>
+    </div>
+</form>
+
+{% endblock %}

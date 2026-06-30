@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+.main { max-width: none; }
+
+/* ---- Modal overlay ---- */
+#audio-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(10, 8, 6, 0.80);
+    align-items: center;
+    justify-content: center;
+}
+#audio-modal.open {
+    display: flex;
+}
+#audio-modal-panel {
+    position: relative;
+    background: var(--ink-raised);
+    border: 1px solid var(--ink-line);
+    border-radius: 8px;
+    width: min(600px, 92vw);
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+}
+#audio-modal-embed {
+    background: #000;
+    line-height: 0;
+}
+#audio-modal-embed iframe {
+    display: block;
+    width: 100%;
+    height: 340px;
+}
+#audio-modal-embed .audio-player {
+    padding: 14px 16px;
+}
+#audio-modal-body {
+    padding: 20px 22px 24px;
+}
+#audio-modal-title {
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    color: var(--bone-bright);
+    margin: 8px 0 10px;
+    line-height: 1.25;
+}
+#audio-modal-note {
+    font-size: 0.9rem;
+    color: var(--bone-dim);
+    line-height: 1.55;
+    margin: 0;
+    white-space: pre-wrap;
+}
+#audio-modal-header {
+    display: flex;
+    justify-content: flex-end;
+    padding: 8px 10px 6px;
+    border-bottom: 1px solid var(--ink-line);
+}
+#audio-modal-close {
+    background: none;
+    border: none;
+    color: var(--bone-dim);
+    font-size: 1.1rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px 6px;
+    transition: color 0.15s;
+}
+#audio-modal-close:hover { color: var(--bone-bright); }
+</style>
+
+<div class="page-header">
+    <p class="page-eyebrow">Colonna sonora</p>
+    <h1 class="page-title">Audio</h1>
+</div>
+
+<div class="actions-row" style="margin-bottom: 24px;">
+    <a href="{{ url_for('audio_nuova') }}" class="btn">+ Nuova traccia</a>
+    <a href="{{ url_for('audio_tag_lista') }}" class="btn btn--ghost">Gestisci tag</a>
+</div>
+
+<details class="filtri-section" {% if tag_attivo %}open{% endif %}>
+    <summary class="filtri-section__toggle">
+        Filtri
+        {% if tag_attivo %}
+        <span class="filtri-section__attivo">— {{ tag_attivo }}</span>
+        {% endif %}
+    </summary>
+    <div class="filtri-categoria">
+        <a href="{{ url_for('audio_lista') }}"
+           class="filtro-pill {% if not tag_attivo %}filtro-pill--attivo{% endif %}">
+            Tutti
+        </a>
+        {% for t in tag_disponibili %}
+        <a href="{{ url_for('audio_lista', tag=t) }}"
+           class="filtro-pill {% if tag_attivo == t %}filtro-pill--attivo{% endif %}">
+            {{ t }}
+        </a>
+        {% endfor %}
+    </div>
+</details>
+
+{% if not tracce %}
+<div class="empty-state">
+    <p class="empty-state__title">Nessuna traccia salvata{% if tag_attivo %} con questo tag{% endif %}</p>
+    <p>Aggiungi la prima traccia per iniziare a costruire la colonna sonora della campagna.</p>
+</div>
+{% endif %}
+
+<div class="entry-grid">
+    {% for t in tracce %}
+    <div class="card card--audio"
+         data-tipo="{{ t.tipo_sorgente }}"
+         data-nome="{{ t.nome }}"
+         data-tags="{{ (t.tags or []) | join(', ') }}"
+         data-note="{{ t.note or '' }}"
+         data-file-path="{{ t.file_path or '' }}"
+         data-youtube-id="{{ t.youtube_id or '' }}"
+         data-timestamp="{{ t.timestamp_inizio or 0 }}"
+         style="cursor: pointer;">
+        <div class="card--audio__embed">
+            {% if t.tipo_sorgente == 'file' %}
+            <div class="audio-player">
+                <audio class="audio-player__audio" preload="metadata"
+                       src="{{ url_for('static', filename='audio/' + t.file_path) }}"></audio>
+                <button class="audio-player__play" type="button" aria-label="Play/Pausa"></button>
+                <span class="audio-player__time">0:00 / --:--</span>
+                <div class="audio-player__progress">
+                    <div class="audio-player__bar">
+                        <div class="audio-player__fill"></div>
+                        <div class="audio-player__thumb"></div>
+                    </div>
+                </div>
+                <button class="audio-player__vol" type="button" aria-label="Muto/Volume"></button>
+                <input class="audio-player__vol-slider" type="range"
+                       min="0" max="1" step="0.02" value="1" aria-label="Volume">
+            </div>
+            {% else %}
+            <iframe
+                    width="100%" height="180"
+                    src="https://www.youtube.com/embed/{{ t.youtube_id }}?start={{ t.timestamp_inizio or 0 }}"
+                    title="{{ t.nome }}"
+                    frameborder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowfullscreen>
+            </iframe>
+            {% endif %}
+        </div>
+        <div class="card--audio__body">
+            <div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px;">
+                {% for tag in (t.tags or []) %}
+                <span class="tag tag--categoria">{{ tag }}</span>
+                {% else %}
+                <span class="tag tag--categoria" style="color:var(--bone-dim); border-color:var(--ink-line);">senza tag</span>
+                {% endfor %}
+            </div>
+            <h3 class="card__title">{{ t.nome }}</h3>
+            {% if t.note %}
+            <p class="card__desc">{{ t.note }}</p>
+            {% endif %}
+            <div class="card__footer">
+                <a href="{{ url_for('audio_modifica', traccia_id=t.id) }}" class="btn btn--ghost" style="font-size:0.7rem; padding:6px 12px;">Modifica</a>
+                <form method="post" action="{{ url_for('audio_elimina', traccia_id=t.id) }}"
+                      onsubmit="return confirm('Eliminare questa traccia?');">
+                    <button type="submit" class="btn btn--danger" style="font-size:0.7rem; padding:6px 12px;">Elimina</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Modal overlay -->
+<div id="audio-modal" role="dialog" aria-modal="true">
+    <div id="audio-modal-panel">
+        <div id="audio-modal-header">
+            <button id="audio-modal-close" aria-label="Chiudi">✕</button>
+        </div>
+        <div id="audio-modal-embed"></div>
+        <div id="audio-modal-body">
+            <div id="audio-modal-tags" style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:4px;"></div>
+            <h2 id="audio-modal-title"></h2>
+            <p id="audio-modal-note"></p>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='player-audio.js') }}"></script>
+<script>
+(function () {
+    var overlay  = document.getElementById('audio-modal');
+    var panel    = document.getElementById('audio-modal-panel');
+    var embedEl  = document.getElementById('audio-modal-embed');
+    var tagsEl   = document.getElementById('audio-modal-tags');
+    var titleEl  = document.getElementById('audio-modal-title');
+    var noteEl   = document.getElementById('audio-modal-note');
+    var closeBtn = document.getElementById('audio-modal-close');
+
+    function closeModal() {
+        overlay.classList.remove('open');
+        embedEl.innerHTML = '';
+    }
+
+    function openModal(card) {
+        var tipo      = card.dataset.tipo;
+        var nome      = card.dataset.nome;
+        var tagsStr   = card.dataset.tags;
+        var note      = card.dataset.note;
+        var filePath  = card.dataset.filePath;
+        var youtubeId = card.dataset.youtubeId;
+        var timestamp = card.dataset.timestamp || 0;
+
+        titleEl.textContent = nome;
+        noteEl.textContent  = note;
+        noteEl.style.display = note ? '' : 'none';
+
+        tagsEl.innerHTML = '';
+        if (tagsStr) {
+            tagsStr.split(',').forEach(function(t) {
+                t = t.trim();
+                if (!t) return;
+                var span = document.createElement('span');
+                span.className = 'tag tag--categoria';
+                span.textContent = t;
+                tagsEl.appendChild(span);
+            });
+        }
+
+        embedEl.innerHTML = '';
+
+        if (tipo === 'file') {
+            var playerDiv = document.createElement('div');
+            playerDiv.className = 'audio-player';
+            playerDiv.innerHTML =
+                '<audio class="audio-player__audio" preload="metadata" src="/static/audio/' + filePath + '"></audio>' +
+                '<button class="audio-player__play" type="button" aria-label="Play/Pausa"></button>' +
+                '<span class="audio-player__time">0:00 / --:--</span>' +
+                '<div class="audio-player__progress"><div class="audio-player__bar">' +
+                '<div class="audio-player__fill"></div><div class="audio-player__thumb"></div>' +
+                '</div></div>' +
+                '<button class="audio-player__vol" type="button" aria-label="Muto/Volume"></button>' +
+                '<input class="audio-player__vol-slider" type="range" min="0" max="1" step="0.02" value="1" aria-label="Volume">';
+            embedEl.appendChild(playerDiv);
+            window.AudioPlayer.init(playerDiv);
+        } else {
+            var iframe = document.createElement('iframe');
+            iframe.src = 'https://www.youtube.com/embed/' + youtubeId + '?start=' + timestamp + '&autoplay=0';
+            iframe.title = nome;
+            iframe.frameBorder = '0';
+            iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+            iframe.allowFullscreen = true;
+            embedEl.appendChild(iframe);
+        }
+
+        overlay.classList.add('open');
+    }
+
+    overlay.addEventListener('click', function (e) {
+        if (!panel.contains(e.target)) closeModal();
+    });
+    closeBtn.addEventListener('click', closeModal);
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && overlay.classList.contains('open')) closeModal();
+    });
+
+    var SKIP_TAGS = { BUTTON: 1, A: 1, INPUT: 1, SELECT: 1, TEXTAREA: 1, FORM: 1, IFRAME: 1, LABEL: 1 };
+    document.querySelectorAll('.card--audio').forEach(function (card) {
+        card.addEventListener('click', function (e) {
+            var el = e.target;
+            while (el && el !== card) {
+                if (SKIP_TAGS[el.tagName]) return;
+                if (el.classList && el.classList.contains('audio-player')) return;
+                el = el.parentElement;
+            }
+            openModal(card);
+        });
+    });
+})();
+</script>
+
+{% endblock %}

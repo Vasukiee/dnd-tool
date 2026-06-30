@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Il Registro{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="shell">
+    <nav class="sidebar" id="sidebar">
+    <script>
+    /* Auto-hover è il default: sidebar sempre collassata all'avvio, senza flash */
+    (function(){
+        document.getElementById('sidebar').classList.add('collapsed', 'no-transition');
+    })();
+    </script>
+
+        <p class="sidebar__title">Il Registro</p>
+        <p class="sidebar__subtitle">Sorveglianza di campagna</p>
+        <div class="nav">
+            <a class="nav__item {% if active == 'home' %}active{% endif %}" href="{{ url_for('home') }}" title="Sommario">
+                <svg class="nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                    <polyline points="9 22 9 12 15 12 15 22"/>
+                </svg>
+                <span class="nav__label">Sommario</span>
+            </a>
+            <a class="nav__item {% if active == 'npc' %}active{% endif %}" href="{{ url_for('lista_npc') }}" title="Personaggi">
+                <svg class="nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span class="nav__label">Personaggi</span>
+            </a>
+            <a class="nav__item {% if active == 'fazioni' %}active{% endif %}" href="{{ url_for('lista_fazioni') }}" title="Fazioni">
+                <svg class="nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+                    <line x1="4" y1="22" x2="4" y2="15"/>
+                </svg>
+                <span class="nav__label">Fazioni</span>
+            </a>
+            <a class="nav__item {% if active == 'locations' %}active{% endif %}" href="{{ url_for('lista_locations') }}" title="Luoghi">
+                <svg class="nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                    <circle cx="12" cy="10" r="3"/>
+                </svg>
+                <span class="nav__label">Luoghi</span>
+            </a>
+            <a class="nav__item {% if active == 'quest' %}active{% endif %}" href="{{ url_for('lista_quest') }}" title="Incarichi">
+                <svg class="nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+                    <rect x="9" y="3" width="6" height="4" rx="1"/>
+                    <line x1="9" y1="12" x2="15" y2="12"/>
+                    <line x1="9" y1="16" x2="13" y2="16"/>
+                </svg>
+                <span class="nav__label">Incarichi</span>
+            </a>
+            <a class="nav__item {% if active == 'eventi' %}active{% endif %}" href="{{ url_for('lista_eventi') }}" title="Cronaca">
+                <svg class="nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span class="nav__label">Cronaca</span>
+            </a>
+            {% if not modalita_giocatrice %}
+            <a class="nav__item {% if active == 'indagini' %}active{% endif %}" href="{{ url_for('lista_indagini') }}" title="Indagini">
+                <svg class="nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <span class="nav__label">Indagini</span>
+            </a>
+            {% endif %}
+            <a class="nav__item {% if active == 'pg' %}active{% endif %}" href="{{ url_for('pg_stato_page') }}" title="Il Soggetto">
+                <svg class="nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span class="nav__label">Il Soggetto</span>
+            </a>
+            <a href="{{ url_for('copioni_indice') }}"
+               class="nav__item {% if active=='copioni' %}active{% endif %}" title="Copioni">
+                <svg class="nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                </svg>
+                <span class="nav__label">Copioni</span>
+            </a>
+            <a href="{{ url_for('audio_lista') }}"
+               class="nav__item {% if active=='audio' %}active{% endif %}" title="Audio">
+                <svg class="nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                </svg>
+                <span class="nav__label">Audio</span>
+            </a>
+            {% if not modalita_giocatrice %}
+            <a href="{{ url_for('genera_prompt_page') }}" class="nav__item {% if active=='genera' %}active{% endif %}" title="Genera prompt">
+                <svg class="nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                </svg>
+                <span class="nav__label">Genera prompt</span>
+            </a>
+            {% endif %}
+        </div>
+        <form method="post" action="{{ url_for('toggle_modalita_giocatrice') }}" class="modalita-toggle" data-attiva="{{ 'true' if modalita_giocatrice else 'false' }}">
+            <button type="submit" class="modalita-toggle__btn" title="{{ 'Mostra sezioni da master' if modalita_giocatrice else 'Nascondi sezioni da master' }}">
+                {% if modalita_giocatrice %}
+                <!-- icona: occhio chiuso/barrato -->
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                </svg>
+                {% else %}
+                <!-- icona: occhio aperto -->
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                </svg>
+                {% endif %}
+            </button>
+        </form>
+        <button class="hover-toggle" id="hoverToggle" title="Hover automatico attivo — clicca per modalità manuale">
+            <!-- icona cursore: modalità auto -->
+            <svg id="hoverToggleIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 4l7 18 3-7 7-3z"/>
+            </svg>
+            <span class="hover-toggle__label" id="hoverToggleLabel">Hover auto</span>
+        </button>
+        <button class="sidebar-toggle" id="sidebarToggle" title="Comprimi menu">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 17l-5-5 5-5"/>
+                <path d="M18 17l-5-5 5-5"/>
+            </svg>
+        </button>
+    </nav>
+    <main class="main">
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        {% for message in messages %}
+        <div class="flash">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </main>
+</div>
+<!-- heartbeat: keeps Render free-tier instance warm while the tab is visible -->
+<script src="{{ url_for('static', filename='heartbeat.js') }}"></script>
+<script src="{{ url_for('static', filename='textarea-resize.js') }}"></script>
+<script>
+(function () {
+    var sidebar    = document.getElementById('sidebar');
+    var toggleBtn  = document.getElementById('sidebarToggle');
+    var hoverBtn   = document.getElementById('hoverToggle');
+    var hoverLabel = document.getElementById('hoverToggleLabel');
+    var hoverIcon  = document.getElementById('hoverToggleIcon');
+
+    var SVG_AUTO   = '<path d="M4 4l7 18 3-7 7-3z"/>';
+    var SVG_MANUAL = '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>';
+
+    var autoHover = true;
+
+    /* Rimuove no-transition dopo il primo frame per abilitare le animazioni successive */
+    requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+            sidebar.classList.remove('no-transition');
+        });
+    });
+
+    /* --- Hover automatico --- */
+    function onMouseEnter() {
+        if (autoHover) sidebar.classList.remove('collapsed');
+    }
+    function onMouseLeave() {
+        if (autoHover) sidebar.classList.add('collapsed');
+    }
+    sidebar.addEventListener('mouseenter', onMouseEnter);
+    sidebar.addEventListener('mouseleave', onMouseLeave);
+
+    /* --- Toggle hover/manuale --- */
+    function updateHoverUI() {
+        if (autoHover) {
+            hoverBtn.classList.remove('manual');
+            hoverBtn.title = 'Hover automatico attivo — clicca per modalità manuale';
+            hoverLabel.textContent = 'Hover auto';
+            hoverIcon.innerHTML = SVG_AUTO;
+        } else {
+            hoverBtn.classList.add('manual');
+            hoverBtn.title = 'Modalità manuale — clicca per attivare hover automatico';
+            hoverLabel.textContent = 'Manuale';
+            hoverIcon.innerHTML = SVG_MANUAL;
+        }
+    }
+
+    hoverBtn.addEventListener('click', function () {
+        autoHover = !autoHover;
+        if (autoHover) {
+            sidebar.classList.add('collapsed');
+        } else {
+            /* Ripristina stato manuale da localStorage */
+            var stored = localStorage.getItem('sidebar_collapsed');
+            if (stored === '0') {
+                sidebar.classList.remove('collapsed');
+            } else {
+                sidebar.classList.add('collapsed');
+            }
+        }
+        updateHoverUI();
+    });
+
+    /* --- Toggle manuale (funziona solo in modalità manuale) --- */
+    toggleBtn.addEventListener('click', function () {
+        if (autoHover) return;
+        var collapsed = sidebar.classList.toggle('collapsed');
+        localStorage.setItem('sidebar_collapsed', collapsed ? '1' : '0');
+    });
+
+    updateHoverUI();
+
+    /* Modalità giocatrice toggle */
+    var form = document.querySelector(".modalita-toggle");
+    if (!form) return;
+    form.addEventListener("submit", function (e) {
+        if (form.dataset.attiva !== "true") return;
+        if (sessionStorage.getItem("sbloccato") === "1") {
+            var inp = document.createElement("input");
+            inp.type = "hidden";
+            inp.name = "sbloccato_tab";
+            inp.value = "1";
+            form.appendChild(inp);
+        } else {
+            e.preventDefault();
+            window.location.href = "{{ url_for('sblocca_modalita') }}?next=" + encodeURIComponent(window.location.pathname);
+        }
+    });
+})();
+</script>
+</body>
+</html>

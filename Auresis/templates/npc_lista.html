@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Personaggi — Il Registro{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">Catalogo dei soggetti</p>
+    <h1 class="page-title">Personaggi</h1>
+</div>
+
+<div class="actions-row" style="margin-bottom: 28px;">
+    <a class="btn" href="{{ url_for('nuovo_npc') }}">+ Nuovo personaggio</a>
+</div>
+
+{% if npc_list %}
+<div class="entry-grid">
+    {% for n in npc_list %}
+    <div class="card card--contaminazione" style="--vena-width: {{ 2 + (n.livello_contaminazione or 0) * 3 }}px;">
+        <h3 class="card__title"><a href="{{ url_for('dettaglio_npc', npc_id=n.id) }}">{{ n.nome }}</a></h3>
+        <p class="card__subtitle">
+            {{ n.ruolo or 'ruolo non specificato' }}
+            {% if n.fazione_nome %} · {{ n.fazione_nome }}{% endif %}
+            {% if n.location_nome %} · {{ n.location_nome }}{% endif %}
+        </p>
+        {% if n.descrizione_breve %}
+        <p class="card__desc">{{ n.descrizione_breve }}</p>
+        {% endif %}
+        <div class="card__footer">
+            <span class="tag tag--{{ n.stato }}">{{ n.stato }}</span>
+            {% if n.livello_contaminazione and n.livello_contaminazione > 0 %}
+            <span class="tag" style="color: var(--gold-bright); border-color: var(--gold);">AC livello {{ n.livello_contaminazione }}</span>
+            {% endif %}
+        </div>
+        {% if not modalita_giocatrice %}
+        <form method="post" action="{{ url_for('npc_toggle_visibile', npc_id=n.id) }}" style="margin-top: 10px;">
+            <button type="submit" class="completata-toggle {% if n.visibile_giocatrice %}completata-toggle--attivo{% endif %}">
+                <span class="completata-toggle__check">{% if n.visibile_giocatrice %}✓{% endif %}</span>
+                {{ 'Mostrabile alla giocatrice' if n.visibile_giocatrice else 'Nascosto' }}
+            </button>
+        </form>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <p class="empty-state__title">Nessun personaggio ancora registrato.</p>
+    <p>I soggetti che incontri nella campagna compariranno qui.</p>
+</div>
+{% endif %}
+
+{% endblock %}

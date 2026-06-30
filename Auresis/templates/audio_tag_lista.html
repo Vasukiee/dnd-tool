@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">Colonna sonora</p>
+    <h1 class="page-title">Gestione tag</h1>
+</div>
+
+<div class="actions-row" style="margin-bottom: 24px;">
+    <a href="{{ url_for('audio_lista') }}" class="btn btn--ghost">← Torna alla lista</a>
+</div>
+
+{% if not tag %}
+<div class="empty-state">
+    <p class="empty-state__title">Nessun tag creato</p>
+    <p>I tag vengono creati automaticamente quando aggiungi o modifichi una traccia.</p>
+</div>
+{% else %}
+<div style="border: 1px solid var(--ink-line); border-radius: 6px; overflow: hidden;">
+    {% for t in tag %}
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 18px;
+                border-bottom: {% if not loop.last %}1px solid var(--ink-line){% else %}none{% endif %};">
+        <div style="display:flex; align-items:center; gap:14px;">
+            <span class="tag tag--categoria">{{ t.nome }}</span>
+            <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--bone-dim);">
+                {{ t.uso }} {% if t.uso == 1 %}traccia{% else %}tracce{% endif %}
+            </span>
+        </div>
+        <form method="post" action="{{ url_for('audio_tag_elimina', tag_id=t.id) }}"
+              onsubmit="return confirm({% if t.uso > 0 %}'Questo tag è usato da {{ t.uso }} {% if t.uso == 1 %}traccia{% else %}tracce{% endif %}. Eliminarlo lo rimuoverà da {% if t.uso == 1 %}quella traccia{% else %}tutte{% endif %}. Continuare?'{% else %}'Eliminare questo tag?'{% endif %});">
+            <button type="submit" class="btn btn--danger" style="font-size:0.7rem; padding:6px 12px;">Elimina</button>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

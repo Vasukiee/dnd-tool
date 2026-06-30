@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ location.nome }} — Il Registro{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">Luogo · {{ location.tipo or 'tipo non specificato' }}</p>
+    <h1 class="page-title">{{ location.nome }}</h1>
+    {% if location.stato_attuale %}<p class="page-meta">{{ location.stato_attuale }}</p>{% endif %}
+</div>
+
+<div class="detail-section">
+    <p class="detail-section__label">Dati</p>
+    <div class="field-row"><span class="field-row__label">Fazione controllante</span><span>{{ location.fazione_nome or '—' }}</span></div>
+</div>
+
+{% if location.descrizione_breve %}
+<div class="detail-section">
+    <p class="detail-section__label">Descrizione</p>
+    <p>{{ location.descrizione_breve }}</p>
+</div>
+{% endif %}
+
+{% if location.npc_presenti %}
+<div class="detail-section">
+    <p class="detail-section__label">Personaggi presenti</p>
+    <div class="related-list">
+        {% for n in location.npc_presenti %}
+        <a class="related-item" href="{{ url_for('dettaglio_npc', npc_id=n.id) }}">
+            <span>{{ n.nome }}</span>
+            <span class="tag tag--{{ n.stato }}">{{ n.stato }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if location.quest_collegate %}
+<div class="detail-section">
+    <p class="detail-section__label">Incarichi collegati</p>
+    <div class="related-list">
+        {% for q in location.quest_collegate %}
+        <a class="related-item" href="{{ url_for('dettaglio_quest', quest_id=q.id) }}">
+            <span>{{ q.nome }}</span>
+            <span class="tag tag--{{ q.stato }}">{{ q.stato }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if location.eventi_qui %}
+<div class="detail-section">
+    <p class="detail-section__label">Eventi avvenuti qui</p>
+    <div class="timeline">
+        {% for e in location.eventi_qui %}
+        <div class="timeline-item">
+            <div class="timeline-item__session">Sess. {{ e.sessione }}</div>
+            <div class="timeline-item__body"><p>{{ e.riassunto }}</p></div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if location.note %}
+<div class="detail-section">
+    <p class="detail-section__label">Note libere</p>
+    <p>{{ location.note }}</p>
+</div>
+{% endif %}
+
+<div class="actions-row">
+    <a class="btn btn--ghost" href="{{ url_for('edita_location', location_id=location.id) }}">Modifica</a>
+    <form method="POST" action="{{ url_for('elimina_location', location_id=location.id) }}" onsubmit="return confirm('Eliminare definitivamente questo luogo dal registro?');" style="display:inline;">
+        <button type="submit" class="btn btn--danger">Elimina</button>
+    </form>
+</div>
+
+{% endblock %}
