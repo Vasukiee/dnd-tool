@@ -1461,6 +1461,7 @@ details[open] .filtri-section__toggle::before {
     overflow-y: auto;
     font-size: 0.9rem;
     background: var(--ink);
+    scroll-behavior: smooth;
 }
 
 .editor-footer {
