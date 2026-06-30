@@ -294,11 +294,16 @@ async function salva() {
 }
 
 function handleKey(e) {
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    // Può essere usato per altre shortcut specifiche della textarea (es. Tab)
+}
+
+// Intercetta Ctrl+S a livello globale sull'intero documento
+document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         salva();
     }
-}
+});
 
 document.addEventListener('DOMContentLoaded', () => {
     const ta = document.getElementById('editor-textarea');

@@ -1,6 +1,6 @@
-## SESSIONE 1: IL PESO DELL'ORO
+# SESSIONE 1: IL PESO DELL'ORO
 
-### SCENA 0: L'ANTICAMERA TERMICA
+## SCENA 0: L'ANTICAMERA TERMICA
 
 **(Master)** Benvenuta su Auresis. Qui non esistono continenti, solo un infinito arcipelago vulcanico circondato da un mare denso, oleoso e grigio, saturo di silice. Non esiste un calendario globale. Il tempo, su quest'isola, si misura solo a ritmi di estrazione.
 
@@ -72,7 +72,7 @@ _(Silenzio rotto solo dallo stridore del montacarichi e dal fischio del vapore).
 
 Tu non ti sei mai interessata di politica, ma Tessa è la cosa più vicina a una famiglia che hai qui sotto. Cosa le rispondi, o cosa fai, in questo momento di intimità e tensione mentre il montacarichi continua la sua discesa?
 
-### SCENA 1: LA SCOPERTA NEL FILONE SETTE
+## SCENA 1: LA SCOPERTA NEL FILONE SETTE
 
 _(L'ascensore urta il fondo corsa con un tonfo metallico che fa vibrare la roccia. I cancelli si spalancano sferragliando. L'aria alla base del pozzo è pesante, satura di vapore in pressione e zolfo. I minatori si riversano fuori in silenzio, disperdendosi nei vari tunnel)._
 
@@ -108,7 +108,7 @@ _(Il rumore è assordante: ferro contro pietra, scricchiolii strutturali, il res
 
 **(Master)** L'oro brilla debolmente sotto la luce aranciata. Sei tu quella con il piccone sollevato e l'attrezzo in mano in questo momento. Boro pende dalle tue labbra, paralizzato dall'indecisione tra la salute e il salario.
 
-## IL BIVIO NARRATIVO
+## ** IL BIVIO NARRATIVO **
 
 ### PERCORSO A: L'ESTRAZIONE CLANDESTINA (La Via del Rischio e della Febbre)
 
@@ -158,7 +158,7 @@ _(Il bagliore di una lanterna chimica a Lumen puro illumina il corridoio. Appare
 
 **(Master)** Le guardie si posizionano all'ingresso del tunnel, sbarrandoti la strada verso il tuo fronte di scavo. Sei costretta a risalire in superficie a mani vuote, con il freddo di Glacies che inizia a premere sulle tue giunture inutilizzate e gli sguardi d'odio degli altri minatori che ti seguono lungo il pozzo. Stasera alla fonte principale dovrai spiegare a Tessa perché hai fatto perdere il turno a tutti.
 
-### SCENA 2: IL DISASTRO DELLA GALLERIA NOVE E IL TRADIMENTO
+## SCENA 2: IL DISASTRO DELLA GALLERIA NOVE E IL TRADIMENTO
 
 _(Che tu stia stringendo la pesante bisaccia con l'oro clandestino o che tu stia risalendo con le mani vuote e lo stomaco contratto dal risentimento, il destino di Calderaviva si compie nello stesso, identico istante)._
 
@@ -210,13 +210,13 @@ Sei rimasta sola. Voll osserva il suo orologio da taschino, impassibile, aspetta
 
 Sei tu contro la montagna e contro la fredda apatia della Curia. Che cosa fai?
 
-## LA SCELTA SOLITARIA E IL PREZZO DA PAGARE
+## **LA SCELTA SOLITARIA E IL PREZZO DA PAGARE**
 
-_A seconda di cosa sceglie di fare la giocatrice, leggi la risoluzione corrispondente:_
+*A seconda di cosa sceglie di fare la giocatrice, leggi la risoluzione corrispondente:*
 
 ### OPZIONE 1: LA FORZA DELLA DISPERAZIONE (Il Sacrificio Strutturale)
 
-_Se la giocatrice tenta di sollevare o fare leva sulla lastra da sola, senza chiedere aiuto a Voll._
+_Se la giocatrice tenta di sollevare o fare leva sulla lastra da sola, senza chiedere aiuto a Voll.
 
 **(Master)** Non ti pieghi. Afferri il tuo pesante piccone, sapendo che sei sola. Incastri la punta acuminata sotto la lastra di basalto, cercando un fulcro instabile tra i detriti. Voll ti guarda, segnando distrattamente qualcosa sulla sua tavoletta, ma non ti ferma. Per lui, se muori tu, è solo un'altra riga tirata in bilancio.
 
@@ -254,7 +254,7 @@ Ma mentre ti avvicini per sorreggerla, Voll ti blocca la strada con il suo basto
 
 L'hai salvata sottomettendoti al sistema, solo per sentirti dire che il sistema la scarterà comunque per fame e freddo, condannando anche il bambino di Tessa di cui ti aveva parlato stamattina.
 
-### SCENA 3: CENERE E RUGGINE
+## SCENA 3: CENERE E RUGGINE
 
 **(Master)** Siete tornate ai livelli abitativi superiori. Il turno è finito. Non c'è la solita confusione allegra di fine lavoro, solo un silenzio cupo e pesante. Siete nella baracca di Tessa. La stufa a carbone emette solo un debole bagliore rossastro, del tutto incapace di respingere il freddo denso di Glacies che preme contro le pareti di lamiera. Il silenzio è interrotto soltanto dal ticchettio irregolare di una perdita d'acqua che gocciola dal soffitto.
 
@@ -274,7 +274,7 @@ _(Scagli la spazzola di ferro contro la parete di ghisa della stufa. Il rumore m
 
 **(Master)** Tessa non si muove. Il suo respiro continua a salire e scendere, debole, sospeso nel limbo grigio della miniera.
 
-## IL TEMPO DELLE INCALCINATURE (Il Timeskip)
+## SCENA 4: IL TEMPO DELLE INCALCINATURE (Il Timeskip)
 
 **(Master)** I cicli di estrazione si sono succeduti l'uno dopo l'altro, seppellendo il ricordo di quel crollo sotto tonnellate di nuovo basalto. Su Auresis il tempo non ha un nome, si misura solo in turni consumati e gallerie abbandonate.
 

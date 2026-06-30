@@ -33,3 +33,19 @@ _(Una nuova scena, un nuovo titolo. L'indice a destra si aggiorna da solo mentre
 ## TERZA SCENA: LA CHECKBOX "COMPLETATA"
 
 **(Master)** Le sessioni vere della campagna nascono come bozza. Restano visibili a te, ma sono nascoste alla giocatrice finché non spunti "Completata" nella pagina della sessione. Questa pagina di esempio, invece, non ha quella spunta: è sempre visibile, a prescindere.
+
+## QUARTA SCENA: INTEGRAZIONE AUDIO
+
+**(Master)** Una novità assoluta è la possibilità di integrare i brani musicali direttamente nel testo, per averli sempre a portata di click senza interrompere la narrazione. 
+
+Basta usare un tag testuale nel copione. Se il nome corrisponde a una traccia esistente nel database, diventerà un comodo bottone interattivo. Prova a premere questo:
+
+@audio: Wii Shop
+
+**(Master)** Quando premi un bottone valido, a destra comparirà automaticamente il Player Audio che caricherà la canzone, pronta da ascoltare in sottofondo.
+
+Cosa succede invece se ti sbagli a scrivere o inserisci una canzone che non hai ancora caricato nel database? Il sistema se ne accorge subito e ti mostra un bottone rosso di errore.
+
+@audio: Canzone che non esiste
+
+**(Master)** Questo ti aiuterà tantissimo in fase di revisione per assicurarti di aver preparato tutte le tracce per la sessione!
