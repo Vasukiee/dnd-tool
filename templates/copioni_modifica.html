@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+{% block title %}Modifica — {{ titolo }} — Il Registro{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">Modifica copione · <code style="font-size:0.75em; color:var(--bone-dim);">{{ nome_file }}</code></p>
+    <h1 class="page-title">{{ titolo }}</h1>
+</div>
+
+<div class="editor-toolbar">
+    <button type="button" class="editor-btn" onclick="inserisci('**', '**')" title="Grassetto">B</button>
+    <button type="button" class="editor-btn editor-btn--italic" onclick="inserisci('*', '*')" title="Corsivo">I</button>
+    <span class="editor-toolbar__sep"></span>
+    <button type="button" class="editor-btn" onclick="inserisciRiga('# ')" title="Titolo H1">H1</button>
+    <button type="button" class="editor-btn" onclick="inserisciRiga('## ')" title="Titolo H2">H2</button>
+    <button type="button" class="editor-btn" onclick="inserisciRiga('### ')" title="Titolo H3">H3</button>
+    <span class="editor-toolbar__sep"></span>
+    <button type="button" class="editor-btn" onclick="inserisciRiga('> ')" title="Citazione / dialogo">❝</button>
+    <button type="button" class="editor-btn" onclick="inserisciRiga('- ')" title="Lista">—</button>
+    <button type="button" class="editor-btn" onclick="inserisciRigaIntera('---')" title="Separatore scena">÷</button>
+    <span class="editor-toolbar__sep"></span>
+    <button type="button" class="editor-btn" onclick="inserisci('**(Master) ', '**')" title="Voce Master">(M)</button>
+    <span class="editor-toolbar__sep"></span>
+    <button type="button" class="editor-btn" onclick="document.getElementById('img-file-input').click()" title="Inserisci immagine">🖼</button>
+    <input type="file" id="img-file-input" accept="image/*" style="display:none"
+           onchange="inserisciImmagineFile(this.files[0]); this.value='';">
+    <span class="editor-toolbar__spacer"></span>
+    <span class="editor-hint">Anteprima in tempo reale · incolla un'immagine · Ctrl+S per salvare</span>
+</div>
+
+<div class="editor-layout">
+    <div class="editor-pane editor-pane--source">
+        <div class="editor-pane__label">Sorgente</div>
+        <form method="POST" id="editor-form">
+            <textarea id="editor-textarea" name="contenuto" class="editor-textarea"
+                      oninput="aggiornaPrev()" onkeydown="handleKey(event)"
+                      spellcheck="false">{{ contenuto }}</textarea>
+        </form>
+    </div>
+    <div class="editor-pane editor-pane--preview">
+        <div class="editor-pane__label">Anteprima</div>
+        <div id="editor-preview" class="copione-corpo editor-preview-body"></div>
+    </div>
+</div>
+
+<div class="editor-footer">
+    <button type="button" class="btn" onclick="salva()">Salva</button>
+    <a href="{{ url_for('copioni_dettaglio', numero_sessione=numero_sessione) }}" class="btn btn--ghost">Annulla</a>
+    <span id="save-stato" class="editor-save-stato"></span>
+</div>
+
+<script>
+/* ── Gestione immagini ──────────────────────────────────────────────
+   Le immagini base64 (data:...) sono enormi: nella textarea verrebbero
+   mostrate come un muro di codice. Le "collassiamo" in un token corto
+   #b64_N (lo store tiene il dato vero), così la sorgente resta leggibile.
+   In salvataggio ri-espandiamo i token nel base64 reale, mantenendo il
+   .md autocontenuto. */
+let imgStore = {};
+let imgSeq = 0;
+
+function collassaBase64(text) {
+    return text.replace(/(!\[[^\]]*\]\()\s*(data:[^)\s]+)\s*(\))/g, (m, pre, data, post) => {
+        imgSeq++;
+        const id = 'b64_' + imgSeq;
+        imgStore[id] = data;
+        return pre + '#' + id + post;
+    });
+}
+function espandiBase64(text) {
+    return text.replace(/(!\[[^\]]*\]\()#(b64_\d+)(\))/g, (m, pre, id, post) =>
+        pre + (imgStore[id] || ('#' + id)) + post);
+}
+
+/* Allineamenti memorizzati in italiano nel markdown: sx / centro / dx */
+function normAlign(a) {
+    a = (a || '').toLowerCase();
+    if (a === 'left')   return 'sx';
+    if (a === 'center') return 'centro';
+    if (a === 'right')  return 'dx';
+    if (a === 'sx' || a === 'centro' || a === 'dx') return a;
+    return 'sx';
+}
+function parseImgOpts(opts) {
+    let width = '', align = 'sx';
+    (opts || '').split('|').forEach(tok => {
+        tok = tok.trim();
+        if (!tok) return;
+        if (/^\d+$/.test(tok)) width = tok;
+        else if (/^(sx|left|centro|center|dx|right)$/i.test(tok)) align = normAlign(tok);
+    });
+    return { width, align };
+}
+function imgStyle(width, align) {
+    let s = 'display:block;';
+    s += width ? ('max-width:' + width + 'px;width:100%;') : 'max-width:100%;';
+    if (align === 'centro')  s += 'margin-left:auto;margin-right:auto;';
+    else if (align === 'dx') s += 'margin-left:auto;margin-right:0;';
+    else                     s += 'margin-left:0;margin-right:auto;';
+    return s;
+}
+
+/* HTML di una singola immagine con barra controlli sotto */
+function renderImage(alt, opts, src, idx) {
+    const o = parseImgOpts(opts);
+    let realSrc = src;
+    if (src.charAt(0) === '#' && imgStore[src.slice(1)]) realSrc = imgStore[src.slice(1)];
+    const w = o.width || '';
+    function alBtn(val, label, title) {
+        return '<button type="button" class="img-ctrl__al' + (o.align === val ? ' is-on' : '') +
+               '" onclick="setImgAlign(' + idx + ',\'' + val + '\')" title="' + title + '">' + label + '</button>';
+    }
+    const bar =
+        '<div class="img-ctrl">' +
+          '<input type="range" class="img-ctrl__range" min="120" max="1000" step="20" ' +
+                 'value="' + (w || 500) + '" oninput="setImgWidth(' + idx + ', this.value)">' +
+          '<span class="img-ctrl__w" id="imgw-' + idx + '">' + (w ? w + 'px' : 'auto') + '</span>' +
+          alBtn('sx', '⇤', 'Sinistra') + alBtn('centro', '⇔', 'Centro') + alBtn('dx', '⇥', 'Destra') +
+          '<button type="button" class="img-ctrl__al" onclick="setImgWidth(' + idx + ',\'\')" title="Larghezza automatica">auto</button>' +
+        '</div>';
+    return '<figure class="img-wrap">' +
+           '<img id="previmg-' + idx + '" src="' + realSrc + '" alt="' + alt + '" style="' + imgStyle(o.width, o.align) + '">' +
+           bar + '</figure>';
+}
+
+/* Riscrive gli attributi dell'idx-esima immagine nella textarea sorgente */
+function updateImgToken(idx, changes) {
+    const ta = document.getElementById('editor-textarea');
+    let i = 0, result = { width: '', align: 'sx' };
+    ta.value = ta.value.replace(/!\[([^\]|]*)((?:\|[^\]|]+)*)\]\(([^)]+)\)/g, (m, alt, opts, src) => {
+        if (i++ !== idx) return m;
+        const o = parseImgOpts(opts);
+        if ('width' in changes) o.width = changes.width;
+        if ('align' in changes) o.align = changes.align;
+        result = o;
+        const parts = [];
+        if (o.width) parts.push(o.width);
+        if (o.align && o.align !== 'sx') parts.push(o.align);
+        return '![' + alt + (parts.length ? '|' + parts.join('|') : '') + '](' + src + ')';
+    });
+    return result;
+}
+
+/* Slider larghezza: aggiorna la sorgente e ri-stila l'immagine in tempo
+   reale SENZA rigenerare l'anteprima (così lo slider non perde il drag). */
+function setImgWidth(idx, val) {
+    const o = updateImgToken(idx, { width: val });
+    const img = document.getElementById('previmg-' + idx);
+    if (img) img.style.cssText = imgStyle(o.width, o.align);
+    const lbl = document.getElementById('imgw-' + idx);
+    if (lbl) lbl.textContent = o.width ? o.width + 'px' : 'auto';
+}
+function setImgAlign(idx, align) {
+    updateImgToken(idx, { align: align });
+    aggiornaPrev();
+}
+
+/* Inserisce un file immagine come token base64 collassato */
+function fileToDataURL(file) {
+    return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+    });
+}
+async function inserisciImmagineFile(file) {
+    if (!file || !file.type || file.type.indexOf('image/') !== 0) return;
+    const data = await fileToDataURL(file);
+    imgSeq++;
+    const id = 'b64_' + imgSeq;
+    imgStore[id] = data;
+    const ta = document.getElementById('editor-textarea');
+    const s = ta.selectionStart;
+    const snippet = '\n![immagine|500|centro](#' + id + ')\n';
+    ta.setRangeText(snippet, s, s, 'end');
+    ta.focus();
+    aggiornaPrev();
+}
+
+/* ── Minimal markdown renderer per l'anteprima ── */
+function renderMd(src) {
+    // Escape HTML
+    let s = src
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    // Le immagini sono gestite riga per riga nel loop sotto (block-level),
+    // così i controlli dimensione/allineamento non finiscono dentro un <p>.
+    // Voce Master: **(testo che inizia con ()** → span master
+    s = s.replace(/\*\*((\([^)]+\))[^*]*)\*\*/g,
+        '<span class="copione-master">$1</span>');
+    // Nomi personaggio: **testo** rimasto
+    s = s.replace(/\*\*([^*\n]+)\*\*/g,
+        '<span class="copione-personaggio">$1</span>');
+    // Corsivo
+    s = s.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+
+    const lines = s.split('\n');
+    const out = [];
+    let inUl = false, inPara = false;
+    let imgIdx = 0;
+    const RE_IMG_LINE = /^!\[([^\]|]*)((?:\|[^\]|]+)*)\]\(([^)]+)\)\s*$/;
+
+    function chiudi() {
+        if (inPara)  { out.push('</p>');  inPara  = false; }
+        if (inUl)    { out.push('</ul>'); inUl    = false; }
+    }
+
+    for (let line of lines) {
+        const t = line.trimStart();
+        const mImg = t.match(RE_IMG_LINE);
+        if (mImg) {
+            chiudi();
+            out.push(renderImage(mImg[1], mImg[2], mImg[3], imgIdx++));
+            continue;
+        }
+        const mH = t.match(/^(#{1,6})\s(.*)/);
+        if (mH) {
+            chiudi();
+            const lv = mH[1].length;
+            out.push(`<h${lv}>${mH[2]}</h${lv}>`);
+        } else if (/^---+$/.test(t)) {
+            chiudi(); out.push('<hr>');
+        } else if (/^&gt;\s/.test(t)) {
+            chiudi();
+            out.push(`<blockquote><p>${t.replace(/^&gt;\s/, '')}</p></blockquote>`);
+        } else if (/^[-*]\s/.test(t)) {
+            if (inPara) { out.push('</p>'); inPara = false; }
+            if (!inUl)  { out.push('<ul>'); inUl = true; }
+            out.push(`<li>${t.slice(2)}</li>`);
+        } else if (t === '') {
+            chiudi(); out.push('');
+        } else {
+            if (inUl) { out.push('</ul>'); inUl = false; }
+            if (!inPara) { out.push('<p>'); inPara = true; }
+            else out.push('<br>');
+            out.push(line);
+        }
+    }
+    chiudi();
+    return out.join('\n');
+}
+
+function aggiornaPrev() {
+    const src = document.getElementById('editor-textarea').value;
+    document.getElementById('editor-preview').innerHTML = renderMd(src);
+}
+
+/* ── Toolbar helpers ── */
+function inserisci(pre, post) {
+    const ta = document.getElementById('editor-textarea');
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    const sel = ta.value.slice(s, e) || 'testo';
+    ta.setRangeText(pre + sel + post, s, e, 'select');
+    ta.focus();
+    aggiornaPrev();
+}
+
+function inserisciRiga(prefix) {
+    const ta = document.getElementById('editor-textarea');
+    const s = ta.selectionStart;
+    const lineStart = ta.value.lastIndexOf('\n', s - 1) + 1;
+    ta.setRangeText(prefix, lineStart, lineStart, 'end');
+    ta.focus();
+    aggiornaPrev();
+}
+
+function inserisciRigaIntera(testo) {
+    const ta = document.getElementById('editor-textarea');
+    const s = ta.selectionStart;
+    const ins = '\n' + testo + '\n';
+    ta.setRangeText(ins, s, s, 'end');
+    ta.focus();
+    aggiornaPrev();
+}
+
+/* ── Salvataggio asincrono ── */
+const _saveUrl = "{{ url_for('copioni_modifica', numero_sessione=numero_sessione) }}";
+let _saveTimer = null;
+
+async function salva() {
+    const testo = espandiBase64(document.getElementById('editor-textarea').value);
+    const stato = document.getElementById('save-stato');
+    stato.textContent = 'Salvataggio…';
+    stato.className = 'editor-save-stato';
+    try {
+        const r = await fetch(_saveUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contenuto: testo }),
+        });
+        if (r.ok) {
+            stato.textContent = '✓ Salvato';
+            stato.className = 'editor-save-stato editor-save-stato--ok';
+            clearTimeout(_saveTimer);
+            _saveTimer = setTimeout(() => { stato.textContent = ''; }, 2500);
+        } else {
+            stato.textContent = `Errore ${r.status}`;
+            stato.className = 'editor-save-stato editor-save-stato--err';
+        }
+    } catch (e) {
+        stato.textContent = 'Errore di rete';
+        stato.className = 'editor-save-stato editor-save-stato--err';
+    }
+}
+
+function handleKey(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        salva();
+    }
+}
+
+/* Inizializza: collassa il base64 esistente in token corti, poi anteprima */
+document.addEventListener('DOMContentLoaded', () => {
+    const ta = document.getElementById('editor-textarea');
+    ta.value = collassaBase64(ta.value);
+    aggiornaPrev();
+
+    // Incolla un'immagine dagli appunti → inserita come token base64
+    ta.addEventListener('paste', (e) => {
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (const it of items) {
+            if (it.type && it.type.indexOf('image/') === 0) {
+                e.preventDefault();
+                inserisciImmagineFile(it.getAsFile());
+                return;
+            }
+        }
+    });
+});
+</script>
+
+{% endblock %}

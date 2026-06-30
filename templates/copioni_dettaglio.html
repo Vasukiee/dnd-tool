@@ -28,14 +28,17 @@
         {% endif %}
     </div>
 
-    {% if not is_template %}
-    <form method="post" action="{{ url_for('copioni_toggle_completata', numero_sessione=numero_sessione) }}">
-        <button type="submit" class="completata-toggle {% if completata %}completata-toggle--attivo{% endif %}">
-            <span class="completata-toggle__check">{% if completata %}✓{% endif %}</span>
-            {{ 'Completata, mostrabile alla giocatrice' if completata else 'Segna come completata' }}
-        </button>
-    </form>
-    {% endif %}
+    <div class="actions-row">
+        {% if not is_template %}
+        <form method="post" action="{{ url_for('copioni_toggle_completata', numero_sessione=numero_sessione) }}">
+            <button type="submit" class="completata-toggle {% if completata %}completata-toggle--attivo{% endif %}">
+                <span class="completata-toggle__check">{% if completata %}✓{% endif %}</span>
+                {{ 'Completata' if completata else 'Segna come completata' }}
+            </button>
+        </form>
+        {% endif %}
+        <a href="{{ url_for('copioni_modifica', numero_sessione=numero_sessione) }}" class="btn btn--ghost">✎ Modifica</a>
+    </div>
 </div>
 
 <div class="copione-layout">

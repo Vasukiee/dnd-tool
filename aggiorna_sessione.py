@@ -1,5 +1,4 @@
 import db
-import psycopg2.extras
 
 
 def chiedi(domanda, default=None):
@@ -97,8 +96,8 @@ def azione_location():
     if stato_attuale: kwargs["stato_attuale"] = stato_attuale
     if fazione_nome:
         conn = db.get_connection()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT id FROM fazioni WHERE nome ILIKE %s", (f"%{fazione_nome}%",))
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM fazioni WHERE nome LIKE ?", (f"%{fazione_nome}%",))
         row = cur.fetchone()
         cur.close()
         conn.close()
@@ -154,8 +153,8 @@ def azione_quest():
 def azione_link_npc_quest():
     nome_quest = chiedi("Nome quest")
     conn = db.get_connection()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT id FROM quest WHERE nome ILIKE %s", (f"%{nome_quest}%",))
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM quest WHERE nome LIKE ?", (f"%{nome_quest}%",))
     quest_row = cur.fetchone()
     if not quest_row:
         print(f"  Quest '{nome_quest}' non trovata.")
@@ -163,7 +162,7 @@ def azione_link_npc_quest():
         conn.close()
         return
     nome_npc = chiedi("Nome NPC")
-    cur.execute("SELECT id FROM npc WHERE nome ILIKE %s", (f"%{nome_npc}%",))
+    cur.execute("SELECT id FROM npc WHERE nome LIKE ?", (f"%{nome_npc}%",))
     npc_row = cur.fetchone()
     cur.close()
     conn.close()
@@ -176,6 +175,25 @@ def azione_link_npc_quest():
 
 
 def azione_pg_stato():
+    pgs = db.get_all_pg()
+
+    if not pgs:
+        print("  Nessun personaggio ancora registrato. Verra' creato un nuovo personaggio.")
+        pg_id = None
+    elif len(pgs) == 1:
+        pg_id = pgs[0]["id"]
+        print(f"  Personaggio: {pgs[0]['nome'] or '(senza nome)'}")
+    else:
+        print("\n  Personaggi disponibili:")
+        for i, pg in enumerate(pgs, 1):
+            print(f"    {i}. {pg['nome'] or '(senza nome)'}")
+        while True:
+            scelta = input("  Quale vuoi aggiornare? Scegli un numero: ").strip()
+            if scelta.isdigit() and 1 <= int(scelta) <= len(pgs):
+                pg_id = pgs[int(scelta) - 1]["id"]
+                break
+            print("  Input non valido, riprova.")
+
     nome = chiedi("Nome PG (invio per non modificare)")
     condizione = chiedi("Condizione fisica attuale (invio per non modificare)")
     ferite = chiedi("Ferite attive (invio per non modificare)")
@@ -200,8 +218,16 @@ def azione_pg_stato():
         else:
             print(f"  (location '{location_nome}' non trovata, ignorata)")
 
-    db.set_pg_stato(**kwargs)
-    print("Stato del PG aggiornato.")
+    if not kwargs:
+        print("Nessuna modifica inserita, niente da salvare.")
+        return
+
+    if pg_id is None:
+        db.crea_pg(**kwargs)
+        print("Personaggio creato.")
+    else:
+        db.aggiorna_pg(pg_id, **kwargs)
+        print("Stato del PG aggiornato.")
 
 
 def azione_fatto():

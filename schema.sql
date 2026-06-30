@@ -6,11 +6,11 @@
 CREATE TABLE IF NOT EXISTS fazioni (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT NOT NULL UNIQUE,
-    nome_popolare TEXT,              -- es. "I Gravitisti" vs nome ufficiale
-    ideologia TEXT,                  -- breve descrizione del principio guida
-    territorio TEXT,                 -- dove ha base/influenza
-    relazione_pg TEXT DEFAULT 'neutrale',  -- alleata / neutrale / ostile / sconosciuta
-    stato_attuale TEXT,              -- breve nota su cosa sta facendo ora nella trama
+    nome_popolare TEXT,
+    ideologia TEXT,
+    territorio TEXT,
+    relazione_pg TEXT DEFAULT 'neutrale',
+    stato_attuale TEXT,
     note TEXT,
     attiva INTEGER DEFAULT 1         -- 0 se la fazione è stata distrutta/sciolta
 );
@@ -19,12 +19,13 @@ CREATE TABLE IF NOT EXISTS fazioni (
 CREATE TABLE IF NOT EXISTS locations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT NOT NULL UNIQUE,
-    tipo TEXT,                       -- città / quartiere / dungeon / regione...
+    tipo TEXT,
     descrizione_breve TEXT,
     fazione_controllante_id INTEGER,
-    location_padre_id INTEGER,       -- per gerarchie (es. quartiere dentro città)
-    stato_attuale TEXT,              -- es. "in rovina dopo l'attacco", "in festa"
+    location_padre_id INTEGER,
+    stato_attuale TEXT,
     note TEXT,
+    visibile_giocatrice INTEGER DEFAULT 0,
     FOREIGN KEY (fazione_controllante_id) REFERENCES fazioni(id),
     FOREIGN KEY (location_padre_id) REFERENCES locations(id)
 );
@@ -33,16 +34,17 @@ CREATE TABLE IF NOT EXISTS locations (
 CREATE TABLE IF NOT EXISTS npc (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT NOT NULL,
-    ruolo TEXT,                      -- es. "fornitore", "antagonista minore", "alleato"
+    ruolo TEXT,
     fazione_id INTEGER,
     location_attuale_id INTEGER,
     stato TEXT DEFAULT 'vivo',       -- vivo / morto / disperso / sconosciuto
-    relazione_pg TEXT,               -- breve nota qualitativa ("fidato", "diffidente"...)
-    descrizione_breve TEXT,          -- una riga, per riconoscerlo al volo
-    note_caratteriali TEXT,          -- tic verbali, modo di parlare, per consistenza
-    livello_contaminazione INTEGER DEFAULT 0,  -- 0-5, esposizione/avanzamento Auris Cancer
+    relazione_pg TEXT,
+    descrizione_breve TEXT,
+    note_caratteriali TEXT,
+    livello_contaminazione INTEGER DEFAULT 0,  -- 0-5, progressione Oripatia
     ultima_apparizione_sessione INTEGER,
     note TEXT,
+    visibile_giocatrice INTEGER DEFAULT 0,
     FOREIGN KEY (fazione_id) REFERENCES fazioni(id),
     FOREIGN KEY (location_attuale_id) REFERENCES locations(id)
 );
@@ -51,14 +53,15 @@ CREATE TABLE IF NOT EXISTS npc (
 CREATE TABLE IF NOT EXISTS quest (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT NOT NULL,
-    tipo TEXT DEFAULT 'side',         -- main / side
-    stato TEXT DEFAULT 'attiva',      -- attiva / completata / fallita / in_pausa
+    tipo TEXT DEFAULT 'side',
+    stato TEXT DEFAULT 'attiva',
     location_id INTEGER,
-    riassunto TEXT,                   -- stato fattuale attuale, breve
-    obiettivo_attuale TEXT,           -- cosa deve fare il PG per progredire
+    riassunto TEXT,
+    obiettivo_attuale TEXT,
     sessione_inizio INTEGER,
     sessione_fine INTEGER,
     note TEXT,
+    visibile_giocatrice INTEGER DEFAULT 0,
     FOREIGN KEY (location_id) REFERENCES locations(id)
 );
 
@@ -76,34 +79,66 @@ CREATE TABLE IF NOT EXISTS quest_npc (
 CREATE TABLE IF NOT EXISTS eventi (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sessione INTEGER NOT NULL,
-    riassunto TEXT NOT NULL,          -- 1-3 frasi, fattuale
-    conseguenze_attive TEXT,          -- cosa resta "vivo" da questo evento ora
+    riassunto TEXT NOT NULL,
+    conseguenze_attive TEXT,
     location_id INTEGER,
     data_inserimento TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (location_id) REFERENCES locations(id)
 );
 
--- STATO DEL PERSONAGGIO (singola riga aggiornata, single-player)
+-- STATO DEI PERSONAGGI (una riga per personaggio giocante)
 CREATE TABLE IF NOT EXISTS pg_stato (
-    id INTEGER PRIMARY KEY CHECK (id = 1),  -- forziamo una sola riga
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT,
-    condizione_fisica TEXT,           -- es. "braccio meccanico, costola incrinata"
+    classe TEXT,
+    razza TEXT,
+    condizione_fisica TEXT,
     ferite_attive TEXT,
     equipaggiamento TEXT,
-    risorse TEXT,                     -- crediti, oggetti di valore, ecc.
+    risorse TEXT,
     abilita_acquisite TEXT,
     sessione_corrente INTEGER DEFAULT 0,
     location_attuale_id INTEGER,
     note TEXT,
+    hp_correnti            INTEGER,
+    hp_massimi             INTEGER,
+    background             TEXT,
+    stadio_oripatia        INTEGER DEFAULT 0,
+    oripatia_agente        TEXT,
+    oripatia_vettore       TEXT,
+    oripatia_progressione  TEXT,
+    oripatia_risposta_arti TEXT,
+    oripatia_prognosi      TEXT,
+    oripatia_note          TEXT,
+    stato                  TEXT DEFAULT 'sconosciuto',
     FOREIGN KEY (location_attuale_id) REFERENCES locations(id)
 );
 
--- FATTI ACCERTATI (cose scoperte/promesse fatte, slegate da una singola quest/npc)
+-- STATISTICHE DEI PERSONAGGI (valori liberi 1-10, N per PG)
+CREATE TABLE IF NOT EXISTS pg_statistiche (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    pg_id           INTEGER NOT NULL,
+    nome_statistica TEXT    NOT NULL,
+    valore          INTEGER NOT NULL DEFAULT 5,
+    posizione       INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (pg_id) REFERENCES pg_stato(id) ON DELETE CASCADE
+);
+
+-- ABILITÀ SPECIALI DEI PERSONAGGI (N per PG, nome + descrizione libera)
+CREATE TABLE IF NOT EXISTS pg_abilita (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    pg_id       INTEGER NOT NULL,
+    nome        TEXT NOT NULL,
+    descrizione TEXT,
+    FOREIGN KEY (pg_id) REFERENCES pg_stato(id) ON DELETE CASCADE
+);
+
+-- FATTI ACCERTATI
 CREATE TABLE IF NOT EXISTS fatti_accertati (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     descrizione TEXT NOT NULL,
     sessione INTEGER,
-    rilevanza TEXT DEFAULT 'media',   -- alta / media / bassa (per filtraggio futuro)
+    rilevanza TEXT DEFAULT 'media',
     note TEXT
 );
 
@@ -120,13 +155,13 @@ CREATE INDEX IF NOT EXISTS idx_eventi_sessione ON eventi(sessione);
 
 CREATE TABLE IF NOT EXISTS tracce_audio (
                                             id INTEGER PRIMARY KEY AUTOINCREMENT,
-                                            nome TEXT NOT NULL,                  -- es. "Fonderia / Acciaieria"
-                                            categoria TEXT NOT NULL,             -- es. "industriale", "tensione", "intimo", "orrore"
+                                            nome TEXT NOT NULL,
+                                            categoria TEXT NOT NULL,
                                             youtube_id TEXT NOT NULL,            -- solo l'ID del video, non l'URL intero (es. "P1rgc5FBPOM")
-                                            timestamp_inizio INTEGER DEFAULT 0,  -- secondi da cui far partire il loop, opzionale
-                                            note TEXT,                           -- "buono per scene in miniera, loop lungo"
-                                            location_id INTEGER,                 -- opzionale: traccia legata a una location
-                                            quest_id INTEGER,                    -- opzionale: traccia legata a una questline
+                                            timestamp_inizio INTEGER DEFAULT 0,
+                                            note TEXT,
+                                            location_id INTEGER,
+                                            quest_id INTEGER,
                                             FOREIGN KEY (location_id) REFERENCES locations(id),
     FOREIGN KEY (quest_id) REFERENCES quest(id)
     );
@@ -141,5 +176,16 @@ CREATE INDEX IF NOT EXISTS idx_audio_quest ON tracce_audio(quest_id);
 
 CREATE TABLE IF NOT EXISTS sessioni_copioni (
                                                 numero_sessione INTEGER PRIMARY KEY,
-                                                completata INTEGER DEFAULT 0  -- 0 = non completata (nascosta in modalità giocatrice), 1 = completata
+                                                completata INTEGER DEFAULT 0  -- 0 = bozza, 1 = visibile
+);
+
+CREATE TABLE IF NOT EXISTS palette_personalizzata (
+    variabile TEXT PRIMARY KEY,
+    valore    TEXT NOT NULL
+);
+
+-- PASSWORD MASTER per il toggle modalità giocatrice
+CREATE TABLE IF NOT EXISTS impostazioni_sicurezza (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    password_master TEXT
 );

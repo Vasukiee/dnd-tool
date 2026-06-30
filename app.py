@@ -1,9 +1,9 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from urllib.parse import urlparse
 from werkzeug.security import check_password_hash
+import os
 import db
 import copioni
-from prompt_builder import costruisci_prompt
 
 app = Flask(__name__)
 app.secret_key = "campagna-locale-non-serve-sicurezza-vera"
@@ -14,6 +14,12 @@ modalita_giocatrice_attiva = True
 @app.context_processor
 def inietta_modalita_giocatrice():
     return {"modalita_giocatrice": modalita_giocatrice_attiva}
+
+
+@app.context_processor
+def inietta_palette():
+    return {"palette_personalizzata": db.get_palette()}
+
 
 def _int_or_none(value):
     return int(value) if value else None
@@ -83,6 +89,36 @@ def copioni_dettaglio(numero_sessione):
         sessioni=sessioni,
         completata=completata,
         is_template=is_template,
+    )
+
+
+@app.route("/copioni/<int:numero_sessione>/modifica", methods=["GET", "POST"])
+def copioni_modifica(numero_sessione):
+    percorso = copioni.get_file_path_sessione(numero_sessione)
+    if percorso is None:
+        flash("File copione non trovato o sessione non esistente.")
+        return redirect(url_for("copioni_dettaglio", numero_sessione=numero_sessione))
+    if request.method == "POST":
+        if request.is_json:
+            testo = request.get_json(force=True).get("contenuto", "")
+            with open(percorso, "w", encoding="utf-8") as fh:
+                fh.write(testo)
+            return {"ok": True}
+        testo = request.form.get("contenuto", "")
+        with open(percorso, "w", encoding="utf-8") as fh:
+            fh.write(testo)
+        flash("Copione salvato.")
+        return redirect(url_for("copioni_dettaglio", numero_sessione=numero_sessione))
+    with open(percorso, "r", encoding="utf-8") as fh:
+        testo = fh.read()
+    titolo = copioni.estrai_titolo(testo) or f"Sessione {numero_sessione}"
+    return render_template(
+        "copioni_modifica.html",
+        active="copioni",
+        numero_sessione=numero_sessione,
+        titolo=titolo,
+        contenuto=testo,
+        nome_file=os.path.basename(percorso),
     )
 
 
@@ -164,8 +200,11 @@ def edita_npc(npc_id):
 
 @app.route("/npc/<int:npc_id>/elimina", methods=["POST"])
 def elimina_npc(npc_id):
-    db.delete_record("npc", npc_id)
-    flash("Personaggio eliminato dal registro.")
+    try:
+        db.delete_record("npc", npc_id)
+        flash("Personaggio eliminato dal registro.")
+    except db.EliminazioneBloccata as e:
+        flash(str(e))
     return redirect(url_for("lista_npc"))
 
 
@@ -224,8 +263,11 @@ def edita_fazione(fazione_id):
 
 @app.route("/fazioni/<int:fazione_id>/elimina", methods=["POST"])
 def elimina_fazione(fazione_id):
-    db.delete_record("fazioni", fazione_id)
-    flash("Fazione eliminata dal registro.")
+    try:
+        db.delete_record("fazioni", fazione_id)
+        flash("Fazione eliminata dal registro.")
+    except db.EliminazioneBloccata as e:
+        flash(str(e))
     return redirect(url_for("lista_fazioni"))
 
 
@@ -285,8 +327,11 @@ def edita_location(location_id):
 
 @app.route("/locations/<int:location_id>/elimina", methods=["POST"])
 def elimina_location(location_id):
-    db.delete_record("locations", location_id)
-    flash("Luogo eliminato dal registro.")
+    try:
+        db.delete_record("locations", location_id)
+        flash("Luogo eliminato dal registro.")
+    except db.EliminazioneBloccata as e:
+        flash(str(e))
     return redirect(url_for("lista_locations"))
 
 
@@ -337,7 +382,6 @@ def nuova_quest():
     locations = db.get_all_locations()
     return render_template("quest_form.html", active="quest", quest=None, locations=locations)
 
-
 @app.route("/quest/<int:quest_id>/edita", methods=["GET", "POST"])
 def edita_quest(quest_id):
     quest = db.get_quest_full(quest_id)
@@ -352,7 +396,7 @@ def edita_quest(quest_id):
         kwargs["location_id"] = _int_or_none(request.form.get("location_id"))
         kwargs["sessione_inizio"] = _int_or_none(request.form.get("sessione_inizio"))
         kwargs["sessione_fine"] = _int_or_none(request.form.get("sessione_fine"))
-        db.upsert_quest(request.form["nome"], **kwargs)
+        db.aggiorna_quest(quest_id, request.form["nome"], **kwargs)
         flash(f"Incarico '{request.form['nome']}' aggiornato.")
         return redirect(url_for("dettaglio_quest", quest_id=quest_id))
 
@@ -362,8 +406,11 @@ def edita_quest(quest_id):
 
 @app.route("/quest/<int:quest_id>/elimina", methods=["POST"])
 def elimina_quest(quest_id):
-    db.delete_record("quest", quest_id)
-    flash("Incarico eliminato dal registro.")
+    try:
+        db.delete_record("quest", quest_id)
+        flash("Incarico eliminato dal registro.")
+    except db.EliminazioneBloccata as e:
+        flash(str(e))
     return redirect(url_for("lista_quest"))
 
 
@@ -389,6 +436,20 @@ def collega_npc_quest(quest_id):
 
     npc_list = db.get_all_npc_full()
     return render_template("quest_collega_npc.html", active="quest", quest=quest, npc_list=npc_list)
+
+
+@app.route("/quest/<int:quest_id>/scollega-npc/<int:npc_id>", methods=["POST"])
+def scollega_npc_da_quest(quest_id, npc_id):
+    db.unlink_npc_quest(quest_id, npc_id)
+    flash("Collegamento rimosso.")
+    return redirect(url_for("dettaglio_quest", quest_id=quest_id))
+
+
+@app.route("/npc/<int:npc_id>/scollega-quest/<int:quest_id>", methods=["POST"])
+def scollega_quest_da_npc(npc_id, quest_id):
+    db.unlink_npc_quest(quest_id, npc_id)
+    flash("Collegamento rimosso.")
+    return redirect(url_for("dettaglio_npc", npc_id=npc_id))
 
 
 # --- EVENTI ---
@@ -418,8 +479,11 @@ def nuovo_evento():
 
 @app.route("/eventi/<int:evento_id>/elimina", methods=["POST"])
 def elimina_evento(evento_id):
-    db.delete_record("eventi", evento_id)
-    flash("Evento eliminato dalla cronaca.")
+    try:
+        db.delete_record("eventi", evento_id)
+        flash("Evento eliminato dalla cronaca.")
+    except db.EliminazioneBloccata as e:
+        flash(str(e))
     return redirect(url_for("lista_eventi"))
 
 
@@ -447,28 +511,149 @@ def nuovo_fatto():
 
 @app.route("/fatti/<int:fatto_id>/elimina", methods=["POST"])
 def elimina_fatto(fatto_id):
-    db.delete_record("fatti_accertati", fatto_id)
-    flash("Verità eliminata dal registro.")
+    try:
+        db.delete_record("fatti_accertati", fatto_id)
+        flash("Verità eliminata dal registro.")
+    except db.EliminazioneBloccata as e:
+        flash(str(e))
     return redirect(url_for("lista_fatti"))
 
 
-# --- STATO DEL PG ---
+# --- SOGGETTI ---
 
-@app.route("/soggetto", methods=["GET", "POST"])
-def pg_stato_page():
+@app.route("/soggetti")
+def pg_lista_page():
+    pgs = db.get_all_pg()
+    return render_template("pg_lista.html", active="pg", pgs=pgs)
+
+
+@app.route("/soggetti/nuovo", methods=["GET", "POST"])
+def nuovo_pg():
     if request.method == "POST":
         kwargs = _kwargs_da_form(request.form, [
-            "nome", "condizione_fisica", "ferite_attive", "equipaggiamento", "risorse", "abilita_acquisite", "note"
+            "nome", "classe", "razza", "condizione_fisica", "ferite_attive",
+            "equipaggiamento", "risorse", "note", "background",
+            "oripatia_agente", "oripatia_vettore", "oripatia_progressione",
+            "oripatia_risposta_arti", "oripatia_prognosi", "oripatia_note", "stato",
         ])
         kwargs["sessione_corrente"] = int(request.form.get("sessione_corrente") or 0)
         kwargs["location_attuale_id"] = _int_or_none(request.form.get("location_attuale_id"))
-        db.set_pg_stato(**kwargs)
-        flash("Stato del personaggio aggiornato.")
-        return redirect(url_for("pg_stato_page"))
-
-    pg = db.get_pg_stato()
+        kwargs["hp_correnti"] = _int_or_none(request.form.get("hp_correnti"))
+        kwargs["hp_massimi"] = _int_or_none(request.form.get("hp_massimi"))
+        kwargs["stadio_oripatia"] = max(0, min(4, int(request.form.get("stadio_oripatia") or 0)))
+        pg_id = db.crea_pg(**kwargs)
+        flash("Personaggio creato.")
+        return redirect(url_for("pg_dettaglio", pg_id=pg_id))
     locations = db.get_all_locations()
-    return render_template("pg_stato.html", active="pg", pg=pg, locations=locations)
+    return render_template("pg_form.html", active="pg", pg=None, locations=locations, statistiche=[], abilita=[])
+
+
+@app.route("/soggetti/<int:pg_id>", methods=["GET", "POST"])
+def pg_dettaglio(pg_id):
+    pg = db.get_pg_by_id(pg_id)
+    if pg is None:
+        flash("Personaggio non trovato.")
+        return redirect(url_for("pg_lista_page"))
+    if request.method == "POST":
+        kwargs = _kwargs_da_form(request.form, [
+            "nome", "classe", "razza", "condizione_fisica", "ferite_attive",
+            "equipaggiamento", "risorse", "note", "background",
+            "oripatia_agente", "oripatia_vettore", "oripatia_progressione",
+            "oripatia_risposta_arti", "oripatia_prognosi", "oripatia_note", "stato",
+        ])
+        kwargs["sessione_corrente"] = int(request.form.get("sessione_corrente") or 0)
+        kwargs["location_attuale_id"] = _int_or_none(request.form.get("location_attuale_id"))
+        kwargs["hp_correnti"] = _int_or_none(request.form.get("hp_correnti"))
+        kwargs["hp_massimi"] = _int_or_none(request.form.get("hp_massimi"))
+        kwargs["stadio_oripatia"] = max(0, min(4, int(request.form.get("stadio_oripatia") or 0)))
+        db.aggiorna_pg(pg_id, **kwargs)
+        for key, val in request.form.items():
+            if key.startswith("stat_") and val.isdigit():
+                stat_id = int(key[5:])
+                db.aggiorna_statistica_pg(stat_id, max(0, min(10, int(val))))
+        flash("Personaggio aggiornato.")
+        return redirect(url_for("pg_dettaglio", pg_id=pg_id))
+    locations = db.get_all_locations()
+    statistiche = db.get_statistiche_pg(pg_id)
+    abilita = db.get_abilita_pg(pg_id)
+    return render_template("pg_form.html", active="pg", pg=pg, locations=locations, statistiche=statistiche, abilita=abilita)
+
+
+@app.route("/soggetti/<int:pg_id>/elimina", methods=["POST"])
+def elimina_pg(pg_id):
+    db.delete_pg(pg_id)
+    flash("Personaggio eliminato.")
+    return redirect(url_for("pg_lista_page"))
+
+
+
+
+@app.route("/soggetti/<int:pg_id>/statistiche/aggiungi", methods=["POST"])
+def pg_aggiungi_statistica(pg_id):
+    pg = db.get_pg_by_id(pg_id)
+    if pg is None:
+        flash("Personaggio non trovato.")
+        return redirect(url_for("pg_lista_page"))
+    nome = request.form.get("nome_statistica", "").strip()
+    valore = max(0, min(10, int(request.form.get("valore_statistica") or 5)))
+    if nome:
+        db.aggiungi_statistica_pg(pg_id, nome, valore)
+        flash(f"Statistica '{nome}' aggiunta.")
+    return redirect(url_for("pg_dettaglio", pg_id=pg_id))
+
+
+@app.route("/soggetti/<int:pg_id>/statistiche/<int:stat_id>/elimina", methods=["POST"])
+def pg_elimina_statistica(pg_id, stat_id):
+    db.delete_statistica_pg(stat_id)
+    flash("Statistica rimossa.")
+    return redirect(url_for("pg_dettaglio", pg_id=pg_id))
+
+
+@app.route("/soggetti/<int:pg_id>/background", methods=["POST"])
+def pg_salva_background(pg_id):
+    background = request.form.get("background", "").strip()
+    db.aggiorna_pg(pg_id, background=background)
+    flash("Background salvato.")
+    return redirect(url_for("pg_dettaglio", pg_id=pg_id))
+
+
+@app.route("/soggetti/<int:pg_id>/statistiche/riordina", methods=["POST"])
+def pg_riordina_statistiche(pg_id):
+    ordine = request.get_json(silent=True) or {}
+    for i, stat_id in enumerate(ordine.get("ids", [])):
+        db.aggiorna_posizione_statistica(int(stat_id), i)
+    return {"ok": True}
+
+
+@app.route("/soggetti/<int:pg_id>/abilita/aggiungi", methods=["POST"])
+def pg_aggiungi_abilita(pg_id):
+    pg = db.get_pg_by_id(pg_id)
+    if pg is None:
+        flash("Personaggio non trovato.")
+        return redirect(url_for("pg_lista_page"))
+    nome = request.form.get("nome", "").strip()
+    descrizione = request.form.get("descrizione", "").strip()
+    if nome:
+        db.aggiungi_abilita_pg(pg_id, nome, descrizione)
+        flash(f"Abilità '{nome}' aggiunta.")
+    return redirect(url_for("pg_dettaglio", pg_id=pg_id))
+
+
+@app.route("/soggetti/<int:pg_id>/abilita/<int:abilita_id>/modifica", methods=["POST"])
+def pg_modifica_abilita(pg_id, abilita_id):
+    nome = request.form.get("nome", "").strip()
+    descrizione = request.form.get("descrizione", "").strip()
+    if nome:
+        db.aggiorna_abilita_pg(abilita_id, nome, descrizione)
+        flash(f"Abilità aggiornata.")
+    return redirect(url_for("pg_dettaglio", pg_id=pg_id))
+
+
+@app.route("/soggetti/<int:pg_id>/abilita/<int:abilita_id>/elimina", methods=["POST"])
+def pg_elimina_abilita(pg_id, abilita_id):
+    db.delete_abilita_pg(abilita_id)
+    flash("Abilità rimossa.")
+    return redirect(url_for("pg_dettaglio", pg_id=pg_id))
 
 
 # --- MODALITÀ GIOCATRICE ---
@@ -514,69 +699,6 @@ def sblocca_modalita():
 
     return render_template("sblocca_modalita.html", next_url=next_url)
 
-
-# --- GENERA PROMPT ---
-
-@app.route("/genera-prompt", methods=["GET", "POST"])
-def genera_prompt_page():
-    if modalita_giocatrice_attiva:
-        flash("Pagina non disponibile in modalità giocatrice.")
-        return redirect(url_for("home"))
-
-    locations = db.get_all_locations()
-
-    prompt_generato = None
-    quest_attive = []
-
-    location_id_selezionata = request.form.get("location_id") if request.method == "POST" else request.args.get("location_id")
-
-    if location_id_selezionata:
-        quest_attive = db.get_quest_attive(location_id=int(location_id_selezionata))
-    else:
-        quest_attive = db.get_quest_attive()
-
-    if request.method == "POST":
-        location_id = int(request.form["location_id"])
-        conn = db.get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM locations WHERE id = %s", (location_id,))
-        location_row = cur.fetchone()
-        cur.close()
-        conn.close()
-        location = dict(location_row) if location_row else None
-
-        quest_ids = [int(q) for q in request.form.getlist("quest_ids")]
-        quest_selezionate = [q for q in db.get_all_quest_full() if q["id"] in quest_ids]
-
-        npc_visti = {}
-        for npc in db.get_npc_in_location(location_id):
-            npc_visti[npc["id"]] = npc
-        for q in quest_selezionate:
-            for npc in db.get_npc_per_quest(q["id"]):
-                npc_visti[npc["id"]] = npc
-
-        contesto = {
-            "location_nome": location["nome"] if location else "Non specificata",
-            "location_descrizione": location.get("descrizione_breve", "") if location else "",
-            "npc": list(npc_visti.values()),
-            "quest": quest_selezionate,
-            "fazioni": db.get_fazioni_rilevanti(),
-            "fatti": db.get_fatti_accertati(),
-            "eventi": db.get_eventi_recenti(n=5),
-            "pg_stato": db.get_pg_stato(),
-            "tipo_scena": request.form.get("tipo_scena", ""),
-            "tono": request.form.get("tono", "").strip(),
-            "intento": request.form.get("intento", "").strip(),
-        }
-        prompt_generato = costruisci_prompt(contesto)
-
-    return render_template(
-        "genera_prompt.html",
-        active="genera",
-        locations=locations,
-        quest_attive=quest_attive,
-        prompt_generato=prompt_generato,
-    )
 
 # --- AUDIO ---
 
@@ -624,6 +746,28 @@ def audio_nuova():
 def audio_elimina(traccia_id):
     db.delete_traccia_audio(traccia_id)
     return redirect(url_for("audio_lista"))
+
+
+_VARIABILI_PALETTE = {
+    "--ink", "--ink-raised", "--ink-line",
+    "--bone", "--bone-dim",
+    "--gold", "--gold-bright",
+    "--rust", "--rust-bright",
+    "--verdigris", "--verdigris-bright",
+}
+
+
+@app.route("/palette", methods=["POST"])
+def salva_palette():
+    data = request.get_json()
+    if not data:
+        return {"ok": False}, 400
+    variabile = data.get("variabile", "").strip()
+    valore = data.get("valore", "").strip()
+    if variabile not in _VARIABILI_PALETTE:
+        return {"ok": False}, 400
+    db.set_palette_colore(variabile, valore)
+    return {"ok": True}
 
 
 if __name__ == "__main__":

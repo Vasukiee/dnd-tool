@@ -34,10 +34,19 @@
     <p class="detail-section__label">Personaggi coinvolti</p>
     <div class="related-list">
         {% for n in quest.npc_coinvolti %}
-        <a class="related-item" href="{{ url_for('dettaglio_npc', npc_id=n.id) }}">
-            <span>{{ n.nome }} {% if n.ruolo_nella_quest %}<span style="color: var(--bone-dim);">({{ n.ruolo_nella_quest }})</span>{% endif %}</span>
-            <span class="tag tag--{{ n.stato }}">{{ n.stato }}</span>
-        </a>
+        <div class="related-item">
+            <a href="{{ url_for('dettaglio_npc', npc_id=n.id) }}" style="flex:1; display:flex; justify-content:space-between; align-items:center; text-decoration:none; color:inherit; gap:8px;">
+                <span>{{ n.nome }} {% if n.ruolo_nella_quest %}<span style="color: var(--bone-dim);">({{ n.ruolo_nella_quest }})</span>{% endif %}</span>
+                <span class="tag tag--{{ n.stato }}">{{ n.stato }}</span>
+            </a>
+            {% if not modalita_giocatrice %}
+            <form method="POST" action="{{ url_for('scollega_npc_da_quest', quest_id=quest.id, npc_id=n.id) }}"
+                  onsubmit="return confirm('Rimuovere il collegamento tra {{ n.nome }} e questo incarico?');"
+                  style="margin:0; margin-left:10px;">
+                <button type="submit" class="btn btn--ghost" style="font-size:0.78rem; padding:3px 8px;">Scollega</button>
+            </form>
+            {% endif %}
+        </div>
         {% endfor %}
     </div>
 </div>

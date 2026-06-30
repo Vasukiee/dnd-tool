@@ -25,20 +25,37 @@ def _estrai_numero_sessione(nome_file):
 
 
 def _estrai_titolo(testo_md):
-    """Preferisce il primo H2 (## ...) trovato, perché nei file reali l'H1
-    è spesso il titolo generale dell'ambientazione/capitolo (es. "AURESIS:
-    CALDERAVIVA") mentre l'H2 è il titolo specifico della sessione (es.
-    "SESSIONE 1: IL PESO DELL'ORO") - quest'ultimo è quello che interessa
-    vedere nell'indice. Se non trova nessun H2, usa il primo H1 come
-    fallback. Ritorna None se non trova nessuno dei due."""
-    primo_h1 = None
+    """Ritorna il primo H1 (# ...) trovato, con H2 come fallback.
+    Ritorna None se non trova nessuno dei due."""
+    primo_h2 = None
     for riga in testo_md.splitlines():
         riga = riga.strip()
-        if riga.startswith("## "):
-            return riga.lstrip("#").strip()
-        if primo_h1 is None and riga.startswith("# "):
-            primo_h1 = riga.lstrip("#").strip()
-    return primo_h1
+        if not riga.startswith("#"):
+            continue
+        livello = len(riga) - len(riga.lstrip("#"))
+        testo = riga[livello:].strip()
+        if livello == 1:
+            return testo
+        if livello == 2 and primo_h2 is None:
+            primo_h2 = testo
+    return primo_h2
+
+
+def estrai_titolo(testo_md):
+    """Versione pubblica di _estrai_titolo."""
+    return _estrai_titolo(testo_md)
+
+
+def get_file_path_sessione(numero_sessione):
+    """Ritorna il percorso del primo file .md per la sessione, o None se non esiste."""
+    _assicura_cartella()
+    file_sessione = sorted([
+        f for f in os.listdir(COPIONI_DIR)
+        if f.endswith(".md") and _estrai_numero_sessione(f) == numero_sessione
+    ])
+    if not file_sessione:
+        return None
+    return os.path.join(COPIONI_DIR, file_sessione[0])
 
 
 def elenca_sessioni():
@@ -75,6 +92,51 @@ def elenca_sessioni():
 
     risultato.sort(key=lambda s: s["numero"], reverse=True)
     return risultato
+
+
+_RE_IMG = re.compile(r'!\[([^\]|]*)((?:\|[^\]|]+)*)\]\(([^)]+)\)')
+
+_ALIGN_MAP = {
+    "sx": "left", "left": "left",
+    "centro": "center", "center": "center",
+    "dx": "right", "right": "right",
+}
+
+def _processa_immagini(testo_md):
+    """Converte la sintassi immagine Markdown in tag <img> con larghezza e
+    allineamento opzionali. Gli attributi vanno dopo l'alt, separati da '|',
+    in qualsiasi ordine:
+      ![alt](url)                → max-width:100%, allineata a sinistra
+      ![alt|400](url)            → larghezza max 400px
+      ![alt|centro](url)         → centrata
+      ![alt|400|dx](url)         → larghezza 400px, allineata a destra
+    Allineamenti accettati: sx/left, centro/center, dx/right.
+    """
+    def sostituisci(m):
+        alt, opts, src = m.group(1), m.group(2), m.group(3)
+        larghezza = None
+        align = "left"
+        for tok in opts.split("|"):
+            tok = tok.strip()
+            if not tok:
+                continue
+            if tok.isdigit():
+                larghezza = tok
+            elif tok.lower() in _ALIGN_MAP:
+                align = _ALIGN_MAP[tok.lower()]
+        stile = ["display:block"]
+        if larghezza:
+            stile += [f"max-width:{larghezza}px", "width:100%"]
+        else:
+            stile.append("max-width:100%")
+        if align == "center":
+            stile += ["margin-left:auto", "margin-right:auto"]
+        elif align == "right":
+            stile += ["margin-left:auto", "margin-right:0"]
+        else:
+            stile += ["margin-left:0", "margin-right:auto"]
+        return f'<img src="{src}" alt="{alt}" style="{";".join(stile)}">'
+    return _RE_IMG.sub(sostituisci, testo_md)
 
 
 def _proteggi_blocchi_master_e_personaggi(testo_md):
@@ -134,7 +196,8 @@ def renderizza_sessione(numero_sessione):
             testo_completo.append(f.read())
     testo_unito = "\n\n---\n\n".join(testo_completo)  # separatore visivo tra file/scene
 
-    testo_protetto = _proteggi_blocchi_master_e_personaggi(testo_unito)
+    testo_protetto = _processa_immagini(testo_unito)
+    testo_protetto = _proteggi_blocchi_master_e_personaggi(testo_protetto)
 
     # toc ci serve solo per assegnare id univoci agli heading (gestisce da
     # sola le collisioni, es. titoli duplicati -> id_1, id_2...), anche se
