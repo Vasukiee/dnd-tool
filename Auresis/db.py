@@ -222,6 +222,18 @@ def get_all_tracce_audio(tag=None):
     return result
 
 
+def get_traccia_audio_by_nome(nome):
+    """Cerca una traccia audio per nome (case-insensitive) per l'integrazione nei copioni."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    # L'uso di ILIKE rende la ricerca insensibile a maiuscole/minuscole
+    cur.execute("SELECT * FROM tracce_audio WHERE nome ILIKE %s LIMIT 1", (nome,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return dict(row) if row else None
+
+
 def get_tracce_audio_per_location(location_id):
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)

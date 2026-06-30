@@ -1,6 +1,7 @@
 import os
 import re
 import markdown as md_lib
+import db
 
 
 COPIONI_DIR = os.path.join(os.path.dirname(__file__), "copioni")
@@ -25,20 +26,15 @@ def _estrai_numero_sessione(nome_file):
 
 
 def _estrai_titolo(testo_md):
-    """Preferisce il primo H2 (## ...) trovato, perché nei file reali l'H1
-    è spesso il titolo generale dell'ambientazione/capitolo (es. "AURESIS:
-    CALDERAVIVA") mentre l'H2 è il titolo specifico della sessione (es.
-    "SESSIONE 1: IL PESO DELL'ORO") - quest'ultimo è quello che interessa
-    vedere nell'indice. Se non trova nessun H2, usa il primo H1 come
-    fallback. Ritorna None se non trova nessuno dei due."""
-    primo_h1 = None
+    """Estrae il titolo del copione (il primo H1) e pulisce in automatico
+    la dicitura 'Sessione #: ' lasciando solo il nome della sessione."""
     for riga in testo_md.splitlines():
         riga = riga.strip()
-        if riga.startswith("## "):
-            return riga.lstrip("#").strip()
-        if primo_h1 is None and riga.startswith("# "):
-            primo_h1 = riga.lstrip("#").strip()
-    return primo_h1
+        if riga.startswith("# "):
+            raw_titolo = riga.lstrip("#").strip()
+            # Pulisce "Sessione 1:", "SESSIONE 12: ", ecc.
+            return re.sub(r'(?i)^Sessione\s+\d+:\s*', '', raw_titolo)
+    return None
 
 
 def elenca_sessioni():
@@ -101,6 +97,41 @@ _ALIGN_MAP = {
     "centro": "center", "center": "center",
     "dx": "right", "right": "right",
 }
+
+
+def _processa_audio_tags(testo_md):
+    """Cerca tag testuali tipo @audio: Nome Traccia e li sostituisce
+    con pulsanti interattivi. Pesca i dati interrogando il db audio."""
+    pattern = re.compile(r"@audio:\s*([^\n]+)")
+    
+    def sostituisci(m):
+        nome_traccia = m.group(1).strip()
+        traccia = db.get_traccia_audio_by_nome(nome_traccia)
+        if traccia:
+            traccia_id = traccia['id']
+            tipo = traccia['tipo_sorgente']
+            path = traccia.get('file_path', '') or ''
+            yt_id = traccia.get('youtube_id', '') or ''
+            
+            return (f'<span class="audio-recommendation-wrapper">'
+                    f'<span class="audio-recommendation-label">Musica consigliata:</span> '
+                    f'<button class="btn-inline-audio btn-audio-large" '
+                    f'data-audio-id="{traccia_id}" '
+                    f'data-audio-tipo="{tipo}" '
+                    f'data-audio-path="{path}" '
+                    f'data-audio-yt="{yt_id}" '
+                    f'data-audio-nome="{nome_traccia}" '
+                    f'title="Riproduci {nome_traccia}">🎵 {nome_traccia}</button>'
+                    f'</span>')
+        else:
+            return (f'<span class="audio-recommendation-wrapper">'
+                    f'<span class="audio-recommendation-label">Musica consigliata:</span> '
+                    f'<button class="btn-inline-audio btn-audio-large btn-audio-not-found" '
+                    f'title="Traccia \'{nome_traccia}\' non trovata nel database" disabled>'
+                    f'❌ {nome_traccia}</button>'
+                    f'</span>')
+
+    return pattern.sub(sostituisci, testo_md)
 
 
 def _processa_immagini(testo_md):
@@ -197,6 +228,7 @@ def renderizza_sessione(numero_sessione):
 
     testo_protetto = _processa_immagini(testo_unito)
     testo_protetto = _proteggi_blocchi_master_e_personaggi(testo_protetto)
+    testo_protetto = _processa_audio_tags(testo_protetto)
 
     # toc ci serve solo per assegnare id univoci agli heading (gestisce da
     # sola le collisioni, es. titoli duplicati -> id_1, id_2...), anche se
@@ -209,13 +241,16 @@ def renderizza_sessione(numero_sessione):
 
 
 def _estrai_h2_da_html(html):
-    """Estrae {id, testo} di ogni <h2> dall'HTML già renderizzato,
-    usando BeautifulSoup invece dei toc_tokens (vedi nota in
-    renderizza_sessione sul perché)."""
+    """Estrae {id, testo} di ogni <h2> dall'HTML già renderizzato.
+    Salta gli H2 che contengono formattazione (* o **) per distinguerli
+    dalle scene (h2 puliti)."""
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(html, "html.parser")
     risultato = []
     for h2 in soup.find_all("h2"):
+        # Se contiene tag di formattazione, lo ignoriamo
+        if h2.find(['strong', 'em', 'span']):
+            continue
         risultato.append({
             "id": h2.get("id", ""),
             "testo": h2.get_text(strip=True),

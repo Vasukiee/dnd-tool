@@ -32,7 +32,7 @@
 
     /* Colonna sinistra: Navigazione */
     .copione-col-left {
-        flex: 1 1 220px;
+        flex: 1 1 290px;
         display: flex;
         flex-direction: column;
         align-items: flex-end; /* allinea a destra, verso il testo */
@@ -54,7 +54,7 @@
 
     /* Colonna destra: Azioni (nell'header) o Outline (nel corpo) */
     .copione-col-right {
-        flex: 1 1 220px;
+        flex: 1 1 290px;
         display: flex;
         flex-direction: column;
         align-items: flex-start; /* allinea a sinistra, verso il testo */
@@ -87,21 +87,190 @@
         justify-content: flex-end;
     }
 
+    /* Stili per la Modalità Scene */
+    .copione-outline-wrapper {
+        position: sticky;
+        top: 40px;
+        margin: 95px 0 0 0;
+        max-height: calc(100vh - 80px);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .btn-scene-mode {
+        margin-bottom: 8px;
+        align-self: flex-start;
+        font-size: 0.85rem;
+        padding: 6px 12px;
+        opacity: 0.8;
+        transition: opacity 0.2s;
+    }
+    .btn-scene-mode:hover, .btn-scene-mode.attivo {
+        opacity: 1;
+    }
+
     /* Stili override per outline */
     .copione-outline {
-        position: sticky;
-        top: 40px; /* Offset quando l'utente scrolla */
-        max-height: calc(100vh - 80px);
         overflow-y: auto;
         border-left: 2px solid var(--ink-line);
         padding-left: 16px;
         gap: 12px;
-        margin: 95px 0 0 0; /* Allineamento con la prima linea separatrice */
         display: flex;
         flex-direction: column;
         scrollbar-width: none;
     }
     .copione-outline::-webkit-scrollbar { display: none; }
+
+    /* Animazioni Scene */
+    .fade-out { animation: fadeOut 0.4s ease-out forwards; }
+    .fade-in { animation: fadeIn 0.4s ease-in forwards; }
+    
+    @keyframes fadeOut {
+        from { opacity: 1; transform: translateY(0); }
+        to { opacity: 0; transform: translateY(-20px); }
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .next-scene-wrapper {
+        display: flex;
+        justify-content: center;
+        margin: 60px 0;
+    }
+    
+    .btn-next-scene {
+        background: transparent;
+        border: 2px solid var(--ink-line);
+        color: var(--ink-main);
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .btn-next-scene:hover {
+        background: var(--ink-line);
+        color: var(--bone-bg);
+        transform: scale(1.1);
+    }
+
+    /* Elementi Audio nel Testo */
+    .audio-recommendation-wrapper {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 100%;
+        margin: 20px 0;
+        gap: 12px;
+    }
+    .audio-recommendation-label {
+        font-family: var(--font-header);
+        font-size: 0.9rem;
+        color: var(--ink-light);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .btn-inline-audio {
+        display: inline-flex;
+        align-items: center;
+        background-color: var(--ink-light);
+        color: var(--bone-bg);
+        border: 1px solid var(--ink-line);
+        border-radius: 4px;
+        padding: 2px 8px;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .btn-inline-audio.btn-audio-large {
+        padding: 4px 12px;
+        font-size: 1rem;
+        border-radius: 6px;
+        font-weight: bold;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+    .btn-inline-audio:hover {
+        background-color: var(--ink-main);
+        transform: translateY(-2px);
+    }
+    .btn-audio-not-found {
+        background-color: #8b0000 !important;
+        cursor: not-allowed;
+    }
+    .btn-audio-not-found:hover {
+        transform: none;
+    }
+
+    /* Contenitore per renderlo sticky a sinistra */
+    .copione-audio-wrapper {
+        position: sticky;
+        top: 40px;
+        margin: 95px 0 0 0;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end; /* Allinea verso il testo */
+    }
+
+    /* Widget Audio Laterale */
+    #audio-player-widget {
+        background-color: var(--bone-bg);
+        width: 100%;
+        max-width: 290px;
+        border: 2px solid var(--ink-line);
+        border-radius: 8px;
+        padding: 20px;
+        min-height: 280px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        display: none;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .audio-widget-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--ink-line);
+        padding-bottom: 8px;
+    }
+    .audio-widget-title {
+        font-weight: bold;
+        font-size: 0.8rem;
+        color: var(--ink-main);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 150px;
+    }
+    .audio-widget-close {
+        background: none;
+        border: none;
+        font-size: 1.2rem;
+        cursor: pointer;
+        color: var(--ink-light);
+        padding: 0;
+        line-height: 1;
+    }
+    .audio-widget-close:hover {
+        color: var(--ink-main);
+    }
+    #audio-widget-content audio {
+        width: 100%;
+        margin-top: 5px;
+    }
+
+    /* Nascondiamo l'H1 dal corpo testuale, dato che funge già da titolo principale della pagina */
+    .copione-corpo > h1 {
+        display: none !important;
+    }
 
     /* Fallback responsivo per schermi medi e piccoli */
     @media (max-width: 1100px) {
@@ -174,8 +343,21 @@
 
 <!-- CORPO E OUTLINE -->
 <div class="copione-flex-layout">
-    <!-- Bilanciamento vuoto a sx -->
-    <div class="copione-col-left"></div>
+    <!-- Colonna sinistra: Audio Player -->
+    <div class="copione-col-left">
+        <div class="copione-audio-wrapper">
+            <!-- Audio Player Widget -->
+            <div id="audio-player-widget">
+                <div class="audio-widget-header">
+                    <span class="audio-widget-title" id="audio-widget-title" title="">Titolo Traccia</span>
+                    <button class="audio-widget-close" id="audio-widget-close" title="Chiudi e ferma">×</button>
+                </div>
+                <div id="audio-widget-content">
+                    <!-- Audio HTML5 o iFrame YT verranno iniettati qui -->
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Corpo del Copione -->
     <div class="copione-col-center">
@@ -187,13 +369,18 @@
     <!-- Outline a dx -->
     <div class="copione-col-right">
         {% if heading_list %}
-        <nav class="copione-outline" id="copione-outline" aria-label="Indice scene">
-            {% for h in heading_list %}
-            <a href="#{{ h.id }}" class="copione-outline__item" data-heading-id="{{ h.id }}">
-                {{ h.testo }}
-            </a>
-            {% endfor %}
-        </nav>
+        <div class="copione-outline-wrapper">
+            <button type="button" class="btn btn--ghost btn-scene-mode" id="toggle-scene-btn" title="Modalità di lettura focalizzata a scene">
+                🎭 Lettura a Scene
+            </button>
+            <nav class="copione-outline" id="copione-outline" aria-label="Indice scene">
+                {% for h in heading_list %}
+                <a href="#{{ h.id }}" class="copione-outline__item" data-heading-id="{{ h.id }}">
+                    {{ h.testo }}
+                </a>
+                {% endfor %}
+            </nav>
+        </div>
         {% endif %}
     </div>
 </div>
@@ -238,6 +425,177 @@
 
         targets.forEach(t => observer.observe(t));
         impostaAttivo(idCorrente);
+
+        /* --- Logica Modalità Scene --- */
+        const btnScene = document.getElementById('toggle-scene-btn');
+        const corpoText = document.querySelector('.copione-corpo');
+        let modeSceneActive = false;
+        
+        if (btnScene) {
+            btnScene.addEventListener('click', function() {
+                modeSceneActive = !modeSceneActive;
+                this.classList.toggle('attivo', modeSceneActive);
+                
+                if (!corpoText.hasAttribute('data-scenes-initialized')) {
+                    inizializzaScene(corpoText);
+                    corpoText.setAttribute('data-scenes-initialized', 'true');
+                }
+                
+                if (modeSceneActive) {
+                    corpoText.classList.add('scene-mode-active');
+                    mostraScena(0);
+                    this.innerHTML = "📝 Modalità Completa";
+                    outline.style.display = 'none'; // Nascondiamo l'outline in mod. scene
+                } else {
+                    corpoText.classList.remove('scene-mode-active');
+                    const blocchi = corpoText.querySelectorAll('.scena-blocco');
+                    blocchi.forEach(b => {
+                        b.style.display = 'block';
+                        b.classList.remove('fade-out', 'fade-in');
+                    });
+                    this.innerHTML = "🎭 Lettura a Scene";
+                    outline.style.display = 'flex';
+                }
+            });
+        }
+        
+        function inizializzaScene(container) {
+            const children = Array.from(container.childNodes);
+            let currentBlocco = document.createElement('div');
+            currentBlocco.className = 'scena-blocco';
+            
+            const blocchi = [];
+            const validSceneIds = items.map(el => el.dataset.headingId);
+            
+            // Funzione helper per capire se un blocco ha vero contenuto oltre ai titoli
+            function hasRealContent(blocco) {
+                for (let i = 0; i < blocco.childNodes.length; i++) {
+                    const n = blocco.childNodes[i];
+                    if (n.nodeType === 1) {
+                        const tag = n.tagName;
+                        // Ignoriamo i titoli e i separatori. Solo p, ul, blockquote ecc. contano.
+                        if (!['H1','H2','H3','H4','H5','H6','HR','BR'].includes(tag)) {
+                            return true;
+                        }
+                    } else if (n.nodeType === 3 && n.textContent.trim() !== '') {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            
+            children.forEach(node => {
+                if (node.nodeType === 1 && node.tagName === 'H2' && validSceneIds.includes(node.id)) {
+                    // Se c'è già VERO contenuto nel blocco (es. testo, p, ul), lo salviamo e iniziamo una nuova scena.
+                    // Altrimenti (es. due H2 consecutivi senza testo in mezzo), li accorpiamo nello stesso blocco.
+                    if (hasRealContent(currentBlocco)) {
+                        blocchi.push(currentBlocco);
+                        currentBlocco = document.createElement('div');
+                        currentBlocco.className = 'scena-blocco';
+                    }
+                }
+                currentBlocco.appendChild(node.cloneNode(true));
+            });
+            
+            if (currentBlocco.childNodes.length > 0) {
+                blocchi.push(currentBlocco);
+            }
+            
+            container.innerHTML = '';
+            blocchi.forEach((b, i) => {
+                b.dataset.indice = i;
+                if (i < blocchi.length - 1) {
+                    const nextBtnWrap = document.createElement('div');
+                    nextBtnWrap.className = 'next-scene-wrapper';
+                    const nextBtn = document.createElement('button');
+                    nextBtn.className = 'btn-next-scene';
+                    nextBtn.innerHTML = '↓';
+                    nextBtn.onclick = () => scorriScena(i, i + 1);
+                    nextBtnWrap.appendChild(nextBtn);
+                    b.appendChild(nextBtnWrap);
+                }
+                b.style.display = 'block';
+                container.appendChild(b);
+            });
+        }
+        
+        function scorriScena(fromIdx, toIdx) {
+            const fromBlocco = corpoText.querySelector(`.scena-blocco[data-indice="${fromIdx}"]`);
+            const toBlocco = corpoText.querySelector(`.scena-blocco[data-indice="${toIdx}"]`);
+            
+            if (fromBlocco && toBlocco) {
+                fromBlocco.classList.add('fade-out');
+                setTimeout(() => {
+                    fromBlocco.style.display = 'none';
+                    fromBlocco.classList.remove('fade-out');
+                    
+                    toBlocco.style.display = 'block';
+                    toBlocco.classList.add('fade-in');
+                    window.scrollTo({top: 0, behavior: 'smooth'});
+                    
+                    setTimeout(() => toBlocco.classList.remove('fade-in'), 500);
+                }, 400);
+            }
+        }
+        
+        function mostraScena(idx) {
+            const blocchi = corpoText.querySelectorAll('.scena-blocco');
+            blocchi.forEach((b, i) => {
+                b.style.display = (i === idx) ? 'block' : 'none';
+                b.classList.remove('fade-out', 'fade-in');
+            });
+            window.scrollTo({top: 0, behavior: 'smooth'});
+        }
+
+        /* --- Logica Audio Player --- */
+        const audioBtns = document.querySelectorAll('.btn-inline-audio:not(.btn-audio-not-found)');
+        const audioWidget = document.getElementById('audio-player-widget');
+        const audioWidgetTitle = document.getElementById('audio-widget-title');
+        const audioWidgetContent = document.getElementById('audio-widget-content');
+        const audioWidgetClose = document.getElementById('audio-widget-close');
+
+        if (audioWidgetClose) {
+            audioWidgetClose.addEventListener('click', () => {
+                audioWidget.style.display = 'none';
+                audioWidgetContent.innerHTML = ''; // Ferma la riproduzione
+            });
+        }
+
+        audioBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const tipo = this.dataset.audioTipo;
+                const ytId = this.dataset.audioYt;
+                const path = this.dataset.audioPath;
+                const nome = this.dataset.audioNome;
+
+                audioWidgetTitle.textContent = nome;
+                audioWidgetTitle.title = nome;
+                audioWidgetContent.innerHTML = '';
+
+                if (tipo === 'youtube' && ytId) {
+                    const iframe = document.createElement('iframe');
+                    iframe.width = '100%';
+                    iframe.height = '240'; // Player abbastanza alto da mostrare tutti i controlli YT, incluso il volume
+                    iframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1`;
+                    iframe.title = "YouTube player";
+                    iframe.frameBorder = "0";
+                    iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+                    audioWidgetContent.appendChild(iframe);
+                } else if (tipo === 'file' && path) {
+                    const audio = document.createElement('audio');
+                    audio.controls = true;
+                    audio.volume = 0.15; // Imposta il volume iniziale al 15%
+                    audio.autoplay = true;
+                    audio.src = `/static/audio/${path}`;
+                    audioWidgetContent.appendChild(audio);
+                } else {
+                    audioWidgetContent.innerHTML = '<span style="font-size: 0.8rem; color: var(--ink-light);">Sorgente audio non valida.</span>';
+                }
+
+                audioWidget.style.display = 'flex';
+            });
+        });
+
     })();
 </script>
 {% endif %}
