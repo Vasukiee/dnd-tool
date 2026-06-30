@@ -307,22 +307,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* ── Scroll sincronizzato ── */
     const prev = document.getElementById('editor-preview');
-    let lockSource = false, lockPreview = false;
+    let syncing = false;
 
     ta.addEventListener('scroll', () => {
-        if (lockPreview) return;
-        lockSource = true;
+        if (syncing) return;
+        syncing = true;
         const pct = ta.scrollTop / (ta.scrollHeight - ta.clientHeight || 1);
         prev.scrollTop = pct * (prev.scrollHeight - prev.clientHeight);
-        requestAnimationFrame(() => { lockSource = false; });
+        syncing = false;
     });
 
     prev.addEventListener('scroll', () => {
-        if (lockSource) return;
-        lockPreview = true;
+        if (syncing) return;
+        syncing = true;
         const pct = prev.scrollTop / (prev.scrollHeight - prev.clientHeight || 1);
         ta.scrollTop = pct * (ta.scrollHeight - ta.clientHeight);
-        requestAnimationFrame(() => { lockPreview = false; });
+        syncing = false;
     });
 
     ta.addEventListener('paste', (e) => {
