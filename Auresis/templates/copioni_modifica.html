@@ -11,20 +11,21 @@
 </div>
 
 <div class="editor-toolbar">
-    <button type="button" class="editor-btn" onclick="inserisci('**', '**')" title="Grassetto">B</button>
-    <button type="button" class="editor-btn editor-btn--italic" onclick="inserisci('*', '*')" title="Corsivo">I</button>
+    <button type="button" class="editor-btn" id="btn-bold" onclick="inserisci('**', '**')" title="Grassetto">B</button>
+    <button type="button" class="editor-btn editor-btn--italic" id="btn-italic" onclick="inserisci('_', '_')" title="Corsivo">I</button>
     <span class="editor-toolbar__sep"></span>
-    <button type="button" class="editor-btn" onclick="inserisciRiga('# ')" title="Titolo H1">H1</button>
-    <button type="button" class="editor-btn" onclick="inserisciRiga('## ')" title="Titolo H2">H2</button>
-    <button type="button" class="editor-btn" onclick="inserisciRiga('### ')" title="Titolo H3">H3</button>
+    <button type="button" class="editor-btn" id="btn-h1" onclick="inserisciRiga('# ')" title="Titolo H1">H1</button>
+    <button type="button" class="editor-btn" id="btn-h2" onclick="inserisciRiga('## ')" title="Titolo H2">H2</button>
+    <button type="button" class="editor-btn" id="btn-h3" onclick="inserisciRiga('### ')" title="Titolo H3">H3</button>
     <span class="editor-toolbar__sep"></span>
-    <button type="button" class="editor-btn" onclick="inserisciRiga('> ')" title="Citazione / dialogo">❝</button>
-    <button type="button" class="editor-btn" onclick="inserisciRiga('- ')" title="Lista">—</button>
+    <button type="button" class="editor-btn" id="btn-quote" onclick="inserisciRiga('> ')" title="Citazione / dialogo">❝</button>
+    <button type="button" class="editor-btn" id="btn-list" onclick="inserisciRiga('- ')" title="Lista">—</button>
     <button type="button" class="editor-btn" onclick="inserisciRigaIntera('---')" title="Separatore scena">÷</button>
     <span class="editor-toolbar__sep"></span>
-    <button type="button" class="editor-btn" onclick="inserisci('**(Master) ', '**')" title="Voce Master">(M)</button>
+    <button type="button" class="editor-btn" id="btn-master" onclick="inserisciRiga('**(Master)** ')" title="Voce Master">(M)</button>
     <span class="editor-toolbar__sep"></span>
     <button type="button" class="editor-btn" onclick="document.getElementById('img-file-input').click()" title="Inserisci immagine">🖼</button>
+    <button type="button" class="editor-btn" onclick="apriAudioSelector()" title="Inserisci musica">𝄞</button>
     <input type="file" id="img-file-input" accept="image/*" style="display:none"
            onchange="inserisciImmagineFile(this.files[0]); this.value='';">
     <span class="editor-toolbar__spacer"></span>
@@ -36,7 +37,8 @@
         <div class="editor-pane__label">Sorgente</div>
         <form method="POST" id="editor-form">
             <textarea id="editor-textarea" name="contenuto" class="editor-textarea"
-                      oninput="aggiornaPrev()" onkeydown="handleKey(event)"
+                      oninput="aggiornaPrev(); aggiornaBottoni()" onkeydown="handleKey(event)"
+                      onkeyup="aggiornaBottoni()" onclick="aggiornaBottoni()"
                       spellcheck="false">{{ contenuto }}</textarea>
         </form>
     </div>
@@ -51,6 +53,98 @@
     <a href="{{ url_for('copioni_dettaglio', numero_sessione=numero_sessione) }}" class="btn btn--ghost">Annulla</a>
     <span id="save-stato" class="editor-save-stato"></span>
 </div>
+
+<dialog id="audio-selector" class="audio-dialog">
+    <div class="audio-dialog__header">
+        <h3 style="margin: 0; font-family: var(--font-display); font-size: 1.1rem; color: var(--gold);">Inserisci Musica</h3>
+        <button type="button" class="audio-dialog__close" onclick="document.getElementById('audio-selector').close()">✕</button>
+    </div>
+    <div class="audio-dialog__search">
+        <input type="text" id="audio-search" class="audio-dialog__input" placeholder="Cerca traccia..." onkeyup="filtraAudio()">
+    </div>
+    <div class="audio-dialog__list" id="audio-list">
+        {% for traccia in tracce %}
+        <button type="button" class="audio-dialog__item" onclick="inserisciAudio('{{ traccia.nome | replace("'", "\\'") }}')">
+            <span class="audio-dialog__icon">𝄞</span>
+            <span class="audio-dialog__name">{{ traccia.nome }}</span>
+            <span class="audio-dialog__tags">
+                {% if traccia.tags %}
+                    {% for t in traccia.tags %}
+                    <span class="audio-dialog__tag">{{ t }}</span>
+                    {% endfor %}
+                {% endif %}
+            </span>
+        </button>
+        {% endfor %}
+        {% if not tracce %}
+        <div style="padding: 1rem; color: var(--bone-dim); text-align: center; font-style: italic;">Nessuna traccia nel database.</div>
+        {% endif %}
+    </div>
+</dialog>
+
+<style>
+/* ── Audio Dialog ── */
+.audio-dialog {
+    padding: 0;
+    border: 1px solid var(--gold-dim);
+    border-radius: 8px;
+    background: var(--ink);
+    color: var(--bone);
+    max-width: 450px;
+    width: 90vw;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    overflow: hidden;
+}
+.audio-dialog::backdrop {
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(4px);
+}
+.audio-dialog__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--ink-line);
+    background: var(--ink);
+}
+.audio-dialog__close {
+    background: none; border: none; color: var(--bone-dim); cursor: pointer; font-size: 1.1rem;
+}
+.audio-dialog__close:hover { color: var(--bone-bright); }
+.audio-dialog__search {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--ink-line);
+}
+.audio-dialog__input {
+    width: 100%; padding: 8px 12px; border-radius: 4px;
+    border: 1px solid var(--ink-line); background: var(--ink); color: var(--bone);
+    font-family: var(--font-body); box-sizing: border-box;
+}
+.audio-dialog__input:focus {
+    outline: none; border-color: var(--gold);
+}
+.audio-dialog__list {
+    max-height: 350px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+.audio-dialog__item {
+    display: flex; align-items: center; padding: 10px 16px; gap: 10px;
+    background: none; border: none; border-bottom: 1px solid var(--ink-line);
+    color: var(--bone); cursor: pointer; text-align: left; transition: background 0.15s;
+    font-family: var(--font-body);
+}
+.audio-dialog__item:hover { background: rgba(201, 163, 92, 0.1); }
+.audio-dialog__item:last-child { border-bottom: none; }
+.audio-dialog__icon { flex-shrink: 0; }
+.audio-dialog__name { flex-grow: 1; font-weight: 500; }
+.audio-dialog__tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.audio-dialog__tag {
+    font-size: 0.65rem; padding: 2px 6px; border-radius: 12px;
+    background: rgba(255,255,255,0.05); color: var(--bone-dim);
+}
+</style>
 
 <script>
 /* ── Gestione immagini ─────────────────────────────────────────────
@@ -71,6 +165,37 @@ function collassaBase64(text) {
 function espandiBase64(text) {
     return text.replace(/(!\[[^\]]*\]\()#(b64_\d+)(\))/g, (m, pre, id, post) =>
         pre + (imgStore[id] || ('#' + id)) + post);
+}
+
+/* ── Gestione Audio Dialog ── */
+function apriAudioSelector() {
+    const dialog = document.getElementById('audio-selector');
+    document.getElementById('audio-search').value = '';
+    filtraAudio(); // reset filter
+    dialog.showModal();
+    document.getElementById('audio-search').focus();
+}
+
+function chiudiAudioSelector() {
+    document.getElementById('audio-selector').close();
+}
+
+function filtraAudio() {
+    const query = document.getElementById('audio-search').value.toLowerCase();
+    const items = document.getElementById('audio-list').querySelectorAll('.audio-dialog__item');
+    items.forEach(item => {
+        const text = item.textContent.toLowerCase();
+        if (text.includes(query)) {
+            item.style.display = 'flex';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+
+function inserisciAudio(nomeTraccia) {
+    chiudiAudioSelector();
+    inserisciRigaIntera('@audio: ' + nomeTraccia);
 }
 
 function normAlign(a) {
@@ -182,7 +307,10 @@ function renderMd(src) {
         '<span class="copione-master">$1</span>');
     s = s.replace(/\*\*([^*\n]+)\*\*/g,
         '<span class="copione-personaggio">$1</span>');
-    s = s.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+    s = s.replace(/_([^_\n]+)_/g, '<em>$1</em>');
+    
+    s = s.replace(/@audio:\s*([^\n]+)/g,
+        '<span class="audio-recommendation-wrapper"><span class="audio-recommendation-label">Musica consigliata:</span> <button type="button" class="btn-inline-audio btn-audio-large" style="pointer-events:none;" tabindex="-1">$1</button></span>');
 
     const lines = s.split('\n');
     const out = [];
@@ -232,35 +360,195 @@ function renderMd(src) {
 
 function aggiornaPrev() {
     const src = document.getElementById('editor-textarea').value;
-    document.getElementById('editor-preview').innerHTML = renderMd(src);
+    const prev = document.getElementById('editor-preview');
+    const currentScroll = prev.scrollTop;
+    prev.innerHTML = renderMd(src);
+    prev.scrollTop = currentScroll;
 }
 
 /* ── Toolbar helpers ── */
 function inserisci(pre, post) {
     const ta = document.getElementById('editor-textarea');
-    const s = ta.selectionStart, e = ta.selectionEnd;
-    const sel = ta.value.slice(s, e) || 'testo';
-    ta.setRangeText(pre + sel + post, s, e, 'select');
+    let s = ta.selectionStart, e = ta.selectionEnd;
+    
+    if (s === e) {
+        const text = ta.value;
+        let left = s;
+        while (left > 0 && !/\s/.test(text[left - 1])) left--;
+        let right = e;
+        while (right < text.length && !/\s/.test(text[right])) right++;
+        
+        while (left < right && /[_*]/.test(text[left])) left++;
+        while (right > left && /[_*]/.test(text[right - 1])) right--;
+        
+        if (left < right) {
+            s = left;
+            e = right;
+            ta.setSelectionRange(s, e);
+        }
+    }
+    
+    let sel = ta.value.slice(s, e);
     ta.focus();
+    
+    if (sel.startsWith(pre) && sel.endsWith(post) && sel.length >= pre.length + post.length) {
+        const textToInsert = sel.slice(pre.length, sel.length - post.length);
+        document.execCommand('insertText', false, textToInsert);
+        ta.setSelectionRange(s, s + textToInsert.length);
+    } 
+    else if (s >= pre.length && ta.value.slice(s - pre.length, s) === pre && ta.value.slice(e, e + post.length) === post) {
+        ta.setSelectionRange(s - pre.length, e + post.length);
+        document.execCommand('insertText', false, sel);
+        ta.setSelectionRange(s - pre.length, s - pre.length + sel.length);
+    } 
+    else {
+        const lineStart = ta.value.lastIndexOf('\n', s - 1) + 1;
+        const lineEndOrig = ta.value.indexOf('\n', e);
+        const lineEnd = lineEndOrig === -1 ? ta.value.length : lineEndOrig;
+        const lineTesto = ta.value.slice(lineStart, lineEnd);
+        const localS = s - lineStart;
+        const localE = e - lineStart;
+        
+        let blockStart = -1;
+        let blockEnd = -1;
+        
+        if (pre === post) {
+            const left = lineTesto.slice(0, localS);
+            const right = lineTesto.slice(localE);
+            if ((left.split(pre).length - 1) % 2 === 1 && (right.split(post).length - 1) % 2 === 1) {
+                blockStart = left.lastIndexOf(pre);
+                blockEnd = localE + right.indexOf(post) + post.length;
+            }
+        }
+        
+        if (blockStart !== -1 && blockEnd !== -1) {
+            const beforeText = lineTesto.slice(blockStart + pre.length, localS);
+            const selectedText = lineTesto.slice(localS, localE) || 'testo';
+            const afterText = lineTesto.slice(localE, blockEnd - post.length);
+            
+            const matchBefore = beforeText.match(/^(\s*)(.*?)(\s*)$/);
+            const newBefore = matchBefore[2] ? (matchBefore[1] + pre + matchBefore[2] + post + matchBefore[3]) : beforeText;
+            
+            const matchAfter = afterText.match(/^(\s*)(.*?)(\s*)$/);
+            const newAfter = matchAfter[2] ? (matchAfter[1] + pre + matchAfter[2] + post + matchAfter[3]) : afterText;
+            
+            ta.setSelectionRange(lineStart + blockStart, lineStart + blockEnd);
+            document.execCommand('insertText', false, newBefore + selectedText + newAfter);
+            ta.setSelectionRange(lineStart + blockStart + newBefore.length, lineStart + blockStart + newBefore.length + selectedText.length);
+            
+            aggiornaPrev();
+            aggiornaBottoni();
+            return;
+        }
+
+        let merged = false;
+        if (pre === post) {
+            const textPrima = ta.value.slice(0, s);
+            const textDopo = ta.value.slice(e);
+            
+            const safePre = pre.replace(/[*_]/g, '\\$&');
+            const matchPrima = textPrima.match(new RegExp(safePre + '(\\s*)$'));
+            const matchDopo = textDopo.match(new RegExp('^(\\s*)' + safePre));
+            
+            if (matchPrima || matchDopo) {
+                let sMod = s;
+                let eMod = e;
+                if (matchPrima) sMod -= matchPrima[0].length;
+                if (matchDopo) eMod += matchDopo[0].length;
+                
+                let center = sel || 'testo';
+                if (matchPrima && matchDopo) {
+                    center = (matchPrima[1] || '') + center + (matchDopo[1] || '');
+                } else if (matchPrima) {
+                    center = (matchPrima[1] || '') + center + post;
+                } else if (matchDopo) {
+                    center = pre + center + (matchDopo[1] || '');
+                }
+                
+                ta.setSelectionRange(sMod, eMod);
+                document.execCommand('insertText', false, center);
+                let selectStart = sMod + (matchPrima ? matchPrima[1].length : pre.length);
+                ta.setSelectionRange(selectStart, selectStart + (sel || 'testo').length);
+                merged = true;
+            }
+        }
+        
+        if (!merged) {
+            if (!sel) sel = 'testo';
+            document.execCommand('insertText', false, pre + sel + post);
+            ta.setSelectionRange(s + pre.length, s + pre.length + sel.length);
+        }
+    }
+    
     aggiornaPrev();
+    aggiornaBottoni();
 }
 
 function inserisciRiga(prefix) {
     const ta = document.getElementById('editor-textarea');
     const s = ta.selectionStart;
     const lineStart = ta.value.lastIndexOf('\n', s - 1) + 1;
-    ta.setRangeText(prefix, lineStart, lineStart, 'end');
+    const lineEndOrig = ta.value.indexOf('\n', s);
+    const lineEnd = lineEndOrig === -1 ? ta.value.length : lineEndOrig;
+    const lineText = ta.value.slice(lineStart, lineEnd);
+
     ta.focus();
+
+    // Se la riga inizia già con questo prefisso, lo togliamo (toggle)
+    if (lineText.startsWith(prefix)) {
+        ta.setSelectionRange(lineStart, lineStart + prefix.length);
+        document.execCommand('insertText', false, '');
+    } else {
+        ta.setSelectionRange(lineStart, lineStart);
+        document.execCommand('insertText', false, prefix);
+    }
+    
     aggiornaPrev();
+    aggiornaBottoni();
 }
 
 function inserisciRigaIntera(testo) {
     const ta = document.getElementById('editor-textarea');
-    const s = ta.selectionStart;
-    const ins = '\n' + testo + '\n';
-    ta.setRangeText(ins, s, s, 'end');
+    const ins = '\n' + testo + '\n\n';
+    
     ta.focus();
+    document.execCommand('insertText', false, ins);
+    
     aggiornaPrev();
+    aggiornaBottoni();
+}
+
+function aggiornaBottoni() {
+    const ta = document.getElementById('editor-textarea');
+    const val = ta.value;
+    const s = ta.selectionStart;
+    
+    // Controlla riga corrente
+    const lineStart = val.lastIndexOf('\n', s - 1) + 1;
+    const lineEndOrig = val.indexOf('\n', s);
+    const lineEnd = lineEndOrig === -1 ? val.length : lineEndOrig;
+    const lineTesto = val.slice(lineStart, lineEnd);
+    
+    document.getElementById('btn-h1')?.classList.toggle('attivo', lineTesto.startsWith('# '));
+    document.getElementById('btn-h2')?.classList.toggle('attivo', lineTesto.startsWith('## '));
+    document.getElementById('btn-h3')?.classList.toggle('attivo', lineTesto.startsWith('### '));
+    document.getElementById('btn-quote')?.classList.toggle('attivo', lineTesto.startsWith('> '));
+    document.getElementById('btn-list')?.classList.toggle('attivo', lineTesto.startsWith('- '));
+    document.getElementById('btn-master')?.classList.toggle('attivo', lineTesto.startsWith('**(Master)**'));
+    
+    function isInside(token) {
+        const left = lineTesto.slice(0, s - lineStart);
+        const right = lineTesto.slice(s - lineStart);
+        const countLeft = left.split(token).length - 1;
+        const countRight = right.split(token).length - 1;
+        return (countLeft % 2 === 1) && (countRight % 2 === 1);
+    }
+    
+    const inBold = isInside('**');
+    const inItalic = isInside('_');
+    
+    document.getElementById('btn-bold')?.classList.toggle('attivo', inBold);
+    document.getElementById('btn-italic')?.classList.toggle('attivo', inItalic);
 }
 
 /* ── Salvataggio asincrono ── */
@@ -294,7 +582,21 @@ async function salva() {
 }
 
 function handleKey(e) {
-    // Può essere usato per altre shortcut specifiche della textarea (es. Tab)
+    const ta = document.getElementById('editor-textarea');
+    
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        const ins = e.shiftKey ? '\n' : '\n\n';
+        document.execCommand('insertText', false, ins);
+    } 
+    else if (e.key === 'Backspace' && ta.selectionStart === ta.selectionEnd) {
+        const s = ta.selectionStart;
+        if (s >= 2 && ta.value.slice(s - 2, s) === '\n\n') {
+            e.preventDefault();
+            ta.setSelectionRange(s - 2, s);
+            document.execCommand('insertText', false, '');
+        }
+    }
 }
 
 // Intercetta Ctrl+S a livello globale sull'intero documento
@@ -312,22 +614,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* ── Scroll sincronizzato ── */
     const prev = document.getElementById('editor-preview');
-    let syncing = false;
+    let activePane = 'left';
+
+    ta.addEventListener('mouseenter', () => activePane = 'left');
+    ta.addEventListener('focus', () => activePane = 'left');
+    prev.addEventListener('mouseenter', () => activePane = 'right');
 
     ta.addEventListener('scroll', () => {
-        if (syncing) return;
-        syncing = true;
+        if (activePane !== 'left') return;
         const pct = ta.scrollTop / (ta.scrollHeight - ta.clientHeight || 1);
         prev.scrollTop = pct * (prev.scrollHeight - prev.clientHeight);
-        syncing = false;
     });
 
     prev.addEventListener('scroll', () => {
-        if (syncing) return;
-        syncing = true;
+        if (activePane !== 'right') return;
         const pct = prev.scrollTop / (prev.scrollHeight - prev.clientHeight || 1);
         ta.scrollTop = pct * (ta.scrollHeight - ta.clientHeight);
-        syncing = false;
     });
 
     ta.addEventListener('paste', (e) => {

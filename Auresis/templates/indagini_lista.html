@@ -3,12 +3,16 @@
 {% block content %}
 
 <div class="page-header">
+    {% if not modalita_giocatrice %}
     <p class="page-eyebrow">Strumento da master</p>
+    {% endif %}
     <h1 class="page-title">Indagini</h1>
 </div>
 
 <div class="actions-row" style="margin-bottom: 28px;">
+    {% if not modalita_giocatrice %}
     <a class="btn" href="{{ url_for('nuova_indagine') }}">+ Nuova indagine</a>
+    {% endif %}
 </div>
 
 {% if indagini %}
@@ -23,14 +27,23 @@
             <span class="tag" style="{% if ind.attiva %}color: var(--verdigris-bright); border-color: var(--verdigris);{% else %}color: var(--bone-dim); border-color: var(--ink-line);{% endif %}">
                 {{ 'attiva' if ind.attiva else 'archiviata' }}
             </span>
+            {% if not modalita_giocatrice %}
+            <span class="tag" style="{% if ind.visibile_giocatrice %}color: var(--gold-bright); border-color: var(--gold);{% else %}color: var(--bone-dim); border-color: var(--ink-line);{% endif %}">
+                {{ 'visibile' if ind.visibile_giocatrice else 'nascosta' }}
+            </span>
+            {% endif %}
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            {% if modalita_giocatrice %}
+            <a class="btn" href="{{ url_for('indagini_player', indagine_id=ind.id) }}" style="border-color: var(--gold); color: var(--gold-bright);">Bacheca Indizi</a>
+            {% else %}
             <a class="btn" href="{{ url_for('indagini_editor', indagine_id=ind.id) }}">Editor</a>
             <a class="btn" href="{{ url_for('indagini_live', indagine_id=ind.id) }}" style="border-color: var(--gold); color: var(--gold-bright);">Vista live</a>
             <a class="btn" href="{{ url_for('edita_indagine', indagine_id=ind.id) }}" style="font-size: 0.75rem; padding: 5px 10px;">Modifica</a>
             <form method="POST" action="{{ url_for('elimina_indagine', indagine_id=ind.id) }}" onsubmit="return confirm('Eliminare l\'indagine e tutti i suoi nodi?');">
                 <button type="submit" class="btn btn--danger" style="font-size: 0.75rem; padding: 5px 10px;">Elimina</button>
             </form>
+            {% endif %}
         </div>
     </div>
     {% endfor %}

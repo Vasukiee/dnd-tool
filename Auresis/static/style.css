@@ -1307,6 +1307,7 @@ details[open] .filtri-section__toggle::before {
     letter-spacing: 0.04em;
 }
 .editor-btn:hover { color: var(--bone); border-color: var(--gold); background: rgba(201,163,92,0.07); }
+.editor-btn.attivo { color: var(--gold-bright); border-color: var(--gold); background: rgba(201,163,92,0.2); font-weight: bold; }
 .editor-btn--italic { font-style: italic; }
 
 .editor-toolbar__sep {
@@ -1392,7 +1393,6 @@ details[open] .filtri-section__toggle::before {
     outline: none;
     overflow-y: auto;
     overflow-wrap: break-word;
-    word-break: break-all;
 }
 
 .editor-preview-body img {
@@ -1478,6 +1478,133 @@ details[open] .filtri-section__toggle::before {
 }
 .editor-save-stato--ok  { color: #6aaa64; }
 .editor-save-stato--err { color: #c0392b; }
+
+/* --- Elementi Audio nel Testo (Condivisi tra Dettaglio e Preview Editor) --- */
+.audio-recommendation-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    margin: 36px 0;
+    position: relative;
+}
+
+.audio-recommendation-label {
+    display: none;
+}
+
+.btn-inline-audio {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    width: min(90%, 380px);
+    padding: 10px 18px;
+    border: 1px solid var(--gold-dim);
+    border-radius: 2px;
+    background: transparent;
+    color: var(--bone);
+    cursor: pointer;
+    box-shadow: none;
+    transition: border-color 0.3s ease, color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-style: italic;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    text-align: left;
+    line-height: 1.3;
+}
+
+/* Cinque righe del pentagramma e vere note di "Ridi, Pagliaccio" (Vesti la giubba) */
+.btn-inline-audio::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+        url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27600%27%20height%3D%2740%27%20viewBox%3D%270%200%20600%2040%27%3E%3Cg%20fill%3D%27rgba%28156%2C122%2C60%2C0.7%29%27%20stroke%3D%27rgba%28156%2C122%2C60%2C0.7%29%27%20stroke-width%3D%271.2%27%3E%3Cellipse%20cx%3D%2720%27%20cy%3D%279.5%27%20rx%3D%273.5%27%20ry%3D%272.5%27%20transform%3D%27rotate%28-15%2020%209.5%29%27%20stroke%3D%27none%27/%3E%3Ccircle%20cx%3D%2726%27%20cy%3D%279.5%27%20r%3D%271%27%20fill%3D%27rgba%28156%2C122%2C60%2C0.7%29%27%20stroke%3D%27none%27/%3E%3Crect%20x%3D%2716.5%27%20y%3D%279.5%27%20width%3D%271.2%27%20height%3D%2715%27%20stroke%3D%27none%27/%3E%3Cellipse%20cx%3D%2770%27%20cy%3D%2716.5%27%20rx%3D%273.5%27%20ry%3D%272.5%27%20transform%3D%27rotate%28-15%2070%2016.5%29%27%20stroke%3D%27none%27/%3E%3Crect%20x%3D%2766.5%27%20y%3D%2716.5%27%20width%3D%271.2%27%20height%3D%2715%27%20stroke%3D%27none%27/%3E%3Cpath%20d%3D%27M67.7%2C31.5%20Q72%2C24.5%2075%2C28.5%20Q71%2C21.5%2067.7%2C26.5%27%20fill%3D%27rgba%28156%2C122%2C60%2C0.7%29%27%20stroke%3D%27none%27/%3E%3Cpath%20d%3D%27M20%2C5%20Q45.0%2C-3%2070%2C10%27%20fill%3D%27none%27/%3E%3Cellipse%20cx%3D%27110%27%20cy%3D%2723.5%27%20rx%3D%273.5%27%20ry%3D%272.5%27%20transform%3D%27rotate%28-15%20110%2023.5%29%27%20stroke%3D%27none%27/%3E%3Crect%20x%3D%27106.5%27%20y%3D%2723.5%27%20width%3D%271.2%27%20height%3D%2715%27%20stroke%3D%27none%27/%3E%3Cellipse%20cx%3D%27150%27%20cy%3D%2727%27%20rx%3D%273.5%27%20ry%3D%272.5%27%20transform%3D%27rotate%28-15%20150%2027%29%27%20stroke%3D%27none%27/%3E%3Crect%20x%3D%27152.3%27%20y%3D%2712%27%20width%3D%271.2%27%20height%3D%2715%27%20stroke%3D%27none%27/%3E%3Cpath%20d%3D%27M153.5%2C12%20Q158%2C19%20161%2C15%20Q157%2C22%20153.5%2C17%27%20fill%3D%27rgba%28156%2C122%2C60%2C0.7%29%27%20stroke%3D%27none%27/%3E%3Cellipse%20cx%3D%27190%27%20cy%3D%2730.5%27%20rx%3D%273.5%27%20ry%3D%272.5%27%20transform%3D%27rotate%28-15%20190%2030.5%29%27%20stroke%3D%27none%27/%3E%3Ccircle%20cx%3D%27196%27%20cy%3D%2730.5%27%20r%3D%271%27%20fill%3D%27rgba%28156%2C122%2C60%2C0.7%29%27%20stroke%3D%27none%27/%3E%3Crect%20x%3D%27192.3%27%20y%3D%2715.5%27%20width%3D%271.2%27%20height%3D%2715%27%20stroke%3D%27none%27/%3E%3Cpath%20d%3D%27M110%2C18%20Q150.0%2C8%20190%2C25%27%20fill%3D%27none%27/%3E%3Cpath%20d%3D%27M178%2C28%20L178%2C36%20M182%2C26%20L182%2C34%20M176%2C33%20L184%2C31%20M176%2C30%20L184%2C28%27%20fill%3D%27none%27%20stroke-width%3D%270.8%27/%3E%3Cellipse%20cx%3D%27250%27%20cy%3D%2734%27%20rx%3D%273.5%27%20ry%3D%272.5%27%20transform%3D%27rotate%28-15%20250%2034%29%27%20stroke%3D%27none%27/%3E%3Crect%20x%3D%27252.3%27%20y%3D%2719%27%20width%3D%271.2%27%20height%3D%2715%27%20stroke%3D%27none%27/%3E%3Cpath%20d%3D%27M253.5%2C19%20Q258%2C26%20261%2C22%20Q257%2C29%20253.5%2C24%27%20fill%3D%27rgba%28156%2C122%2C60%2C0.7%29%27%20stroke%3D%27none%27/%3E%3Cpath%20d%3D%27M268%2C28%20L268%2C36%20M272%2C26%20L272%2C34%20M266%2C33%20L274%2C31%20M266%2C30%20L274%2C28%27%20fill%3D%27none%27%20stroke-width%3D%270.8%27/%3E%3Cellipse%20cx%3D%27280%27%20cy%3D%2730.5%27%20rx%3D%273.5%27%20ry%3D%272.5%27%20transform%3D%27rotate%28-15%20280%2030.5%29%27%20stroke%3D%27none%27/%3E%3Crect%20x%3D%27282.3%27%20y%3D%2715.5%27%20width%3D%271.2%27%20height%3D%2715%27%20stroke%3D%27none%27/%3E%3Cpath%20d%3D%27M283.5%2C15.5%20Q288%2C22.5%20291%2C18.5%20Q287%2C25.5%20283.5%2C20.5%27%20fill%3D%27rgba%28156%2C122%2C60%2C0.7%29%27%20stroke%3D%27none%27/%3E%3Cellipse%20cx%3D%27310%27%20cy%3D%2727%27%20rx%3D%273.5%27%20ry%3D%272.5%27%20transform%3D%27rotate%28-15%20310%2027%29%27%20stroke%3D%27none%27/%3E%3Crect%20x%3D%27312.3%27%20y%3D%2712%27%20width%3D%271.2%27%20height%3D%2715%27%20stroke%3D%27none%27/%3E%3Cpath%20d%3D%27M313.5%2C12%20Q318%2C19%20321%2C15%20Q317%2C22%20313.5%2C17%27%20fill%3D%27rgba%28156%2C122%2C60%2C0.7%29%27%20stroke%3D%27none%27/%3E%3Cellipse%20cx%3D%27350%27%20cy%3D%2723.5%27%20rx%3D%273.5%27%20ry%3D%272.5%27%20transform%3D%27rotate%28-15%20350%2023.5%29%27%20stroke%3D%27none%27/%3E%3Crect%20x%3D%27346.5%27%20y%3D%2723.5%27%20width%3D%271.2%27%20height%3D%2715%27%20stroke%3D%27none%27/%3E%3Cellipse%20cx%3D%27390%27%20cy%3D%2727%27%20rx%3D%273.5%27%20ry%3D%272.5%27%20transform%3D%27rotate%28-15%20390%2027%29%27%20stroke%3D%27none%27/%3E%3Crect%20x%3D%27392.3%27%20y%3D%2712%27%20width%3D%271.2%27%20height%3D%2715%27%20stroke%3D%27none%27/%3E%3Cpath%20d%3D%27M393.5%2C12%20Q398%2C19%20401%2C15%20Q397%2C22%20393.5%2C17%27%20fill%3D%27rgba%28156%2C122%2C60%2C0.7%29%27%20stroke%3D%27none%27/%3E%3Cpath%20d%3D%27M418%2C28%20L418%2C36%20M422%2C26%20L422%2C34%20M416%2C33%20L424%2C31%20M416%2C30%20L424%2C28%27%20fill%3D%27none%27%20stroke-width%3D%270.8%27/%3E%3Cellipse%20cx%3D%27430%27%20cy%3D%2730.5%27%20rx%3D%273.5%27%20ry%3D%272.5%27%20transform%3D%27rotate%28-15%20430%2030.5%29%27%20stroke%3D%27none%27/%3E%3Crect%20x%3D%27432.3%27%20y%3D%2715.5%27%20width%3D%271.2%27%20height%3D%2715%27%20stroke%3D%27none%27/%3E%3Cellipse%20cx%3D%27480%27%20cy%3D%2734%27%20rx%3D%273.5%27%20ry%3D%272.5%27%20transform%3D%27rotate%28-15%20480%2034%29%27%20stroke%3D%27none%27/%3E%3Cellipse%20cx%3D%27480%27%20cy%3D%2734%27%20rx%3D%272.5%27%20ry%3D%271.5%27%20fill%3D%27%23231e1a%27%20transform%3D%27rotate%28-15%20480%2034%29%27%20stroke%3D%27none%27/%3E%3Crect%20x%3D%27482.3%27%20y%3D%2719%27%20width%3D%271.2%27%20height%3D%2715%27%20stroke%3D%27none%27/%3E%3Cpath%20d%3D%27M483%2C36%20Q505.0%2C42%20527%2C36%27%20fill%3D%27none%27/%3E%3Cellipse%20cx%3D%27530%27%20cy%3D%2734%27%20rx%3D%273.5%27%20ry%3D%272.5%27%20transform%3D%27rotate%28-15%20530%2034%29%27%20stroke%3D%27none%27/%3E%3Cellipse%20cx%3D%27530%27%20cy%3D%2734%27%20rx%3D%272.5%27%20ry%3D%271.5%27%20fill%3D%27%23231e1a%27%20transform%3D%27rotate%28-15%20530%2034%29%27%20stroke%3D%27none%27/%3E%3Crect%20x%3D%27532.3%27%20y%3D%2719%27%20width%3D%271.2%27%20height%3D%2715%27%20stroke%3D%27none%27/%3E%3Cpath%20d%3D%27M250%2C28%20Q365.0%2C3%20480%2C28%27%20fill%3D%27none%27/%3E%3C/g%3E%3C/svg%3E"),
+        repeating-linear-gradient(
+            to bottom,
+            transparent 0px,
+            transparent 7px,
+            rgba(156, 122, 60, 0.12) 7px,
+            rgba(156, 122, 60, 0.12) 8px
+        );
+    background-size: 600px 40px, 100% 40px;
+    background-position: 420px 0, center 0; /* Note nascoste fuori a destra */
+    background-repeat: no-repeat, repeat;
+    z-index: 0;
+}
+
+/* Chiave di violino a sinistra */
+.btn-inline-audio::after {
+    content: '𝄞';
+    order: -1;
+    flex-shrink: 0;
+    font-size: 1.8rem;
+    font-style: normal;
+    line-height: 1;
+    color: var(--gold);
+    z-index: 1;
+    transition: color 0.3s ease;
+    /* Spazio per evitare tagli se il font deborda */
+    padding-bottom: 4px;
+}
+
+.btn-inline-audio span,
+.btn-inline-audio {
+    position: relative;
+    z-index: 1;
+}
+
+@keyframes clefFloat {
+    0%, 100% { transform: translateY(0) scale(1) rotate(0deg); }
+    33% { transform: translateY(-3px) scale(1.05) rotate(-3deg); }
+    66% { transform: translateY(-1px) scale(1.05) rotate(3deg); }
+}
+
+@keyframes notesScrollX {
+    0% { background-position: 420px 0, center 0; }
+    100% { background-position: -600px 0, center 0; }
+}
+
+.btn-inline-audio:hover {
+    border-color: var(--gold);
+    color: var(--bone-bright);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(156, 122, 60, 0.08);
+}
+
+.btn-inline-audio:hover::before {
+    animation: notesScrollX 10s linear infinite;
+}
+
+.btn-inline-audio:hover::after {
+    color: var(--gold-bright);
+    animation: clefFloat 1.5s ease-in-out infinite;
+    text-shadow: 0 0 8px rgba(201, 163, 92, 0.4);
+}
+
+.btn-audio-not-found {
+    background: transparent !important;
+    border-color: var(--rust) !important;
+    color: var(--bone-dim) !important;
+    cursor: not-allowed;
+    opacity: 0.6;
+    text-decoration: line-through;
+}
+
+.btn-audio-not-found::after {
+    content: '✕' !important;
+    color: var(--rust-bright) !important;
+}
+
+.btn-audio-not-found:hover {
+    border-color: var(--rust) !important;
+    color: var(--bone-dim) !important;
+}
+
 
 @media (max-width: 700px) {
     .editor-layout { grid-template-columns: 1fr; height: auto; }
