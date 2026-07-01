@@ -140,6 +140,11 @@
         margin: 60px 0;
     }
     
+    /* Nasconde i bottoni di cambio scena se non siamo attivamente in Scene Mode */
+    .copione-corpo:not(.scene-mode-active) .next-scene-wrapper {
+        display: none !important;
+    }
+    
     .btn-next-scene {
         background: transparent;
         border: 2px solid var(--ink-line);
@@ -161,54 +166,6 @@
     }
 
     /* Elementi Audio nel Testo */
-    .audio-recommendation-wrapper {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        width: 100%;
-        margin: 20px 0;
-        gap: 12px;
-    }
-    .audio-recommendation-label {
-        font-family: var(--font-header);
-        font-size: 0.9rem;
-        color: var(--ink-light);
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    
-    .btn-inline-audio {
-        display: inline-flex;
-        align-items: center;
-        background-color: var(--ink-light);
-        color: var(--bone-bg);
-        border: 1px solid var(--ink-line);
-        border-radius: 4px;
-        padding: 2px 8px;
-        font-size: 0.85rem;
-        cursor: pointer;
-        transition: all 0.2s;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .btn-inline-audio.btn-audio-large {
-        padding: 4px 12px;
-        font-size: 1rem;
-        border-radius: 6px;
-        font-weight: bold;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-    }
-    .btn-inline-audio:hover {
-        background-color: var(--ink-main);
-        transform: translateY(-2px);
-    }
-    .btn-audio-not-found {
-        background-color: #8b0000 !important;
-        cursor: not-allowed;
-    }
-    .btn-audio-not-found:hover {
-        transform: none;
-    }
-
     /* Contenitore per renderlo sticky a sinistra */
     .copione-audio-wrapper {
         position: sticky;
@@ -267,8 +224,8 @@
         margin-top: 5px;
     }
 
-    /* Nascondiamo l'H1 dal corpo testuale, dato che funge già da titolo principale della pagina */
-    .copione-corpo > h1 {
+    /* Nascondiamo l'H1 dal corpo testuale, dato che funge già da titolo principale della pagina (funziona sia in modalità normale che scene) */
+    .copione-corpo h1 {
         display: none !important;
     }
 
@@ -392,13 +349,19 @@
         if (!outline) return;
 
         const items = Array.from(outline.querySelectorAll('.copione-outline__item'));
-        const targets = items
+        let targets = items
             .map(item => document.getElementById(item.dataset.headingId))
             .filter(Boolean);
 
         if (targets.length === 0) return;
+        
+        let modeSceneActive = false;
+        let activeSceneIndex = 0;
 
         function impostaAttivo(idAttivo) {
+            const idx = items.findIndex(i => i.dataset.headingId === idAttivo);
+            if (idx !== -1) activeSceneIndex = idx;
+
             items.forEach(item => {
                 const distanza = Math.abs(items.indexOf(item) - items.findIndex(i => i.dataset.headingId === idAttivo));
                 item.classList.toggle('copione-outline__item--attivo', item.dataset.headingId === idAttivo);
@@ -409,6 +372,25 @@
         }
 
         let idCorrente = targets[0].id;
+        
+        // Intercetta il click sull'outline
+        items.forEach((item, index) => {
+            item.addEventListener('click', (e) => {
+                if (modeSceneActive) {
+                    e.preventDefault();
+                    if (index !== activeSceneIndex) {
+                        scorriScena(activeSceneIndex, index);
+                    }
+                } else if (index === 0) {
+                    // Se è la prima scena dell'elenco, porta la pagina completamente in cima
+                    e.preventDefault();
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    // Aggiorniamo comunque l'URL per coerenza
+                    history.pushState(null, null, item.getAttribute('href'));
+                }
+            });
+        });
+
         const observer = new IntersectionObserver((entries) => {
             const visibili = entries.filter(e => e.isIntersecting).map(e => e.target.id);
             if (visibili.length > 0) {
@@ -429,7 +411,6 @@
         /* --- Logica Modalità Scene --- */
         const btnScene = document.getElementById('toggle-scene-btn');
         const corpoText = document.querySelector('.copione-corpo');
-        let modeSceneActive = false;
         
         if (btnScene) {
             btnScene.addEventListener('click', function() {
@@ -439,13 +420,16 @@
                 if (!corpoText.hasAttribute('data-scenes-initialized')) {
                     inizializzaScene(corpoText);
                     corpoText.setAttribute('data-scenes-initialized', 'true');
+                    
+                    // Riassegna i target per l'observer poiché il DOM è stato ricostruito e i vecchi H2 distrutti
+                    targets = items.map(item => document.getElementById(item.dataset.headingId)).filter(Boolean);
+                    targets.forEach(t => observer.observe(t));
                 }
                 
                 if (modeSceneActive) {
                     corpoText.classList.add('scene-mode-active');
-                    mostraScena(0);
+                    mostraScena(activeSceneIndex);
                     this.innerHTML = "📝 Modalità Completa";
-                    outline.style.display = 'none'; // Nascondiamo l'outline in mod. scene
                 } else {
                     corpoText.classList.remove('scene-mode-active');
                     const blocchi = corpoText.querySelectorAll('.scena-blocco');
@@ -454,7 +438,11 @@
                         b.classList.remove('fade-out', 'fade-in');
                     });
                     this.innerHTML = "🎭 Lettura a Scene";
-                    outline.style.display = 'flex';
+                    // Scrolla dolcemente alla scena a cui ci eravamo fermati
+                    if (targets[activeSceneIndex]) {
+                        const y = targets[activeSceneIndex].getBoundingClientRect().top + window.scrollY - 100;
+                        window.scrollTo({ top: y, behavior: 'smooth' });
+                    }
                 }
             });
         }
@@ -520,8 +508,9 @@
         }
         
         function scorriScena(fromIdx, toIdx) {
-            const fromBlocco = corpoText.querySelector(`.scena-blocco[data-indice="${fromIdx}"]`);
-            const toBlocco = corpoText.querySelector(`.scena-blocco[data-indice="${toIdx}"]`);
+            const blocchiScena = corpoText.querySelectorAll('.scena-blocco');
+            const fromBlocco = blocchiScena[fromIdx];
+            const toBlocco = blocchiScena[toIdx];
             
             if (fromBlocco && toBlocco) {
                 fromBlocco.classList.add('fade-out');
@@ -531,6 +520,11 @@
                     
                     toBlocco.style.display = 'block';
                     toBlocco.classList.add('fade-in');
+
+                    const validSceneIds = items.map(el => el.dataset.headingId);
+                    if (validSceneIds[toIdx]) {
+                        impostaAttivo(validSceneIds[toIdx]);
+                    }
                     window.scrollTo({top: 0, behavior: 'smooth'});
                     
                     setTimeout(() => toBlocco.classList.remove('fade-in'), 500);
@@ -544,11 +538,15 @@
                 b.style.display = (i === idx) ? 'block' : 'none';
                 b.classList.remove('fade-out', 'fade-in');
             });
+            
+            const validSceneIds = items.map(el => el.dataset.headingId);
+            if (validSceneIds[idx]) {
+                impostaAttivo(validSceneIds[idx]);
+            }
             window.scrollTo({top: 0, behavior: 'smooth'});
         }
 
         /* --- Logica Audio Player --- */
-        const audioBtns = document.querySelectorAll('.btn-inline-audio:not(.btn-audio-not-found)');
         const audioWidget = document.getElementById('audio-player-widget');
         const audioWidgetTitle = document.getElementById('audio-widget-title');
         const audioWidgetContent = document.getElementById('audio-widget-content');
@@ -561,39 +559,50 @@
             });
         }
 
-        audioBtns.forEach(btn => {
-            btn.addEventListener('click', function() {
-                const tipo = this.dataset.audioTipo;
-                const ytId = this.dataset.audioYt;
-                const path = this.dataset.audioPath;
-                const nome = this.dataset.audioNome;
+        // Usiamo l'event delegation globale così il click funziona anche sui cloni generati in Modalità Scene
+        document.body.addEventListener('click', function(e) {
+            const btn = e.target.closest('.btn-inline-audio:not(.btn-audio-not-found)');
+            if (!btn) return;
 
-                audioWidgetTitle.textContent = nome;
-                audioWidgetTitle.title = nome;
-                audioWidgetContent.innerHTML = '';
+            const tipo = btn.dataset.audioTipo;
+            const ytId = btn.dataset.audioYt;
+            const path = btn.dataset.audioPath;
+            const nome = btn.dataset.audioNome;
+            const startTime = btn.dataset.audioStart || 0;
 
-                if (tipo === 'youtube' && ytId) {
-                    const iframe = document.createElement('iframe');
-                    iframe.width = '100%';
-                    iframe.height = '240'; // Player abbastanza alto da mostrare tutti i controlli YT, incluso il volume
-                    iframe.src = `https://www.youtube.com/embed/${ytId}?autoplay=1`;
-                    iframe.title = "YouTube player";
-                    iframe.frameBorder = "0";
-                    iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
-                    audioWidgetContent.appendChild(iframe);
-                } else if (tipo === 'file' && path) {
-                    const audio = document.createElement('audio');
-                    audio.controls = true;
-                    audio.volume = 0.15; // Imposta il volume iniziale al 15%
-                    audio.autoplay = true;
-                    audio.src = `/static/audio/${path}`;
-                    audioWidgetContent.appendChild(audio);
-                } else {
-                    audioWidgetContent.innerHTML = '<span style="font-size: 0.8rem; color: var(--ink-light);">Sorgente audio non valida.</span>';
+            audioWidgetTitle.textContent = nome;
+            audioWidgetTitle.title = nome;
+            audioWidgetContent.innerHTML = '';
+
+            if (tipo === 'youtube' && ytId) {
+                const iframe = document.createElement('iframe');
+                iframe.width = '100%';
+                iframe.height = '240'; // Player abbastanza alto da mostrare tutti i controlli YT, incluso il volume
+                let src = `https://www.youtube.com/embed/${ytId}?autoplay=1`;
+                if (startTime > 0) {
+                    src += `&start=${startTime}`;
                 }
+                iframe.src = src;
+                iframe.title = "YouTube player";
+                iframe.frameBorder = "0";
+                iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+                audioWidgetContent.appendChild(iframe);
+            } else if (tipo === 'file' && path) {
+                const audio = document.createElement('audio');
+                audio.controls = true;
+                audio.volume = 0.15; // Imposta il volume iniziale al 15%
+                audio.autoplay = true;
+                let src = `/static/audio/${path}`;
+                if (startTime > 0) {
+                    src += `#t=${startTime}`;
+                }
+                audio.src = src;
+                audioWidgetContent.appendChild(audio);
+            } else {
+                audioWidgetContent.innerHTML = '<span style="font-size: 0.8rem; color: var(--ink-light);">Sorgente audio non valida.</span>';
+            }
 
-                audioWidget.style.display = 'flex';
-            });
+            audioWidget.style.display = 'flex';
         });
 
     })();
