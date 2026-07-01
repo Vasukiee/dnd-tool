@@ -917,10 +917,13 @@ def set_password_master(password_hash):
 # INDAGINI
 # ------------------------------------------------------------------
 
-def get_all_indagini():
+def get_all_indagini(solo_visibili=False):
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT * FROM indagini ORDER BY id DESC")
+    if solo_visibili:
+        cur.execute("SELECT * FROM indagini WHERE visibile_giocatrice = TRUE ORDER BY id DESC")
+    else:
+        cur.execute("SELECT * FROM indagini ORDER BY id DESC")
     rows = cur.fetchall()
     cur.close()
     conn.close()
@@ -937,12 +940,12 @@ def get_indagine(indagine_id):
     return dict(row) if row else None
 
 
-def add_indagine(titolo, descrizione=None, attiva=True):
+def add_indagine(titolo, descrizione=None, attiva=True, visibile_giocatrice=False):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO indagini (titolo, descrizione, attiva) VALUES (%s, %s, %s) RETURNING id",
-        (titolo, descrizione, attiva),
+        "INSERT INTO indagini (titolo, descrizione, attiva, visibile_giocatrice) VALUES (%s, %s, %s, %s) RETURNING id",
+        (titolo, descrizione, attiva, visibile_giocatrice),
     )
     new_id = cur.fetchone()[0]
     conn.commit()

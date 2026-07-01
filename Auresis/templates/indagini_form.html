@@ -23,6 +23,11 @@
                    {% if not indagine or indagine.attiva %}checked{% endif %}>
             Indagine attiva
         </label>
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 8px;">
+            <input type="checkbox" name="visibile_giocatrice" value="1"
+                   {% if indagine and indagine.visibile_giocatrice %}checked{% endif %}>
+            Visibile alla giocatrice
+        </label>
     </div>
     <div class="actions-row">
         <button type="submit" class="btn">{{ 'Salva modifiche' if indagine else 'Crea indagine' }}</button>

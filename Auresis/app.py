@@ -109,13 +109,15 @@ def copioni_modifica(numero_sessione):
     with open(percorso, "r", encoding="utf-8") as fh:
         testo = fh.read()
     titolo = copioni.estrai_titolo(testo) or f"Sessione {numero_sessione}"
+    tracce = db.get_all_tracce_audio()
     return render_template(
         "copioni_modifica.html",
         active="copioni",
         numero_sessione=numero_sessione,
+        nome_file=os.path.basename(percorso),
         titolo=titolo,
         contenuto=testo,
-        nome_file=os.path.basename(percorso),
+        tracce=tracce
     )
 
 
@@ -520,10 +522,7 @@ def _merge_sblocco_in_nodi(nodi, stati_sblocco):
 
 @app.route("/indagini")
 def lista_indagini():
-    if modalita_giocatrice_attiva:
-        flash("Sezione non disponibile in modalità giocatrice.")
-        return redirect(url_for("home"))
-    indagini = db.get_all_indagini()
+    indagini = db.get_all_indagini(solo_visibili=modalita_giocatrice_attiva)
     return render_template("indagini_lista.html", active="indagini", indagini=indagini)
 
 
@@ -535,7 +534,8 @@ def nuova_indagine():
         titolo = request.form["titolo"].strip()
         descrizione = request.form.get("descrizione", "").strip() or None
         attiva = request.form.get("attiva") == "1"
-        ind_id = db.add_indagine(titolo, descrizione, attiva)
+        visibile_giocatrice = request.form.get("visibile_giocatrice") == "1"
+        ind_id = db.add_indagine(titolo, descrizione, attiva, visibile_giocatrice)
         flash(f"Indagine '{titolo}' creata.")
         return redirect(url_for("indagini_editor", indagine_id=ind_id))
     return render_template("indagini_form.html", active="indagini", indagine=None)
@@ -553,7 +553,8 @@ def edita_indagine(indagine_id):
         titolo = request.form["titolo"].strip()
         descrizione = request.form.get("descrizione", "").strip() or None
         attiva = request.form.get("attiva") == "1"
-        db.update_indagine(indagine_id, titolo=titolo, descrizione=descrizione, attiva=attiva)
+        visibile_giocatrice = request.form.get("visibile_giocatrice") == "1"
+        db.update_indagine(indagine_id, titolo=titolo, descrizione=descrizione, attiva=attiva, visibile_giocatrice=visibile_giocatrice)
         flash(f"Indagine '{titolo}' aggiornata.")
         return redirect(url_for("lista_indagini"))
     return render_template("indagini_form.html", active="indagini", indagine=indagine)
@@ -803,6 +804,52 @@ def indagini_avanza_scena(indagine_id):
             "nome": cronologia_nuova["nome"],
             "creata_il": str(cronologia_nuova["creata_il"]),
         } if cronologia_nuova else None,
+    })
+
+
+@app.route("/indagini/<int:indagine_id>/player")
+def indagini_player(indagine_id):
+    """Pagina player-facing: mostra solo gli indizi scoperti, senza controlli DM.
+    Pensata per screenshare Discord — si aggiorna via polling."""
+    indagine = db.get_indagine(indagine_id)
+    if not indagine:
+        flash("Indagine non trovata.")
+        return redirect(url_for("lista_indagini"))
+    nodi = db.get_nodi_indagine(indagine_id)
+    collegamenti = db.get_collegamenti(indagine_id)
+    cronologia_attiva = db.get_cronologia_attiva(indagine_id)
+    stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"]) if cronologia_attiva else {}
+    scena_corrente_val = cronologia_attiva.get("scena_corrente", 1) if cronologia_attiva else 1
+    nodi = _merge_sblocco_in_nodi(nodi, stati_sblocco)
+    scoperti_ids = [nid for nid, stato in stati_sblocco.items() if stato.get("scoperto")]
+    graph_data = json.dumps({
+        "nodi": nodi,
+        "collegamenti": collegamenti,
+        "scoperti_ids": scoperti_ids,
+        "scena_corrente": scena_corrente_val,
+    }, default=str)
+    return render_template(
+        "indagini_player.html",
+        indagine=indagine,
+        graph_data=graph_data,
+    )
+
+
+@app.route("/indagini/<int:indagine_id>/stato-player")
+def indagini_stato_player(indagine_id):
+    """API JSON leggera per il polling della player view.
+    Ritorna solo gli ID dei nodi scoperti e la scena corrente."""
+    indagine = db.get_indagine(indagine_id)
+    if not indagine:
+        return jsonify({"error": "non trovata"}), 404
+    cronologia_attiva = db.get_cronologia_attiva(indagine_id)
+    if not cronologia_attiva:
+        return jsonify({"scoperti_ids": [], "scena_corrente": 1})
+    stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"])
+    scoperti_ids = [nodo_id for nodo_id, stato in stati_sblocco.items() if stato.get("scoperto")]
+    return jsonify({
+        "scoperti_ids": scoperti_ids,
+        "scena_corrente": cronologia_attiva.get("scena_corrente", 1),
     })
 
 

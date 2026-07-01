@@ -40,6 +40,8 @@ _(Passi pesanti e familiari rimbombano nel tunnel alle tue spalle. Un odore inco
 
 ### LA DISCESA
 
+@audio: Under the Shadow of Evil
+
 **(Master)** La discesa nel pozzo principale dura un'eternità. La gabbia del montacarichi è una mostruosità di ferro arrugginito che stride contro le pareti di basalto. L'oscurità is totale, spezzata solo dai bagliori aranciati e pulsanti del fango geotermico che trasuda dalle fessure della roccia. Siete spalla a spalla con Tessa e un'altra dozzina di minatori Cotti. Siete letteralmente schiacciati l'uno contro l'altro. Più scendete verso il cuore di Calderaviva, più l'aria si satura di zolfo. Senti il tuo fluido interno, denso e grigio-ambrato, liquefarsi del tutto, pompando energia pura nelle tue giunture. Sei "a temperatura".
 
 **Tessa** _(agganciata con un braccio alle sbarre della gabbia, usa l'altra mano per tirare un colpo secco alla cinghia del tuo zaino, tono pratico e protettivo)_

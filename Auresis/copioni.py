@@ -112,6 +112,7 @@ def _processa_audio_tags(testo_md):
             tipo = traccia['tipo_sorgente']
             path = traccia.get('file_path', '') or ''
             yt_id = traccia.get('youtube_id', '') or ''
+            start_time = traccia.get('timestamp_inizio', 0) or 0
             
             return (f'<span class="audio-recommendation-wrapper">'
                     f'<span class="audio-recommendation-label">Musica consigliata:</span> '
@@ -120,15 +121,16 @@ def _processa_audio_tags(testo_md):
                     f'data-audio-tipo="{tipo}" '
                     f'data-audio-path="{path}" '
                     f'data-audio-yt="{yt_id}" '
+                    f'data-audio-start="{start_time}" '
                     f'data-audio-nome="{nome_traccia}" '
-                    f'title="Riproduci {nome_traccia}">🎵 {nome_traccia}</button>'
+                    f'title="Riproduci {nome_traccia}">{nome_traccia}</button>'
                     f'</span>')
         else:
             return (f'<span class="audio-recommendation-wrapper">'
                     f'<span class="audio-recommendation-label">Musica consigliata:</span> '
                     f'<button class="btn-inline-audio btn-audio-large btn-audio-not-found" '
                     f'title="Traccia \'{nome_traccia}\' non trovata nel database" disabled>'
-                    f'❌ {nome_traccia}</button>'
+                    f'{nome_traccia}</button>'
                     f'</span>')
 
     return pattern.sub(sostituisci, testo_md)
