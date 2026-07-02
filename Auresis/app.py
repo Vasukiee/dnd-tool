@@ -1039,6 +1039,11 @@ def salva_palette():
     data = request.get_json()
     if not data:
         return {"ok": False}, 400
+        
+    if data.get("action") == "reset":
+        db.reset_palette()
+        return {"ok": True}
+        
     variabile = data.get("variabile", "").strip()
     valore = data.get("valore", "").strip()
     if variabile not in _VARIABILI_PALETTE:
