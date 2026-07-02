@@ -44,6 +44,7 @@ dnd_tool/
    DATABASE_URL="postgresql://utente:password@host:porta/dbname"
    ```
    L'app rileverà il link e salverà copioni e immagini in cloud invece che in locale.
+   Nello stesso `.env` puoi anche impostare una `SECRET_KEY` per firmare le sessioni; se non lo fai, l'app ne genera una al primo avvio e la salva nel database, quindi non è obbligatorio.
 5. I file in `documenti_statici/` contengono la lore principale. Aggiornali quando l'ambientazione cambia in modo strutturale.
 
 ## Uso: la dashboard web (consigliata)

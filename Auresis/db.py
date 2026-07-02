@@ -1,8 +1,10 @@
 import os
+import secrets
 import sqlite3
 
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,10 +21,51 @@ def get_storage_mode():
         return mode
     return "disk" if is_sqlite() else "db"
 
+_pg_pool = None
+
+
+class _ConnessioneDalPool:
+    """Proxy di una connessione Postgres: close() la restituisce al pool invece di chiuderla.
+
+    putconn() esegue automaticamente il rollback delle transazioni rimaste aperte
+    (es. dopo le sole letture), quindi le connessioni tornano al pool pulite.
+    """
+
+    def __init__(self, conn, pool):
+        self._conn = conn
+        self._pool = pool
+        self._restituita = False
+
+    def close(self):
+        if not self._restituita:
+            self._restituita = True
+            self._pool.putconn(self._conn)
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
+def _get_pg_connection():
+    """Preleva una connessione dal pool, scartando quelle morte (pre-ping)."""
+    global _pg_pool
+    if _pg_pool is None:
+        _pg_pool = psycopg2.pool.ThreadedConnectionPool(1, 5, DATABASE_URL)
+    for _ in range(2):
+        conn = _pg_pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+            return _ConnessioneDalPool(conn, _pg_pool)
+        except psycopg2.Error:
+            # connessione chiusa lato server (idle timeout): la scartiamo e riproviamo
+            _pg_pool.putconn(conn, close=True)
+    return _ConnessioneDalPool(_pg_pool.getconn(), _pg_pool)
+
+
 def get_connection():
-    """Ritorna una connessione Postgres o SQLite a seconda della configurazione."""
+    """Ritorna una connessione Postgres (dal pool) o SQLite a seconda della configurazione."""
     if not is_sqlite():
-        return psycopg2.connect(DATABASE_URL)
+        return _get_pg_connection()
     else:
         db_path = os.path.join(os.path.dirname(__file__), "campagna.db")
         conn = sqlite3.connect(db_path)
@@ -97,6 +140,49 @@ def set_impostazione_bytea(chiave, data, mime):
     conn.commit()
     cur.close()
     conn.close()
+
+def _assicura_tabella_impostazioni(cur):
+    """Crea impostazioni_globali se manca (i db creati con schemi vecchi non la hanno)."""
+    tipo_blob = "BLOB" if is_sqlite() else "BYTEA"
+    cur.execute(
+        f"""CREATE TABLE IF NOT EXISTS impostazioni_globali (
+            chiave TEXT PRIMARY KEY,
+            valore_text TEXT,
+            valore_bytea {tipo_blob},
+            valore_mime TEXT
+        )"""
+    )
+
+
+def get_o_crea_secret_key():
+    """Ritorna la SECRET_KEY persistente dell'app, generandola al primo avvio.
+
+    Persistere la chiave (invece di os.urandom a ogni avvio) evita che le sessioni
+    si invalidino a ogni riavvio e che i worker gunicorn abbiano chiavi diverse.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    _assicura_tabella_impostazioni(cur)
+    cur.execute("SELECT valore_text FROM impostazioni_globali WHERE chiave = %s", ("secret_key",))
+    row = cur.fetchone()
+    if row and row[0]:
+        cur.close()
+        conn.close()
+        return row[0]
+
+    nuova = secrets.token_hex(32)
+    cur.execute(
+        "INSERT INTO impostazioni_globali (chiave, valore_text) VALUES (%s, %s) ON CONFLICT (chiave) DO NOTHING",
+        ("secret_key", nuova),
+    )
+    conn.commit()
+    # Rilettura: se un altro worker ha generato la chiave nel frattempo, usiamo la sua
+    cur.execute("SELECT valore_text FROM impostazioni_globali WHERE chiave = %s", ("secret_key",))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return row[0] if row and row[0] else nuova
+
 
 # --- SIPARIO ---
 def toggle_sipario(indagine_id):
@@ -1062,9 +1148,20 @@ def set_quest_visibile(quest_id, visibile):
     conn.close()
 
 
+def _assicura_tabella_sicurezza(cur):
+    """Crea impostazioni_sicurezza se manca (i db creati con schemi vecchi non la hanno)."""
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS impostazioni_sicurezza (
+            id INTEGER PRIMARY KEY,
+            password_master TEXT
+        )"""
+    )
+
+
 def get_password_master():
     conn = get_connection()
     cur = conn.cursor()
+    _assicura_tabella_sicurezza(cur)
     cur.execute("SELECT password_master FROM impostazioni_sicurezza WHERE id = 1")
     row = cur.fetchone()
     cur.close()
@@ -1075,6 +1172,7 @@ def get_password_master():
 def set_password_master(password_hash):
     conn = get_connection()
     cur = conn.cursor()
+    _assicura_tabella_sicurezza(cur)
     cur.execute("SELECT id FROM impostazioni_sicurezza WHERE id = 1")
     if cur.fetchone():
         cur.execute("UPDATE impostazioni_sicurezza SET password_master = %s WHERE id = 1", (password_hash,))
