@@ -1,7 +1,8 @@
 import os
+from functools import wraps
 from urllib.parse import urlparse
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, make_response
 from werkzeug.security import check_password_hash
 
 import copioni
@@ -9,7 +10,16 @@ import db
 from blueprints.indagini import bp as indagini_bp
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
+
+_secret_key = os.environ.get("SECRET_KEY")
+if not _secret_key:
+    try:
+        _secret_key = db.get_o_crea_secret_key()
+    except Exception as e:
+        # DB non raggiungibile: chiave effimera pur di avviarsi (le sessioni non sopravvivono al riavvio)
+        print(f"ATTENZIONE: impossibile leggere la SECRET_KEY dal database ({e}), uso una chiave temporanea.")
+        _secret_key = os.urandom(24)
+app.secret_key = _secret_key
 
 @app.context_processor
 def inietta_modalita_giocatrice():
@@ -23,6 +33,19 @@ def inietta_palette():
         return {"palette_personalizzata": {}}
 
 app.register_blueprint(indagini_bp)
+
+def solo_master(view):
+    """Blocca la rotta quando è attiva la modalità giocatrice."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if session.get("modalita_giocatrice"):
+            if request.is_json or request.accept_mimetypes.best == "application/json":
+                return jsonify({"ok": False, "errore": "Accesso negato"}), 403
+            flash("Questa azione non è disponibile in modalità giocatrice.")
+            return redirect(url_for("home"))
+        return view(*args, **kwargs)
+    return wrapped
+
 
 def _int_or_none(value):
     return int(value) if value else None
@@ -96,9 +119,8 @@ def copioni_dettaglio(numero_sessione):
 
 
 @app.route("/copioni/nuovo", methods=["POST"])
+@solo_master
 def nuovo_copione():
-    if session.get("modalita_giocatrice"):
-        return redirect(url_for("home"))
     numero_sessione = int(request.form.get("numero_sessione", 0))
     esistente = copioni.get_testo_sessione(numero_sessione)
     if not esistente:
@@ -109,10 +131,8 @@ def nuovo_copione():
 
 
 @app.route("/copioni/<int:numero_sessione>/modifica", methods=["GET", "POST"])
+@solo_master
 def copioni_modifica(numero_sessione):
-    if session.get("modalita_giocatrice"):
-        return redirect(url_for("home"))
-
     if request.method == "POST":
         if request.is_json:
             testo = request.get_json(force=True).get("contenuto", "")
@@ -160,6 +180,7 @@ def copioni_modifica(numero_sessione):
 
 
 @app.route("/copioni/<int:numero_sessione>/toggle-completata", methods=["POST"])
+@solo_master
 def copioni_toggle_completata(numero_sessione):
     nuovo_stato = not db.get_sessione_completata(numero_sessione)
     db.set_sessione_completata(numero_sessione, nuovo_stato)
@@ -189,6 +210,7 @@ def dettaglio_npc(npc_id):
 
 
 @app.route("/npc/nuovo", methods=["GET", "POST"])
+@solo_master
 def nuovo_npc():
     if request.method == "POST":
         kwargs = _kwargs_da_form(request.form, [
@@ -212,6 +234,7 @@ def nuovo_npc():
 
 
 @app.route("/npc/<int:npc_id>/edita", methods=["GET", "POST"])
+@solo_master
 def edita_npc(npc_id):
     npc = db.get_npc_full(npc_id)
     if not npc:
@@ -236,6 +259,7 @@ def edita_npc(npc_id):
 
 
 @app.route("/npc/<int:npc_id>/elimina", methods=["POST"])
+@solo_master
 def elimina_npc(npc_id):
     db.delete_record("npc", npc_id)
     flash("Personaggio eliminato dal registro.")
@@ -243,6 +267,7 @@ def elimina_npc(npc_id):
 
 
 @app.route("/npc/<int:npc_id>/toggle-visibile", methods=["POST"])
+@solo_master
 def npc_toggle_visibile(npc_id):
     db.set_npc_visibile(npc_id, not db.get_npc_visibile(npc_id))
     return redirect(url_for("lista_npc"))
@@ -266,6 +291,7 @@ def dettaglio_fazione(fazione_id):
 
 
 @app.route("/fazioni/nuova", methods=["GET", "POST"])
+@solo_master
 def nuova_fazione():
     if request.method == "POST":
         kwargs = _kwargs_da_form(request.form, ["nome_popolare", "ideologia", "territorio", "stato_attuale", "note"])
@@ -278,6 +304,7 @@ def nuova_fazione():
 
 
 @app.route("/fazioni/<int:fazione_id>/edita", methods=["GET", "POST"])
+@solo_master
 def edita_fazione(fazione_id):
     fazione = db.get_fazione_full(fazione_id)
     if not fazione:
@@ -296,6 +323,7 @@ def edita_fazione(fazione_id):
 
 
 @app.route("/fazioni/<int:fazione_id>/elimina", methods=["POST"])
+@solo_master
 def elimina_fazione(fazione_id):
     db.delete_record("fazioni", fazione_id)
     flash("Fazione eliminata dal registro.")
@@ -325,6 +353,7 @@ def dettaglio_location(location_id):
 
 
 @app.route("/locations/nuova", methods=["GET", "POST"])
+@solo_master
 def nuova_location():
     if request.method == "POST":
         kwargs = _kwargs_da_form(request.form, ["tipo", "descrizione_breve", "stato_attuale", "note"])
@@ -339,6 +368,7 @@ def nuova_location():
 
 
 @app.route("/locations/<int:location_id>/edita", methods=["GET", "POST"])
+@solo_master
 def edita_location(location_id):
     location = db.get_location_full(location_id)
     if not location:
@@ -357,6 +387,7 @@ def edita_location(location_id):
 
 
 @app.route("/locations/<int:location_id>/elimina", methods=["POST"])
+@solo_master
 def elimina_location(location_id):
     db.delete_record("locations", location_id)
     flash("Luogo eliminato dal registro.")
@@ -364,6 +395,7 @@ def elimina_location(location_id):
 
 
 @app.route("/locations/<int:location_id>/toggle-visibile", methods=["POST"])
+@solo_master
 def location_toggle_visibile(location_id):
     db.set_location_visibile(location_id, not db.get_location_visibile(location_id))
     return redirect(url_for("lista_locations"))
@@ -392,6 +424,7 @@ def dettaglio_quest(quest_id):
 
 
 @app.route("/quest/nuova", methods=["GET", "POST"])
+@solo_master
 def nuova_quest():
     if request.method == "POST":
         kwargs = _kwargs_da_form(request.form, ["riassunto", "obiettivo_attuale", "note"])
@@ -412,6 +445,7 @@ def nuova_quest():
 
 
 @app.route("/quest/<int:quest_id>/edita", methods=["GET", "POST"])
+@solo_master
 def edita_quest(quest_id):
     quest = db.get_quest_full(quest_id)
     if not quest:
@@ -434,6 +468,7 @@ def edita_quest(quest_id):
 
 
 @app.route("/quest/<int:quest_id>/elimina", methods=["POST"])
+@solo_master
 def elimina_quest(quest_id):
     db.delete_record("quest", quest_id)
     flash("Incarico eliminato dal registro.")
@@ -441,12 +476,14 @@ def elimina_quest(quest_id):
 
 
 @app.route("/quest/<int:quest_id>/toggle-visibile", methods=["POST"])
+@solo_master
 def quest_toggle_visibile(quest_id):
     db.set_quest_visibile(quest_id, not db.get_quest_visibile(quest_id))
     return redirect(url_for("lista_quest"))
 
 
 @app.route("/quest/<int:quest_id>/collega-npc", methods=["GET", "POST"])
+@solo_master
 def collega_npc_quest(quest_id):
     quest = db.get_quest_full(quest_id)
     if not quest:
@@ -473,6 +510,7 @@ def lista_eventi():
 
 
 @app.route("/eventi/nuovo", methods=["GET", "POST"])
+@solo_master
 def nuovo_evento():
     if request.method == "POST":
         location_id = _int_or_none(request.form.get("location_id"))
@@ -490,6 +528,7 @@ def nuovo_evento():
 
 
 @app.route("/eventi/<int:evento_id>/elimina", methods=["POST"])
+@solo_master
 def elimina_evento(evento_id):
     db.delete_record("eventi", evento_id)
     flash("Evento eliminato dalla cronaca.")
@@ -505,6 +544,7 @@ def lista_fatti():
 
 
 @app.route("/fatti/nuovo", methods=["GET", "POST"])
+@solo_master
 def nuovo_fatto():
     if request.method == "POST":
         sessione = _int_or_none(request.form.get("sessione"))
@@ -519,6 +559,7 @@ def nuovo_fatto():
 
 
 @app.route("/fatti/<int:fatto_id>/elimina", methods=["POST"])
+@solo_master
 def elimina_fatto(fatto_id):
     db.delete_record("fatti_accertati", fatto_id)
     flash("Verità eliminata dal registro.")
@@ -528,9 +569,8 @@ def elimina_fatto(fatto_id):
 # --- INDAGINI: vedi blueprints/indagini.py ---
 
 @app.route("/impostazioni/sipario_globale_toggle", methods=["POST"])
+@solo_master
 def sipario_globale_toggle():
-    if session.get("modalita_giocatrice"):
-        return "Accesso negato", 403
     nuovo_stato = db.toggle_sipario_globale()
     return jsonify({"success": True, "sipario_aperto": nuovo_stato})
 
@@ -566,6 +606,9 @@ def sfondo_default():
 @app.route("/soggetto", methods=["GET", "POST"])
 def pg_stato_page():
     if request.method == "POST":
+        if session.get("modalita_giocatrice"):
+            flash("Questa azione non è disponibile in modalità giocatrice.")
+            return redirect(url_for("pg_stato_page"))
         kwargs = _kwargs_da_form(request.form, [
             "nome", "condizione_fisica", "ferite_attive", "equipaggiamento", "risorse", "abilita_acquisite", "note"
         ])
@@ -671,6 +714,7 @@ def audio_lista():
 
 
 @app.route("/audio/nuova", methods=["GET", "POST"])
+@solo_master
 def audio_nuova():
     if request.method == "POST":
         tipo_sorgente = request.form.get("tipo_sorgente", "youtube")
@@ -721,6 +765,7 @@ def audio_nuova():
 
 
 @app.route("/audio/<int:traccia_id>/modifica", methods=["GET", "POST"])
+@solo_master
 def audio_modifica(traccia_id):
     traccia = db.get_traccia_audio(traccia_id)
     if not traccia:
@@ -770,6 +815,7 @@ def audio_modifica(traccia_id):
 
 
 @app.route("/audio/<int:traccia_id>/elimina", methods=["POST"])
+@solo_master
 def audio_elimina(traccia_id):
     db.delete_traccia_audio(traccia_id)
     return redirect(url_for("audio_lista"))
@@ -782,6 +828,7 @@ def audio_tag_lista():
 
 
 @app.route("/audio/tag/<int:tag_id>/elimina", methods=["POST"])
+@solo_master
 def audio_tag_elimina(tag_id):
     db.delete_tag(tag_id)
     return redirect(url_for("audio_tag_lista"))

@@ -163,3 +163,19 @@ CREATE TABLE IF NOT EXISTS sessioni_copioni (
                                                 numero_sessione INTEGER PRIMARY KEY,
                                                 completata INTEGER DEFAULT 0  -- 0 = non completata (nascosta in modalità giocatrice), 1 = completata
 );
+
+-- ============================================================
+-- IMPOSTAZIONI GLOBALI (secret key, sfondo di default, ecc.)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS impostazioni_globali (
+    chiave TEXT PRIMARY KEY,
+    valore_text TEXT,
+    valore_bytea BLOB,
+    valore_mime TEXT
+);
+
+CREATE TABLE IF NOT EXISTS impostazioni_sicurezza (
+    id INTEGER PRIMARY KEY,
+    password_master TEXT
+);
