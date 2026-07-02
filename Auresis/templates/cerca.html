@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Ricerca — Il Registro{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">In tutto il Registro</p>
+    <h1 class="page-title">Ricerca</h1>
+</div>
+
+<form method="GET" action="{{ url_for('cerca') }}" class="actions-row" style="margin-bottom: 28px; gap: 10px;">
+    <input type="text" name="q" value="{{ q }}" placeholder="Cerca personaggi, luoghi, incarichi, copioni…"
+           autofocus autocomplete="off"
+           style="flex: 1; max-width: 480px; background: var(--ink-raised); color: var(--bone); border: 1px solid var(--ink-line); border-radius: 6px; padding: 10px 14px; font-family: inherit; font-size: 0.9rem;">
+    <button type="submit" class="btn">Cerca</button>
+</form>
+
+{% if q and q|length < 2 %}
+<div class="empty-state">
+    <p class="empty-state__title">Scrivi almeno due caratteri.</p>
+</div>
+{% elif q and not gruppi %}
+<div class="empty-state">
+    <p class="empty-state__title">Nessun risultato per «{{ q }}».</p>
+</div>
+{% endif %}
+
+{% for gruppo in gruppi %}
+<h2 style="font-size: 0.8rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); margin: 26px 0 10px;">
+    {{ gruppo.etichetta }} <span style="color: var(--bone-dim);">({{ gruppo.voci|length }})</span>
+</h2>
+<div class="related-list">
+    {% for voce in gruppo.voci %}
+    <a class="related-item" href="{{ voce.url }}" style="align-items: flex-start; text-decoration: none; color: inherit;">
+        <div>
+            <p style="margin: 0 0 4px 0;">{{ voce.titolo }}</p>
+            {% if voce.snippet %}
+            <p style="margin: 0; font-size: 0.78rem; color: var(--bone-dim);">{{ voce.snippet }}</p>
+            {% endif %}
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% endfor %}
+
+{% endblock %}
