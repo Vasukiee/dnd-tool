@@ -67,7 +67,7 @@ SESSIONE_TEMPLATE_NUMERO = 0
 
 @app.route("/")
 def home():
-    stats = db.get_stats_riepilogo()
+    stats = db.get_stats_riepilogo(solo_visibili=bool(session.get("modalita_giocatrice")))
     eventi_recenti = db.get_eventi_recenti(n=6)
     return render_template("home.html", active="home", stats=stats, eventi_recenti=eventi_recenti)
 
