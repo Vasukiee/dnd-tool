@@ -931,8 +931,13 @@ def delete_record(tabella, record_id):
     conn.close()
 
 
-def get_stats_riepilogo():
-    """Numeri di riepilogo per la home della dashboard."""
+def get_stats_riepilogo(solo_visibili=False):
+    """Numeri di riepilogo per la home della dashboard.
+
+    Con solo_visibili=True (modalità giocatrice) i conteggi contano solo
+    gli elementi con visibile_giocatrice = TRUE, coerentemente con quanto
+    mostrato nelle liste dell'interfaccia giocatrice.
+    """
     conn = get_connection()
     cur = conn.cursor()
 
@@ -940,13 +945,17 @@ def get_stats_riepilogo():
         cur.execute(query)
         return cur.fetchone()[0]
 
+    filtro_npc = " AND visibile_giocatrice = 1" if solo_visibili else ""
+    filtro_quest = " AND visibile_giocatrice = 1" if solo_visibili else ""
+    filtro_locations = " WHERE visibile_giocatrice = 1" if solo_visibili else ""
+
     stats = {
-        "npc_totali": scalare("SELECT COUNT(*) FROM npc"),
-        "npc_vivi": scalare("SELECT COUNT(*) FROM npc WHERE stato = 'vivo'"),
-        "quest_attive": scalare("SELECT COUNT(*) FROM quest WHERE stato = 'attiva'"),
-        "quest_completate": scalare("SELECT COUNT(*) FROM quest WHERE stato = 'completata'"),
+        "npc_totali": scalare(f"SELECT COUNT(*) FROM npc WHERE 1=1{filtro_npc}"),
+        "npc_vivi": scalare(f"SELECT COUNT(*) FROM npc WHERE stato = 'vivo'{filtro_npc}"),
+        "quest_attive": scalare(f"SELECT COUNT(*) FROM quest WHERE stato = 'attiva'{filtro_quest}"),
+        "quest_completate": scalare(f"SELECT COUNT(*) FROM quest WHERE stato = 'completata'{filtro_quest}"),
         "fazioni_totali": scalare("SELECT COUNT(*) FROM fazioni WHERE attiva = 1"),
-        "locations_totali": scalare("SELECT COUNT(*) FROM locations"),
+        "locations_totali": scalare(f"SELECT COUNT(*) FROM locations{filtro_locations}"),
         "sessioni_giocate": scalare("SELECT COALESCE(MAX(sessione), 0) FROM eventi"),
     }
     cur.close()
