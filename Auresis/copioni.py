@@ -38,23 +38,33 @@ def _estrai_titolo(testo_md):
 
 
 def elenca_sessioni():
-    """Scansiona la cartella copioni/ e ritorna una lista di dict:
+    """Scansiona la cartella copioni/ e il database, ritorna una lista di dict:
     [{"numero": 1, "titolo": "...", "file_count": 2}, ...]
     ordinata per numero di sessione decrescente (la più recente prima)."""
     _assicura_cartella()
     sessioni = {}  # numero -> {"titolo": str|None, "files": [nomi_file ordinati]}
 
+    # 1. Carica le sessioni dal database (se in modalità db)
+    if db.get_storage_mode() == "db":
+        sessioni_db = db.get_all_sessioni_db()
+        for numero in sessioni_db:
+            testo_db = db.get_sessione_testo(numero)
+            titolo_db = _estrai_titolo(testo_db) if testo_db else None
+            sessioni[numero] = {"titolo": titolo_db, "files": [], "in_db": True}
+
+    # 2. Scansiona i file locali
     nomi_file = sorted(os.listdir(COPIONI_DIR))  # ordine alfabetico, garantisce scena_00 prima di scena_01
     for nome_file in nomi_file:
         numero = _estrai_numero_sessione(nome_file)
         if numero is None:
             continue  # file che non segue la convenzione, ignorato silenziosamente
-        sessioni.setdefault(numero, {"titolo": None, "files": []})
+        if numero not in sessioni:
+            sessioni[numero] = {"titolo": None, "files": [], "in_db": False}
         sessioni[numero]["files"].append(nome_file)
 
     risultato = []
     for numero, dati in sessioni.items():
-        if dati["titolo"] is None and dati["files"]:
+        if dati["titolo"] is None and dati["files"] and not dati.get("in_db", False):
             primo_file = dati["files"][0]
             path = os.path.join(COPIONI_DIR, primo_file)
             try:
@@ -67,6 +77,7 @@ def elenca_sessioni():
             "numero": numero,
             "titolo": dati["titolo"] or f"Sessione {numero}",
             "file_count": len(dati["files"]),
+            "in_db": dati.get("in_db", False)
         })
 
     risultato.sort(key=lambda s: s["numero"], reverse=True)
@@ -88,6 +99,42 @@ def get_file_path_sessione(numero_sessione):
     if not file_sessione:
         return None
     return os.path.join(COPIONI_DIR, file_sessione[0])
+
+
+def salva_testo_sessione(numero_sessione, testo):
+    """Salva il testo del copione sul DB o su disco in base allo STORAGE_MODE."""
+    if db.get_storage_mode() == "db":
+        db.upsert_sessione_testo(numero_sessione, testo)
+    else:
+        percorso = get_file_path_sessione(numero_sessione)
+        if not percorso:
+            _assicura_cartella()
+            percorso = os.path.join(COPIONI_DIR, f"sessione_{numero_sessione:02d}.md")
+        with open(percorso, "w", encoding="utf-8") as f:
+            f.write(testo)
+
+
+def get_testo_sessione(numero_sessione):
+    """Ritorna il testo completo della sessione."""
+    if db.get_storage_mode() == "db":
+        testo_db = db.get_sessione_testo(numero_sessione)
+        if testo_db is not None:
+            return testo_db
+        
+    _assicura_cartella()
+    nomi_file = sorted([
+        f for f in os.listdir(COPIONI_DIR)
+        if _estrai_numero_sessione(f) == numero_sessione
+    ])
+    if not nomi_file:
+        return ""
+        
+    testo_completo = []
+    for nome_file in nomi_file:
+        path = os.path.join(COPIONI_DIR, nome_file)
+        with open(path, "r", encoding="utf-8") as f:
+            testo_completo.append(f.read())
+    return "\n\n---\n\n".join(testo_completo)
 
 
 _RE_IMG = re.compile(r'!\[([^\]|]*)((?:\|[^\]|]+)*)\]\(([^)]+)\)')
@@ -215,18 +262,9 @@ def renderizza_sessione(numero_sessione):
     if info is None:
         return None, None, None
 
-    _assicura_cartella()
-    nomi_file = sorted([
-        f for f in os.listdir(COPIONI_DIR)
-        if _estrai_numero_sessione(f) == numero_sessione
-    ])
-
-    testo_completo = []
-    for nome_file in nomi_file:
-        path = os.path.join(COPIONI_DIR, nome_file)
-        with open(path, "r", encoding="utf-8") as f:
-            testo_completo.append(f.read())
-    testo_unito = "\n\n---\n\n".join(testo_completo)  # separatore visivo tra file/scene
+    testo_unito = get_testo_sessione(numero_sessione)
+    if not testo_unito.strip():
+        return None, None, None
 
     testo_protetto = _processa_immagini(testo_unito)
     testo_protetto = _proteggi_blocchi_master_e_personaggi(testo_protetto)

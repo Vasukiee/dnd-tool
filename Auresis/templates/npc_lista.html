@@ -8,7 +8,9 @@
 </div>
 
 <div class="actions-row" style="margin-bottom: 28px;">
+    {% if not modalita_giocatrice %}
     <a class="btn" href="{{ url_for('nuovo_npc') }}">+ Nuovo personaggio</a>
+    {% endif %}
 </div>
 
 {% if npc_list %}

@@ -1052,6 +1052,64 @@ details[open] .filtri-section__toggle::before {
 }
 
 /* ============================================================
+   Sezione: Palette Colori
+   ============================================================ */
+
+.palette-panel {
+    position: fixed;
+    left: 0;
+    bottom: 64px;
+    width: 220px;
+    background: var(--ink-raised);
+    border: 1px solid var(--ink-line);
+    border-bottom: none;
+    z-index: 200;
+    padding-bottom: 4px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+}
+
+.palette-panel__title {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--gold);
+    margin: 0 0 4px 0;
+    padding: 12px 16px 8px;
+    border-bottom: 1px solid var(--ink-line);
+}
+
+.palette-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 7px 16px;
+    transition: background 0.1s;
+}
+
+.palette-row:hover {
+    background: rgba(201, 163, 92, 0.07);
+}
+
+.palette-row__label {
+    font-size: 0.82rem;
+    color: var(--bone-dim);
+    flex: 1;
+}
+
+.palette-row__input {
+    width: 28px;
+    height: 20px;
+    border: 1px solid var(--ink-line);
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* ============================================================
    Sezione: Copioni di sessione
    ============================================================ */
 

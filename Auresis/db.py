@@ -1,46 +1,74 @@
 import os
+import sqlite3
 import psycopg2
 import psycopg2.extras
-
-SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema_postgres.sql")
 
 from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-if not DATABASE_URL:
-    raise RuntimeError(
-        "Variabile d'ambiente DATABASE_URL non impostata. "
-        "Vedi il commento in cima a db.py per come configurarla."
-    )
+def is_sqlite():
+    return not bool(DATABASE_URL)
+
+def get_storage_mode():
+    """Ritorna 'disk' o 'db'. Se non settato, default: 'disk' per SQLite, 'db' per Postgres."""
+    mode = os.environ.get("STORAGE_MODE")
+    if mode in ("disk", "db"):
+        return mode
+    return "disk" if is_sqlite() else "db"
 
 def get_connection():
-    """Ritorna una connessione Postgres. Il cursore va creato con
-    cursor_factory=RealDictCursor per ottenere righe-come-dizionario
-    (vedi _dictify sotto, usata da tutte le funzioni di lettura)."""
-    return psycopg2.connect(DATABASE_URL)
-
+    """Ritorna una connessione Postgres o SQLite a seconda della configurazione."""
+    if not is_sqlite():
+        return psycopg2.connect(DATABASE_URL)
+    else:
+        db_path = os.path.join(os.path.dirname(__file__), "campagna.db")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        
+        original_cursor = conn.cursor
+        def patched_cursor(*args, **kwargs):
+            # Ignoriamo cursor_factory=... passato da psycopg2
+            cur = original_cursor()
+            original_execute = cur.execute
+            
+            def execute_wrapper(query, params=None):
+                query = query.replace("%s", "?")
+                query = query.replace(" ILIKE ", " LIKE ")
+                query = query.replace(" NOW()", " CURRENT_TIMESTAMP")
+                query = query.replace(" TRUE", " 1").replace(" FALSE", " 0")
+                if params is not None:
+                    return original_execute(query, params)
+                return original_execute(query)
+                
+            cur.execute = execute_wrapper
+            return cur
+            
+        conn.cursor = patched_cursor
+        return conn
 
 def _dictify(rows):
-    """psycopg2.extras.RealDictRow si comporta già come un dict, ma lo
-    convertiamo esplicitamente a dict puro per restare coerenti con
-    l'interfaccia precedente (dict(r) su sqlite3.Row)."""
+    """psycopg2.extras.RealDictRow o sqlite3.Row si comporta già come un dict, ma lo
+    convertiamo esplicitamente a dict puro per coerenza."""
     return [dict(r) for r in rows]
 
-
 def init_db():
-    """Crea le tabelle (se non esistono) applicando lo schema.
-    Sicuro da rilanciare più volte (CREATE TABLE IF NOT EXISTS)."""
+    """Crea le tabelle (se non esistono) applicando lo schema appropriato."""
     conn = get_connection()
     cur = conn.cursor()
-    with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
+    schema_file = "schema.sql" if is_sqlite() else "schema_postgres.sql"
+    schema_path = os.path.join(os.path.dirname(__file__), schema_file)
+    with open(schema_path, "r", encoding="utf-8") as f:
         schema = f.read()
-    cur.execute(schema)
+    if is_sqlite():
+        cur.executescript(schema)
+    else:
+        cur.execute(schema)
     conn.commit()
     cur.close()
     conn.close()
-    print("Database inizializzato su Supabase.")
+    print(f"Database inizializzato ({'SQLite' if is_sqlite() else 'Postgres'}).")
 
 
 # ------------------------------------------------------------------
@@ -415,6 +443,30 @@ def delete_traccia_audio(traccia_id):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("DELETE FROM tracce_audio WHERE id = %s", (traccia_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_palette():
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT variabile, valore FROM palette_personalizzata")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {r["variabile"]: r["valore"] for r in rows}
+
+
+def set_palette_colore(variabile, valore):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO palette_personalizzata (variabile, valore)
+           VALUES (%s, %s)
+               ON CONFLICT (variabile) DO UPDATE SET valore = EXCLUDED.valore""",
+        (variabile, valore),
+    )
     conn.commit()
     cur.close()
     conn.close()
@@ -831,6 +883,45 @@ def set_sessione_completata(numero_sessione, completata):
     conn.commit()
     cur.close()
     conn.close()
+
+
+def get_sessione_testo(numero_sessione):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT testo_md FROM sessioni_copioni WHERE numero_sessione = %s",
+        (numero_sessione,),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return row[0] if row else None
+
+
+def upsert_sessione_testo(numero_sessione, testo_md):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO sessioni_copioni (numero_sessione, testo_md, data_modifica)
+           VALUES (%s, %s, NOW())
+               ON CONFLICT (numero_sessione) DO UPDATE SET 
+                  testo_md = excluded.testo_md,
+                  data_modifica = NOW()""",
+        (numero_sessione, testo_md),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_all_sessioni_db():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT numero_sessione FROM sessioni_copioni WHERE testo_md IS NOT NULL")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [r[0] for r in rows]
 
 
 def get_npc_visibile(npc_id):

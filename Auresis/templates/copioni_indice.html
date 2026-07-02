@@ -4,13 +4,23 @@
 <div class="page-header">
     <p class="page-eyebrow">Cronaca della campagna</p>
     <h1 class="page-title">Copioni</h1>
-    <p class="page-meta">Lette dalla cartella <code>copioni/</code> — aggiungi un file .md lì e ricarica la pagina.</p>
+    <p class="page-meta">Salvati nel database o letti dalla cartella <code>copioni/</code> come fallback.</p>
 </div>
+
+{% if not modalita_giocatrice %}
+<div class="actions-row" style="margin-bottom: 28px;">
+    <form method="post" action="{{ url_for('nuovo_copione') }}" style="display:flex; gap:12px; align-items:center;">
+        <label style="color:var(--bone-dim);">Nuova sessione:</label>
+        <input type="number" name="numero_sessione" min="1" placeholder="N°" style="width:80px;" required>
+        <button type="submit" class="btn">+ Crea</button>
+    </form>
+</div>
+{% endif %}
 
 {% if not sessioni %}
 <div class="empty-state">
     <p class="empty-state__title">Nessun copione trovato</p>
-    <p>Salva un file <code>sessione_01.md</code> (o simile) nella cartella <code>copioni/</code> del progetto.</p>
+    <p>Usa il pulsante qui sopra per creare il primo copione nel database.</p>
 </div>
 {% endif %}
 
@@ -33,7 +43,11 @@
                 <span class="tag tag--side">Bozza</span>
                 {% endif %}
             {% endif %}
+            {% if s.in_db %}
+            <span class="tag">DB</span>
+            {% elif s.file_count > 0 %}
             <span class="tag">{{ s.file_count }} file</span>
+            {% endif %}
         </span>
     </a>
     {% endfor %}

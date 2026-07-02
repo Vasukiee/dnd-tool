@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 from werkzeug.security import check_password_hash
 import db
 import copioni
-from prompt_builder import costruisci_prompt
+
 
 app = Flask(__name__)
 app.secret_key = "campagna-locale-non-serve-sicurezza-vera"
@@ -17,6 +17,13 @@ modalita_giocatrice_attiva = True
 @app.context_processor
 def inietta_modalita_giocatrice():
     return {"modalita_giocatrice": modalita_giocatrice_attiva}
+
+@app.context_processor
+def inietta_palette():
+    try:
+        return {"palette_personalizzata": db.get_palette()}
+    except Exception:
+        return {"palette_personalizzata": {}}
 
 def _int_or_none(value):
     return int(value) if value else None
@@ -89,32 +96,47 @@ def copioni_dettaglio(numero_sessione):
     )
 
 
+@app.route("/copioni/nuovo", methods=["POST"])
+def nuovo_copione():
+    if modalita_giocatrice_attiva:
+        return redirect(url_for("home"))
+    numero_sessione = int(request.form.get("numero_sessione", 0))
+    esistente = copioni.get_testo_sessione(numero_sessione)
+    if not esistente:
+        titolo = f"Sessione {numero_sessione}: Nuovo Capitolo"
+        testo_base = f"# {titolo}\n\n(Master) Inizia a scrivere qui il nuovo copione..."
+        copioni.salva_testo_sessione(numero_sessione, testo_base)
+    return redirect(url_for("copioni_modifica", numero_sessione=numero_sessione))
+
+
 @app.route("/copioni/<int:numero_sessione>/modifica", methods=["GET", "POST"])
 def copioni_modifica(numero_sessione):
-    percorso = copioni.get_file_path_sessione(numero_sessione)
-    if percorso is None:
-        flash("File copione non trovato o sessione non esistente.")
-        return redirect(url_for("copioni_dettaglio", numero_sessione=numero_sessione))
+    if modalita_giocatrice_attiva:
+        return redirect(url_for("home"))
+
     if request.method == "POST":
         if request.is_json:
             testo = request.get_json(force=True).get("contenuto", "")
-            with open(percorso, "w", encoding="utf-8") as fh:
-                fh.write(testo)
+            copioni.salva_testo_sessione(numero_sessione, testo)
             return {"ok": True}
         testo = request.form.get("contenuto", "")
-        with open(percorso, "w", encoding="utf-8") as fh:
-            fh.write(testo)
+        copioni.salva_testo_sessione(numero_sessione, testo)
         flash("Copione salvato.")
         return redirect(url_for("copioni_dettaglio", numero_sessione=numero_sessione))
-    with open(percorso, "r", encoding="utf-8") as fh:
-        testo = fh.read()
+
+    testo = copioni.get_testo_sessione(numero_sessione)
+    if not testo.strip():
+        flash("File copione non trovato o sessione non esistente.")
+        return redirect(url_for("copioni_indice"))
+
     titolo = copioni.estrai_titolo(testo) or f"Sessione {numero_sessione}"
     tracce = db.get_all_tracce_audio()
+    nome_file_label = f"sessione_{numero_sessione}.md ({'DB' if db.get_storage_mode() == 'db' else 'Disk'})"
     return render_template(
         "copioni_modifica.html",
         active="copioni",
         numero_sessione=numero_sessione,
-        nome_file=os.path.basename(percorso),
+        nome_file=nome_file_label,
         titolo=titolo,
         contenuto=testo,
         tracce=tracce
@@ -646,8 +668,17 @@ def indagini_salva_scena_gif(indagine_id, numero_scena):
         if len(data) > _MAX_SCENA_GIF_BYTES:
             flash("Immagine troppo grande (max 10 MB).")
             return redirect(url_for("indagini_editor", indagine_id=indagine_id))
-        # nel DB, non su disco: il filesystem di Render è effimero
-        db.save_scena_gif_file(indagine_id, numero_scena, data, mime)
+        if db.get_storage_mode() == "disk":
+            gif_dir = os.path.join(app.root_path, "static", "scene_gifs")
+            os.makedirs(gif_dir, exist_ok=True)
+            filename = f"indagine_{indagine_id}_scena_{numero_scena}{ext}"
+            file_path = os.path.join(gif_dir, filename)
+            with open(file_path, "wb") as f:
+                f.write(data)
+            db.upsert_scena_gif(indagine_id, numero_scena, f"/static/scene_gifs/{filename}")
+        else:
+            # nel DB, non su disco: il filesystem di Render è effimero
+            db.save_scena_gif_file(indagine_id, numero_scena, data, mime)
     elif _url_sfondo_interno(gif_url, indagine_id, numero_scena):
         # l'URL nel campo è quello dell'immagine già salvata nel DB: non toccare nulla
         pass
@@ -996,68 +1027,24 @@ def sblocca_modalita():
     return render_template("sblocca_modalita.html", next_url=next_url)
 
 
-# --- GENERA PROMPT ---
 
-@app.route("/genera-prompt", methods=["GET", "POST"])
-def genera_prompt_page():
-    if modalita_giocatrice_attiva:
-        flash("Pagina non disponibile in modalità giocatrice.")
-        return redirect(url_for("home"))
+_VARIABILI_PALETTE = [
+    "--ink", "--ink-raised", "--ink-line", "--bone", "--bone-dim",
+    "--gold", "--gold-bright", "--rust", "--rust-bright",
+    "--verdigris", "--verdigris-bright"
+]
 
-    locations = db.get_all_locations()
-
-    prompt_generato = None
-    quest_attive = []
-
-    location_id_selezionata = request.form.get("location_id") if request.method == "POST" else request.args.get("location_id")
-
-    if location_id_selezionata:
-        quest_attive = db.get_quest_attive(location_id=int(location_id_selezionata))
-    else:
-        quest_attive = db.get_quest_attive()
-
-    if request.method == "POST":
-        location_id = int(request.form["location_id"])
-        conn = db.get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM locations WHERE id = %s", (location_id,))
-        location_row = cur.fetchone()
-        cur.close()
-        conn.close()
-        location = dict(location_row) if location_row else None
-
-        quest_ids = [int(q) for q in request.form.getlist("quest_ids")]
-        quest_selezionate = [q for q in db.get_all_quest_full() if q["id"] in quest_ids]
-
-        npc_visti = {}
-        for npc in db.get_npc_in_location(location_id):
-            npc_visti[npc["id"]] = npc
-        for q in quest_selezionate:
-            for npc in db.get_npc_per_quest(q["id"]):
-                npc_visti[npc["id"]] = npc
-
-        contesto = {
-            "location_nome": location["nome"] if location else "Non specificata",
-            "location_descrizione": location.get("descrizione_breve", "") if location else "",
-            "npc": list(npc_visti.values()),
-            "quest": quest_selezionate,
-            "fazioni": db.get_fazioni_rilevanti(),
-            "fatti": db.get_fatti_accertati(),
-            "eventi": db.get_eventi_recenti(n=5),
-            "pg_stato": db.get_pg_stato(),
-            "tipo_scena": request.form.get("tipo_scena", ""),
-            "tono": request.form.get("tono", "").strip(),
-            "intento": request.form.get("intento", "").strip(),
-        }
-        prompt_generato = costruisci_prompt(contesto)
-
-    return render_template(
-        "genera_prompt.html",
-        active="genera",
-        locations=locations,
-        quest_attive=quest_attive,
-        prompt_generato=prompt_generato,
-    )
+@app.route("/palette", methods=["POST"])
+def salva_palette():
+    data = request.get_json()
+    if not data:
+        return {"ok": False}, 400
+    variabile = data.get("variabile", "").strip()
+    valore = data.get("valore", "").strip()
+    if variabile not in _VARIABILI_PALETTE:
+        return {"ok": False}, 400
+    db.set_palette_colore(variabile, valore)
+    return {"ok": True}
 
 # --- AUDIO ---
 
