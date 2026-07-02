@@ -241,10 +241,13 @@ CREATE TABLE IF NOT EXISTS cronologie_indagine (
     nome TEXT NOT NULL,
     attiva BOOLEAN NOT NULL DEFAULT FALSE,
     creata_il TIMESTAMP NOT NULL DEFAULT NOW(),
-    scena_corrente INTEGER NOT NULL DEFAULT 1
+    scena_corrente INTEGER NOT NULL DEFAULT 0,
+    sipario_aperto BOOLEAN NOT NULL DEFAULT FALSE
 );
 -- Migrazione per DB esistenti
-ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS scena_corrente INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS scena_corrente INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE cronologie_indagine ALTER COLUMN scena_corrente SET DEFAULT 0;
+ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS sipario_aperto BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS stato_nodi_cronologia (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -278,4 +281,11 @@ ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS gif_data_aggiornata TIMESTAM
 
 -- Migrazione per testo dei copioni salvato nel database
 ALTER TABLE sessioni_copioni ADD COLUMN IF NOT EXISTS testo_md TEXT;
+
+CREATE TABLE IF NOT EXISTS impostazioni_globali (
+    chiave TEXT PRIMARY KEY,
+    valore_text TEXT,
+    valore_bytea BYTEA,
+    valore_mime TEXT
+);
 ALTER TABLE sessioni_copioni ADD COLUMN IF NOT EXISTS data_modifica TIMESTAMP DEFAULT NOW();

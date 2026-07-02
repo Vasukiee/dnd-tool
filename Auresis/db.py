@@ -1,9 +1,10 @@
 import os
 import sqlite3
+
 import psycopg2
 import psycopg2.extras
-
 from dotenv import load_dotenv
+
 load_dotenv()
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -70,6 +71,78 @@ def init_db():
     conn.close()
     print(f"Database inizializzato ({'SQLite' if is_sqlite() else 'Postgres'}).")
 
+# --- IMPOSTAZIONI GLOBALI ---
+def get_impostazione(chiave):
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM impostazioni_globali WHERE chiave = %s", (chiave,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return dict(row) if row else None
+
+def set_impostazione_bytea(chiave, data, mime):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO impostazioni_globali (chiave, valore_bytea, valore_mime)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (chiave) DO UPDATE SET 
+            valore_bytea = EXCLUDED.valore_bytea,
+            valore_mime = EXCLUDED.valore_mime
+        """,
+        (chiave, data, mime)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+# --- SIPARIO ---
+def toggle_sipario(indagine_id):
+    # Nota: assume esistenza di get_cronologia_attiva definita altrove
+    cronologia = get_cronologia_attiva(indagine_id)
+    if not cronologia:
+        return False
+    
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    nuovo_stato = not cronologia.get("sipario_aperto", False)
+    
+    cur.execute(
+        "UPDATE cronologie_indagine SET sipario_aperto = %s WHERE id = %s",
+        (nuovo_stato, cronologia["id"])
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return nuovo_stato
+
+def toggle_sipario_globale():
+    """Inverte lo stato del sipario per tutte le cronologie attive (solitamente 1)."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT id, sipario_aperto FROM cronologie_indagine WHERE attiva = TRUE")
+    rows = cur.fetchall()
+    
+    # Se ce ne sono di miste, li portiamo tutti a False o True, per semplicità invertiamo il primo trovato e applichiamo a tutti
+    if not rows:
+        cur.close()
+        conn.close()
+        return False
+        
+    nuovo_stato = not rows[0]["sipario_aperto"]
+    ids = [r["id"] for r in rows]
+    
+    cur.execute(
+        "UPDATE cronologie_indagine SET sipario_aperto = %s WHERE id = ANY(%s)",
+        (nuovo_stato, ids)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return nuovo_stato
 
 # ------------------------------------------------------------------
 # QUERY DI LETTURA (per generare il context pack)
@@ -1498,3 +1571,10 @@ def get_scena_gif_file(indagine_id, numero_scena):
 
 if __name__ == "__main__":
     init_db()
+def set_sipario_aperto(cronologia_id, stato):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE cronologie_indagine SET sipario_aperto = %s WHERE id = %s", (stato, cronologia_id))
+    conn.commit()
+    cur.close()
+    conn.close()

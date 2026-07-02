@@ -1,8 +1,9 @@
 import os
 import re
-import markdown as md_lib
-import db
 
+import markdown as md_lib
+
+import db
 
 COPIONI_DIR = os.path.join(os.path.dirname(__file__), "copioni")
 
@@ -179,6 +180,56 @@ def _processa_audio_tags(testo_md):
                     f'title="Traccia \'{nome_traccia}\' non trovata nel database" disabled>'
                     f'{nome_traccia}</button>'
                     f'</span>')
+    return pattern.sub(sostituisci, testo_md)
+
+
+def _processa_indizi_tags(testo_md):
+    pattern = re.compile(r"@indizio:\s*(\d+)-(\d+)\s*\|\s*([^\n]+)")
+    
+    def sostituisci(m):
+        indagine_id = m.group(1)
+        nodo_id = m.group(2)
+        nome = m.group(3).strip()
+        
+        return (f'<span class="audio-recommendation-wrapper">'
+                f'<span class="audio-recommendation-label" style="color:var(--gold);">Indizio da sbloccare:</span> '
+                f'<button class="btn-inline-indizio btn-audio-large" '
+                f'data-indagine-id="{indagine_id}" '
+                f'data-nodo-id="{nodo_id}" '
+                f'title="Sblocca indizio: {nome}">{nome}</button>'
+                f'</span>')
+
+    return pattern.sub(sostituisci, testo_md)
+
+
+def _processa_scene_tags(testo_md):
+    pattern = re.compile(r"@scena:\s*(\d+)-(\d+)\s*\|\s*([^\n]+)")
+    
+    def sostituisci(m):
+        indagine_id = m.group(1)
+        scena_id = m.group(2)
+        nome = m.group(3).strip()
+        
+        return (f'<span class="audio-recommendation-wrapper">'
+                f'<span class="audio-recommendation-label" style="color:var(--gold);">Cambio scena:</span> '
+                f'<button class="btn-inline-scena btn-audio-large" '
+                f'data-indagine-id="{indagine_id}" '
+                f'data-scena-id="{scena_id}" '
+                f'title="Passa alla scena: {nome}">{nome}</button>'
+                f'</span>')
+
+    return pattern.sub(sostituisci, testo_md)
+
+
+def _processa_sipario_tags(testo_md):
+    pattern = re.compile(r"@sipario:\s*toggle", re.IGNORECASE)
+    
+    def sostituisci(m):
+        return (f'<span class="audio-recommendation-wrapper">'
+                f'<span class="audio-recommendation-label" style="color:var(--gold);">Azione master:</span> '
+                f'<button class="btn-inline-sipario btn-audio-large" '
+                f'title="Apri/Chiudi il sipario">🎭 Attiva Sipario</button>'
+                f'</span>')
 
     return pattern.sub(sostituisci, testo_md)
 
@@ -269,6 +320,9 @@ def renderizza_sessione(numero_sessione):
     testo_protetto = _processa_immagini(testo_unito)
     testo_protetto = _proteggi_blocchi_master_e_personaggi(testo_protetto)
     testo_protetto = _processa_audio_tags(testo_protetto)
+    testo_protetto = _processa_indizi_tags(testo_protetto)
+    testo_protetto = _processa_scene_tags(testo_protetto)
+    testo_protetto = _processa_sipario_tags(testo_protetto)
 
     # toc ci serve solo per assegnare id univoci agli heading (gestisce da
     # sola le collisioni, es. titoli duplicati -> id_1, id_2...), anche se

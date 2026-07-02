@@ -26,6 +26,9 @@
     <span class="editor-toolbar__sep"></span>
     <button type="button" class="editor-btn" onclick="document.getElementById('img-file-input').click()" title="Inserisci immagine">🖼</button>
     <button type="button" class="editor-btn" onclick="apriAudioSelector()" title="Inserisci musica">𝄞</button>
+    <button type="button" class="editor-btn" onclick="apriIndizioSelector()" title="Inserisci indizio">🔍</button>
+    <button type="button" class="editor-btn" onclick="apriScenaSelector()" title="Cambia scena">🎬</button>
+    <button type="button" class="editor-btn" onclick="inserisciRigaIntera('\n@sipario: toggle\n')" title="Sipario">🎭</button>
     <input type="file" id="img-file-input" accept="image/*" style="display:none"
            onchange="inserisciImmagineFile(this.files[0]); this.value='';">
     <span class="editor-toolbar__spacer"></span>
@@ -79,6 +82,50 @@
         {% if not tracce %}
         <div style="padding: 1rem; color: var(--bone-dim); text-align: center; font-style: italic;">Nessuna traccia nel database.</div>
         {% endif %}
+    </div>
+</dialog>
+
+<dialog id="indizio-selector" class="audio-dialog">
+    <div class="audio-dialog__header">
+        <h3 style="margin: 0; font-family: var(--font-display); font-size: 1.1rem; color: var(--gold);">Inserisci Indizio</h3>
+        <button type="button" class="audio-dialog__close" onclick="document.getElementById('indizio-selector').close()">✕</button>
+    </div>
+    <div class="audio-dialog__list">
+        {% for info in indagini_con_nodi %}
+            {% if info.nodi %}
+            <div style="padding: 8px 16px; background: rgba(255,255,255,0.05); font-weight: bold; color: var(--gold); font-size: 0.9rem;">
+                {{ info.indagine.titolo }}
+            </div>
+            {% for nodo in info.nodi %}
+            <button type="button" class="audio-dialog__item" onclick="inserisciIndizio({{ info.indagine.id }}, {{ nodo.id }}, '[{{ nodo.numero_nodo }}] {{ nodo.titolo | replace("'", "\\'") }}')">
+                <span class="audio-dialog__icon">🔍</span>
+                <span class="audio-dialog__name">[{{ nodo.numero_nodo }}] {{ nodo.titolo }}</span>
+            </button>
+            {% endfor %}
+            {% endif %}
+        {% endfor %}
+    </div>
+</dialog>
+
+<dialog id="scena-selector" class="audio-dialog">
+    <div class="audio-dialog__header">
+        <h3 style="margin: 0; font-family: var(--font-display); font-size: 1.1rem; color: var(--gold);">Cambia Scena</h3>
+        <button type="button" class="audio-dialog__close" onclick="document.getElementById('scena-selector').close()">✕</button>
+    </div>
+    <div class="audio-dialog__list">
+        {% for info in indagini_con_nodi %}
+            {% if info.scene %}
+            <div style="padding: 8px 16px; background: rgba(255,255,255,0.05); font-weight: bold; color: var(--gold); font-size: 0.9rem;">
+                {{ info.indagine.titolo }}
+            </div>
+            {% for s in info.scene %}
+            <button type="button" class="audio-dialog__item" onclick="inserisciScena({{ info.indagine.id }}, {{ s }}, '{{ info.indagine.titolo | replace("'", "\\'") }} (Scena {{ s }})')">
+                <span class="audio-dialog__icon">🎬</span>
+                <span class="audio-dialog__name">Scena {{ s }}</span>
+            </button>
+            {% endfor %}
+            {% endif %}
+        {% endfor %}
     </div>
 </dialog>
 
@@ -198,6 +245,22 @@ function inserisciAudio(nomeTraccia) {
     inserisciRigaIntera('@audio: ' + nomeTraccia);
 }
 
+function apriIndizioSelector() {
+    document.getElementById('indizio-selector').showModal();
+}
+function inserisciIndizio(indagine_id, nodo_id, titolo) {
+    document.getElementById('indizio-selector').close();
+    inserisciRigaIntera(`@indizio: ${indagine_id}-${nodo_id} | ${titolo}`);
+}
+
+function apriScenaSelector() {
+    document.getElementById('scena-selector').showModal();
+}
+function inserisciScena(indagine_id, scena_id, titolo) {
+    document.getElementById('scena-selector').close();
+    inserisciRigaIntera(`@scena: ${indagine_id}-${scena_id} | ${titolo}`);
+}
+
 function normAlign(a) {
     a = (a || '').toLowerCase();
     if (a === 'left')   return 'sx';
@@ -311,6 +374,12 @@ function renderMd(src) {
     
     s = s.replace(/@audio:\s*([^\n]+)/g,
         '<span class="audio-recommendation-wrapper"><span class="audio-recommendation-label">Musica consigliata:</span> <button type="button" class="btn-inline-audio btn-audio-large" style="pointer-events:none;" tabindex="-1">$1</button></span>');
+
+    s = s.replace(/@indizio:\s*(\d+)-(\d+)\s*\|\s*([^\n]+)/g,
+        '<span class="audio-recommendation-wrapper"><span class="audio-recommendation-label" style="color:var(--gold);">Indizio da sbloccare:</span> <button type="button" class="btn-inline-indizio btn-audio-large" style="pointer-events:none;" tabindex="-1">$3</button></span>');
+
+    s = s.replace(/@scena:\s*(\d+)-(\d+)\s*\|\s*([^\n]+)/g,
+        '<span class="audio-recommendation-wrapper"><span class="audio-recommendation-label" style="color:var(--gold);">Cambio scena:</span> <button type="button" class="btn-inline-scena btn-audio-large" style="pointer-events:none;" tabindex="-1">$3</button></span>');
 
     const lines = s.split('\n');
     const out = [];
