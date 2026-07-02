@@ -253,22 +253,20 @@ CREATE TABLE IF NOT EXISTS stato_nodi_cronologia (
 CREATE INDEX IF NOT EXISTS idx_cronologie_indagine ON cronologie_indagine(indagine_id);
 CREATE INDEX IF NOT EXISTS idx_stato_nodi_cron ON stato_nodi_cronologia(cronologia_id);
 
--- GIF di sfondo per ogni scena di un'indagine
+-- GIF di sfondo per ogni scena di un'indagine.
+-- L'immagine caricata da file vive in gif_data (BYTEA): il filesystem di
+-- Render è effimero e i file salvati su disco spariscono a ogni deploy.
 CREATE TABLE IF NOT EXISTS scene_indagine (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     indagine_id INTEGER NOT NULL REFERENCES indagini(id) ON DELETE CASCADE,
     numero_scena INTEGER NOT NULL,
     gif_url TEXT,
+    gif_data BYTEA,
+    gif_mime TEXT,
+    gif_data_aggiornata TIMESTAMPTZ,
     UNIQUE (indagine_id, numero_scena)
 );
 -- Migrazione per DB esistenti
-DO $$ BEGIN
-    CREATE TABLE IF NOT EXISTS scene_indagine (
-        id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-        indagine_id INTEGER NOT NULL REFERENCES indagini(id) ON DELETE CASCADE,
-        numero_scena INTEGER NOT NULL,
-        gif_url TEXT,
-        UNIQUE (indagine_id, numero_scena)
-    );
-EXCEPTION WHEN duplicate_table THEN NULL;
-END $$;
+ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS gif_data BYTEA;
+ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS gif_mime TEXT;
+ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS gif_data_aggiornata TIMESTAMPTZ;
