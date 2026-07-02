@@ -111,6 +111,9 @@
         <div id="palette-panel" class="palette-panel" hidden>
             <p class="palette-panel__title">Colori</p>
             <div id="palette-list"></div>
+            <div class="palette-reset">
+                <button type="button" id="palette-reset-btn" class="palette-reset-btn">Reset Predefiniti</button>
+            </div>
         </div>
 
         <form method="post" action="{{ url_for('toggle_modalita_giocatrice') }}" class="modalita-toggle" data-attiva="{{ 'true' if modalita_giocatrice else 'false' }}">
@@ -311,6 +314,7 @@
 
     var paletteBtn = document.getElementById("palette-btn");
     var palettePanel = document.getElementById("palette-panel");
+    var paletteResetBtn = document.getElementById("palette-reset-btn");
 
     if (paletteBtn && palettePanel) {
         paletteBtn.addEventListener("click", function (e) {
@@ -321,6 +325,22 @@
         document.addEventListener("click", function (e) {
             if (!palettePanel.hidden && !palettePanel.contains(e.target) && e.target !== paletteBtn) {
                 palettePanel.hidden = true;
+            }
+        });
+    }
+
+    if (paletteResetBtn) {
+        paletteResetBtn.addEventListener("click", function () {
+            if (confirm("Sei sicuro di voler ripristinare i colori predefiniti?")) {
+                fetch("/palette", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "reset" })
+                }).then(function(res) {
+                    if (res.ok) {
+                        window.location.reload();
+                    }
+                });
             }
         });
     }

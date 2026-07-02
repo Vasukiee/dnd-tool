@@ -471,6 +471,14 @@ def set_palette_colore(variabile, valore):
     cur.close()
     conn.close()
 
+def reset_palette():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM palette_personalizzata")
+    conn.commit()
+    cur.close()
+    conn.close()
+
 
 # ------------------------------------------------------------------
 # QUERY COMPLETE PER LA DASHBOARD WEB (tutti i campi, nessun filtro)
