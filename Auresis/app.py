@@ -27,13 +27,6 @@ app.secret_key = _secret_key
 def inietta_modalita_giocatrice():
     return {"modalita_giocatrice": session.get("modalita_giocatrice")}
 
-@app.context_processor
-def inietta_palette():
-    try:
-        return {"palette_personalizzata": db.get_palette()}
-    except Exception:
-        return {"palette_personalizzata": {}}
-
 app.register_blueprint(indagini_bp)
 
 def solo_master(view):
@@ -756,29 +749,6 @@ def sblocca_modalita():
     return render_template("sblocca_modalita.html", next_url=next_url)
 
 
-
-_VARIABILI_PALETTE = [
-    "--ink", "--ink-raised", "--ink-line", "--bone", "--bone-dim",
-    "--gold", "--gold-bright", "--rust", "--rust-bright",
-    "--verdigris", "--verdigris-bright"
-]
-
-@app.route("/palette", methods=["POST"])
-def salva_palette():
-    data = request.get_json()
-    if not data:
-        return {"ok": False}, 400
-        
-    if data.get("action") == "reset":
-        db.reset_palette()
-        return {"ok": True}
-        
-    variabile = data.get("variabile", "").strip()
-    valore = data.get("valore", "").strip()
-    if variabile not in _VARIABILI_PALETTE:
-        return {"ok": False}, 400
-    db.set_palette_colore(variabile, valore)
-    return {"ok": True}
 
 # --- AUDIO ---
 
