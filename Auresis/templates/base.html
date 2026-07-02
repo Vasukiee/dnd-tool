@@ -5,15 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Il Registro{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    {% if palette_personalizzata %}
-    <style>
-    :root {
-    {% for var, val in palette_personalizzata.items() %}
-        {{ var }}: {{ val }};
-    {% endfor %}
-    }
-    </style>
-    {% endif %}
+    <script>
+    /* Applica la palette personalizzata salvata in locale, prima del paint, per evitare flash. */
+    (function () {
+        try {
+            var salvata = JSON.parse(localStorage.getItem("dnd_palette") || "{}");
+            var root = document.documentElement.style;
+            for (var v in salvata) {
+                root.setProperty(v, salvata[v]);
+            }
+        } catch (e) {}
+    })();
+    </script>
     {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -316,11 +319,9 @@
             });
 
             inp.addEventListener("change", function () {
-                fetch("/palette", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ variabile: v.css, valore: inp.value })
-                });
+                var salvata = JSON.parse(localStorage.getItem("dnd_palette") || "{}");
+                salvata[v.css] = inp.value;
+                localStorage.setItem("dnd_palette", JSON.stringify(salvata));
             });
 
             row.appendChild(lbl);
@@ -349,15 +350,8 @@
     if (paletteResetBtn) {
         paletteResetBtn.addEventListener("click", function () {
             if (confirm("Sei sicuro di voler ripristinare i colori predefiniti?")) {
-                fetch("/palette", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: "reset" })
-                }).then(function(res) {
-                    if (res.ok) {
-                        window.location.reload();
-                    }
-                });
+                localStorage.removeItem("dnd_palette");
+                window.location.reload();
             }
         });
     }

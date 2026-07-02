@@ -283,7 +283,7 @@ def ricerca_globale(testo, solo_visibili=False):
 _TABELLE_EXPORT = [
     "fazioni", "locations", "npc", "quest", "quest_npc", "eventi",
     "pg_stato", "fatti_accertati", "tracce_audio", "tag_audio",
-    "traccia_audio_tag", "sessioni_copioni", "palette_personalizzata",
+    "traccia_audio_tag", "sessioni_copioni",
     "indagini", "nodi_indagine", "collegamenti_nodi", "cronologie_indagine",
     "stato_nodi_cronologia", "scene_indagine", "impostazioni_globali",
 ]
@@ -696,37 +696,6 @@ def delete_traccia_audio(traccia_id):
     cur.close()
     conn.close()
 
-
-def get_palette():
-    conn = get_connection()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT variabile, valore FROM palette_personalizzata")
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
-    return {r["variabile"]: r["valore"] for r in rows}
-
-
-def set_palette_colore(variabile, valore):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        """INSERT INTO palette_personalizzata (variabile, valore)
-           VALUES (%s, %s)
-               ON CONFLICT (variabile) DO UPDATE SET valore = EXCLUDED.valore""",
-        (variabile, valore),
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
-
-def reset_palette():
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM palette_personalizzata")
-    conn.commit()
-    cur.close()
-    conn.close()
 
 
 # ------------------------------------------------------------------
