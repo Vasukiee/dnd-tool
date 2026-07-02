@@ -895,6 +895,66 @@ def audio_tag_elimina(tag_id):
     return redirect(url_for("audio_tag_lista"))
 
 
+@app.route("/audio/bucket-files")
+def audio_bucket_files():
+    """
+    Lista i file nel bucket Supabase SFX leggendo da storage.objects via Postgres.
+    La LIST API di Supabase Storage è bloccata da RLS, quindi usiamo il DB già connesso.
+    """
+    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    bucket = os.environ.get("SUPABASE_BUCKET", "SFX")
+
+    if not supabase_url:
+        return jsonify({"error": "SUPABASE_URL non configurata nel .env"}), 500
+
+    audio_ext = {".mp3", ".ogg", ".wav", ".flac", ".m4a", ".webm"}
+
+    try:
+        conn = db.get_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT name
+            FROM storage.objects
+            WHERE bucket_id = %s
+            ORDER BY name
+            """,
+            (bucket,),
+        )
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        return jsonify({"error": f"Errore query storage.objects: {e}"}), 500
+
+    files = []
+    for (name,) in rows:
+        if any(name.lower().endswith(ext) for ext in audio_ext):
+            public_url = f"{supabase_url}/storage/v1/object/public/{bucket}/{name}"
+            display_name = name.rsplit(".", 1)[0].replace("-", " ").replace("_", " ").title()
+            files.append({"name": display_name, "file": name, "url": public_url})
+
+    return jsonify(sorted(files, key=lambda x: x["name"]))
+
+
+@app.route("/audio/json")
+def audio_json():
+    """Endpoint leggero per la soundboard: restituisce tutte le tracce come JSON."""
+    tracce = db.get_all_tracce_audio()
+    result = []
+    for t in tracce:
+        result.append({
+            "id": t["id"],
+            "nome": t["nome"],
+            "tipo_sorgente": t.get("tipo_sorgente", "youtube"),
+            "youtube_id": t.get("youtube_id"),
+            "file_path": t.get("file_path"),
+            "timestamp_inizio": t.get("timestamp_inizio", 0),
+            "tags": t.get("tags", []),
+        })
+    return jsonify(result)
+
+
 @app.route("/ping")
 def ping():
     return '', 204
