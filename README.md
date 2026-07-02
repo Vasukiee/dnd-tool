@@ -1,4 +1,4 @@
-# Strumento Campagna DnD — Guida d'uso
+# Strumento Campagna DnD - Guida d'uso
 
 Questo strumento fa da interfaccia per gestire lo stato della tua campagna. Hai **due modi equivalenti** di usarlo: una dashboard web con interfaccia grafica (consigliata, "Il Registro") oppure due script da terminale. Entrambi leggono e scrivono lo stesso database (in locale o in cloud), quindi puoi alternarli liberamente.
 
@@ -12,7 +12,6 @@ dnd_tool/
     ├── schema.sql              ← struttura del database locale (SQLite)
     ├── schema_postgres.sql     ← struttura del database cloud (Postgres)
     ├── db.py                   ← astrazione e connessione dinamica al database
-    ├── prompt_builder.py       ← logica di costruzione del prompt
     ├── copioni.py              ← motore di lettura e parsing dei copioni
     │
     ├── app.py                  ← DASHBOARD WEB: lancia questo per l'interfaccia grafica
@@ -20,7 +19,6 @@ dnd_tool/
     ├── static/                 ← stile (CSS), script (JS) e risorse multimediali (audio, gif)
     ├── copioni/                ← i file testuali delle sessioni (.md)
     │
-    ├── genera_prompt.py        ← ALTERNATIVA DA TERMINALE: genera il prompt
     ├── aggiorna_sessione.py    ← ALTERNATIVA DA TERMINALE: registra eventi
     │
     └── documenti_statici/
@@ -46,7 +44,7 @@ dnd_tool/
    DATABASE_URL="postgresql://utente:password@host:porta/dbname"
    ```
    L'app rileverà il link e salverà copioni e immagini in cloud invece che in locale.
-5. I file in `documenti_statici/` vengono inclusi **integralmente** in ogni prompt generato — aggiornali quando la lore cambia in modo strutturale.
+5. I file in `documenti_statici/` contengono la lore principale. Aggiornali quando l'ambientazione cambia in modo strutturale.
 
 ## Uso: la dashboard web (consigliata)
 
@@ -58,21 +56,19 @@ python3 app.py
 Poi apri il browser su **http://127.0.0.1:5000**. Lascia il terminale aperto in background mentre usi la dashboard (è il server che la fa funzionare); per chiuderla, torna al terminale e premi `Ctrl+C`. 
 
 La sidebar a sinistra ti porta tra:
-- **Sommario** — i numeri della campagna a colpo d'occhio (NPC vivi, quest attive, sessioni giocate).
-- **Personaggi** — schede NPC. Il bordo dorato a sinistra di ogni card si allarga in base al livello di Auris Cancer registrato.
-- **Fazioni**, **Luoghi**, **Incarichi** — cataloghi con dettaglio e form di modifica.
-- **Cronaca** — il log delle sessioni giocate (eventi) e dei Fatti Accertati.
-- **Indagini** — pagine dinamiche (Editor e Live) per gestire puzzle e investigazioni, con mappe visive, sblocchi e sfondi scena animati (GIF).
-- **I Copioni** — dove puoi leggere le trascrizioni romanzate delle sessioni arricchite dall'audio ambientale in background.
-- **Il Soggetto** — la scheda del tuo personaggio.
-- **→ Genera prompt sessione** — scegli location, quest, tipo di scena e intento, per ottenere il testo da incollare direttamente in Gemini.
+- **Sommario**: i numeri della campagna a colpo d'occhio (NPC vivi, quest attive, sessioni giocate).
+- **Personaggi**: schede NPC. Il bordo dorato a sinistra di ogni card si allarga in base al livello di Auris Cancer registrato.
+- **Fazioni**, **Luoghi**, **Incarichi**: cataloghi con dettaglio e form di modifica.
+- **Cronaca**: il log delle sessioni giocate (eventi) e dei Fatti Accertati.
+- **Indagini**: pagine dinamiche (Editor e Live) per gestire puzzle e investigazioni, con mappe visive, sblocchi e sfondi scena animati (GIF).
+- **I Copioni**: dove puoi leggere le trascrizioni romanzate delle sessioni arricchite dall'audio ambientale in background.
+- **Il Soggetto**: la scheda del tuo personaggio.
 
 ## Uso: gli script da terminale (alternativa)
 
 Se preferisci non aprire il browser, assicurati di essere in `Auresis/` e lancia:
 
 ```bash
-python3 genera_prompt.py      # genera il prompt a domande, salva un file .md
 python3 aggiorna_sessione.py  # menu per registrare eventi/NPC/quest dopo aver giocato
 ```
 
@@ -80,7 +76,6 @@ python3 aggiorna_sessione.py  # menu per registrare eventi/NPC/quest dopo aver g
 
 - **Architettura Ibrida**: Se cloni il progetto e lo usi sul tuo computer, l'app usa `campagna.db` (SQLite) e salva copioni come file Markdown e immagini su disco in `static/scene_gifs`. Se usi il `.env` con un `DATABASE_URL` (es. Supabase), l'app si connette a Postgres e memorizza file e testo nel database per garantirne la persistenza in hosting come Render.
 - **Multimedialità**: Puoi associare tracce audio e GIF di sfondo alle tue Indagini e Copioni. Il codice gestisce automaticamente il caching per un'esperienza fluida.
-- **Niente costi extra**: La web app gira in locale. L'unico posto in cui "spendi" è per l'abbonamento eventuale a Gemini. 
 - **Auris Cancer**: ogni NPC ha un campo contaminazione (0-5) puramente narrativo, starà a te tracciarne il peso.
 
 ## Se qualcosa non funziona
