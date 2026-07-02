@@ -1,10 +1,9 @@
 import json
 import os
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, Response, abort
 from urllib.parse import urlparse
 from werkzeug.security import check_password_hash
-from werkzeug.utils import secure_filename
 import db
 import copioni
 from prompt_builder import costruisci_prompt
@@ -581,7 +580,7 @@ def indagini_editor(indagine_id):
         return redirect(url_for("lista_indagini"))
     nodi = db.get_nodi_indagine(indagine_id)
     collegamenti = db.get_collegamenti(indagine_id)
-    scene_gifs = db.get_scene_gifs(indagine_id)
+    scene_gifs = _scene_gifs_display(indagine_id)
     scene_numeri = sorted(set(n["numero_nodo"] // 10 for n in nodi)) if nodi else []
     graph_data = json.dumps({
         "nodi": nodi,
@@ -599,7 +598,35 @@ def indagini_editor(indagine_id):
     )
 
 
-_ALLOWED_IMAGE_EXTS = {".gif", ".jpg", ".jpeg", ".png"}
+_IMAGE_MIME_PER_EXT = {
+    ".gif": "image/gif",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+}
+_MAX_SCENA_GIF_BYTES = 10 * 1024 * 1024
+
+
+def _scene_gifs_display(indagine_id):
+    """URL di visualizzazione degli sfondi scena: la route interna se
+    l'immagine è nel DB, altrimenti l'eventuale URL esterno."""
+    out = {}
+    for numero, info in db.get_scene_gifs(indagine_id).items():
+        if info["has_file"]:
+            out[numero] = url_for(
+                "indagini_scena_sfondo",
+                indagine_id=indagine_id,
+                numero_scena=numero,
+                v=info["versione"],
+            )
+        elif info["gif_url"]:
+            out[numero] = info["gif_url"]
+    return out
+
+
+def _url_sfondo_interno(gif_url, indagine_id, numero_scena):
+    return gif_url.startswith(f"/indagini/{indagine_id}/scene/{numero_scena}/sfondo")
+
 
 @app.route("/indagini/<int:indagine_id>/scene/<int:numero_scena>/gif", methods=["POST"])
 def indagini_salva_scena_gif(indagine_id, numero_scena):
@@ -611,17 +638,36 @@ def indagini_salva_scena_gif(indagine_id, numero_scena):
 
     if uploaded and uploaded.filename:
         ext = os.path.splitext(uploaded.filename)[1].lower()
-        if ext not in _ALLOWED_IMAGE_EXTS:
+        mime = _IMAGE_MIME_PER_EXT.get(ext)
+        if not mime:
             flash("Formato non supportato. Usa GIF, JPG o PNG.")
             return redirect(url_for("indagini_editor", indagine_id=indagine_id))
-        filename = secure_filename(f"indagine{indagine_id}_scena{numero_scena}{ext}")
-        save_path = os.path.join(app.root_path, "static", "gif", filename)
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        uploaded.save(save_path)
-        gif_url = url_for("static", filename=f"gif/{filename}")
+        data = uploaded.read()
+        if len(data) > _MAX_SCENA_GIF_BYTES:
+            flash("Immagine troppo grande (max 10 MB).")
+            return redirect(url_for("indagini_editor", indagine_id=indagine_id))
+        # nel DB, non su disco: il filesystem di Render è effimero
+        db.save_scena_gif_file(indagine_id, numero_scena, data, mime)
+    elif _url_sfondo_interno(gif_url, indagine_id, numero_scena):
+        # l'URL nel campo è quello dell'immagine già salvata nel DB: non toccare nulla
+        pass
+    else:
+        db.upsert_scena_gif(indagine_id, numero_scena, gif_url)
 
-    db.upsert_scena_gif(indagine_id, numero_scena, gif_url)
     return redirect(url_for("indagini_editor", indagine_id=indagine_id))
+
+
+@app.route("/indagini/<int:indagine_id>/scene/<int:numero_scena>/sfondo")
+def indagini_scena_sfondo(indagine_id, numero_scena):
+    """Serve l'immagine di sfondo salvata nel DB. Accessibile anche in
+    modalità giocatrice: la player view ne ha bisogno."""
+    risultato = db.get_scena_gif_file(indagine_id, numero_scena)
+    if not risultato:
+        abort(404)
+    data, mime = risultato
+    resp = Response(data, mimetype=mime or "application/octet-stream")
+    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return resp
 
 
 @app.route("/indagini/<int:indagine_id>/nodi/nuovo", methods=["POST"])
@@ -852,7 +898,7 @@ def indagini_player(indagine_id):
     scena_corrente_val = cronologia_attiva.get("scena_corrente", 1) if cronologia_attiva else 1
     nodi = _merge_sblocco_in_nodi(nodi, stati_sblocco)
     scoperti_ids = [nid for nid, stato in stati_sblocco.items() if stato.get("scoperto")]
-    scene_gifs = db.get_scene_gifs(indagine_id)
+    scene_gifs = _scene_gifs_display(indagine_id)
     # converti chiavi in stringhe per compatibilità JSON
     scene_gifs_str = {str(k): v for k, v in scene_gifs.items()}
     graph_data = json.dumps({

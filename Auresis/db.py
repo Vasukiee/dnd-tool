@@ -1314,21 +1314,34 @@ def sblocca_nodo(nodo_id, manuale, cronologia_id):
 
 
 def get_scene_gifs(indagine_id):
-    """Restituisce {numero_scena: gif_url} per un'indagine."""
+    """Restituisce {numero_scena: {"gif_url", "has_file", "versione"}} per
+    un'indagine. "has_file" indica che l'immagine è salvata nel DB (gif_data);
+    "versione" è un epoch usato come cache-buster negli URL."""
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
-        "SELECT numero_scena, gif_url FROM scene_indagine WHERE indagine_id = %s",
+        """SELECT numero_scena, gif_url,
+                  (gif_data IS NOT NULL) AS has_file,
+                  COALESCE(EXTRACT(EPOCH FROM gif_data_aggiornata)::bigint, 0) AS versione
+           FROM scene_indagine WHERE indagine_id = %s""",
         (indagine_id,),
     )
     rows = cur.fetchall()
     cur.close()
     conn.close()
-    return {row["numero_scena"]: row["gif_url"] for row in rows}
+    return {
+        row["numero_scena"]: {
+            "gif_url": row["gif_url"],
+            "has_file": row["has_file"],
+            "versione": row["versione"],
+        }
+        for row in rows
+    }
 
 
 def upsert_scena_gif(indagine_id, numero_scena, gif_url):
-    """Salva o aggiorna la GIF di sfondo per una scena."""
+    """Salva o aggiorna l'URL (esterno) di sfondo per una scena.
+    Rimuove l'eventuale immagine caricata nel DB: URL e file sono alternativi."""
     conn = get_connection()
     cur = conn.cursor()
     gif_val = gif_url.strip() if gif_url and gif_url.strip() else None
@@ -1336,12 +1349,52 @@ def upsert_scena_gif(indagine_id, numero_scena, gif_url):
         """INSERT INTO scene_indagine (indagine_id, numero_scena, gif_url)
            VALUES (%s, %s, %s)
            ON CONFLICT (indagine_id, numero_scena)
-           DO UPDATE SET gif_url = EXCLUDED.gif_url""",
+           DO UPDATE SET gif_url = EXCLUDED.gif_url,
+                         gif_data = NULL,
+                         gif_mime = NULL,
+                         gif_data_aggiornata = NULL""",
         (indagine_id, numero_scena, gif_val),
     )
     conn.commit()
     cur.close()
     conn.close()
+
+
+def save_scena_gif_file(indagine_id, numero_scena, data, mime):
+    """Salva i byte dell'immagine di sfondo nel DB (persistente tra i deploy,
+    a differenza del filesystem di Render). Azzera l'eventuale gif_url."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO scene_indagine (indagine_id, numero_scena, gif_url, gif_data, gif_mime, gif_data_aggiornata)
+           VALUES (%s, %s, NULL, %s, %s, NOW())
+           ON CONFLICT (indagine_id, numero_scena)
+           DO UPDATE SET gif_url = NULL,
+                         gif_data = EXCLUDED.gif_data,
+                         gif_mime = EXCLUDED.gif_mime,
+                         gif_data_aggiornata = NOW()""",
+        (indagine_id, numero_scena, psycopg2.Binary(data), mime),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_scena_gif_file(indagine_id, numero_scena):
+    """Restituisce (data, mime) dell'immagine salvata nel DB, o None."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        """SELECT gif_data, gif_mime FROM scene_indagine
+           WHERE indagine_id = %s AND numero_scena = %s AND gif_data IS NOT NULL""",
+        (indagine_id, numero_scena),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not row:
+        return None
+    return bytes(row["gif_data"]), row["gif_mime"]
 
 
 if __name__ == "__main__":
