@@ -244,6 +244,21 @@
 .riv-contenuto { animation: rivContenuto 0.35s ease both; }
 .ghost-linea   { animation: ghostLinea 0.5s ease 0.1s both; }
 .ghost-q       { animation: ghostQ 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 0.25s both; }
+
+/* --- Sipario --- */
+.sipario-black-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #000;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 9999;
+    transition: opacity 1.5s ease-in-out;
+}
+.sipario-black-overlay.attivo {
+    opacity: 1;
+    pointer-events: all;
+}
 </style>
 
 <div class="player-wrapper">
@@ -278,6 +293,8 @@
     </div>
 </div>
 
+<div class="sipario-black-overlay" id="siparioOverlay"></div>
+
 <script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
 <script>
 (function () {
@@ -286,6 +303,13 @@
     const INDAGINE_ID = {{ indagine.id }};
     const POLL_MS = 2000;
     const SCENE_GIFS = RAW.scene_gifs || {};
+
+    const siparioOverlay = document.getElementById("siparioOverlay");
+    if (RAW.sipario_aperto) {
+        siparioOverlay.classList.remove("attivo");
+    } else {
+        siparioOverlay.classList.add("attivo");
+    }
 
     // --- Gestione sfondo scena ---
     const graphSceneBg = document.getElementById("graphSceneBg");
@@ -296,31 +320,30 @@
 
     function aggiornaSfondoScena(nuovaScena) {
         const img = SCENE_GIFS[String(nuovaScena)];
-        const targetUrl = img ? `url(${JSON.stringify(img)})` : null;
+        const isDefault = !img;
+        const targetUrl = img ? `url(${JSON.stringify(img)})` : "url('/impostazioni/sfondo_default')";
         
         if (targetUrl === currentBgImg) return;
         currentBgImg = targetUrl;
         
         clearTimeout(bgTimeout);
 
-        if (targetUrl) {
-            if (graphSceneBg.classList.contains("attivo")) {
-                // Svanisce a nero (durata 0.6s) prima di caricare la nuova
-                graphSceneBg.classList.remove("attivo");
-                bgTimeout = setTimeout(() => {
-                    if (currentBgImg === targetUrl) {
-                        graphSceneBg.style.backgroundImage = targetUrl;
-                        graphSceneBg.classList.add("attivo");
-                    }
-                }, 600);
-            } else {
-                graphSceneBg.style.backgroundImage = targetUrl;
-                graphSceneBg.classList.add("attivo");
-                graphSceneOverlay.classList.add("attivo");
-            }
-        } else {
+        if (graphSceneBg.classList.contains("attivo")) {
+            // Svanisce a nero (durata 0.6s) prima di caricare la nuova
             graphSceneBg.classList.remove("attivo");
-            graphSceneOverlay.classList.remove("attivo");
+            bgTimeout = setTimeout(() => {
+                if (currentBgImg === targetUrl) {
+                    graphSceneBg.style.backgroundImage = targetUrl;
+                    graphSceneBg.classList.add("attivo");
+                    if (isDefault) graphSceneOverlay.classList.remove("attivo");
+                    else graphSceneOverlay.classList.add("attivo");
+                }
+            }, 600);
+        } else {
+            graphSceneBg.style.backgroundImage = targetUrl;
+            graphSceneBg.classList.add("attivo");
+            if (isDefault) graphSceneOverlay.classList.remove("attivo");
+            else graphSceneOverlay.classList.add("attivo");
         }
     }
     const NODE_W = 170;
@@ -1028,6 +1051,18 @@
             if (nuovaScena !== scenaCorrente) {
                 cambiato = true;
                 aggiornaSfondoScena(nuovaScena);
+            }
+
+            // Aggiorna stato sipario indipendentemente dal resto
+            const siparioOverlay = document.getElementById("siparioOverlay");
+            if (data.sipario_aperto) {
+                if (siparioOverlay.classList.contains("attivo")) {
+                    siparioOverlay.classList.remove("attivo");
+                }
+            } else {
+                if (!siparioOverlay.classList.contains("attivo")) {
+                    siparioOverlay.classList.add("attivo");
+                }
             }
 
             if (!cambiato) return;

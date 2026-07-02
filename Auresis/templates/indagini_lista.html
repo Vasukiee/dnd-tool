@@ -9,9 +9,15 @@
     <h1 class="page-title">Indagini</h1>
 </div>
 
-<div class="actions-row" style="margin-bottom: 28px;">
+<div class="actions-row" style="margin-bottom: 28px; justify-content: space-between;">
     {% if not modalita_giocatrice %}
     <a class="btn" href="{{ url_for('nuova_indagine') }}">+ Nuova indagine</a>
+    
+    <form method="POST" action="{{ url_for('sfondo_default') }}" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: center;">
+        <label style="font-size: 0.85rem; color: var(--bone-dim);">Sfondo di default globale:</label>
+        <input type="file" name="file" accept="image/*" required style="font-size: 0.85rem; color: var(--bone);">
+        <button type="submit" class="btn" style="padding: 4px 12px; font-size: 0.8rem;">Carica</button>
+    </form>
     {% endif %}
 </div>
 

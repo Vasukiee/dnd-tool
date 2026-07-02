@@ -605,6 +605,95 @@
             audioWidget.style.display = 'flex';
         });
 
+        // Gestione bottoni indizio inline
+        document.body.addEventListener('click', async function(e) {
+            const btn = e.target.closest('.btn-inline-indizio');
+            if (!btn) return;
+
+            const indagineId = btn.dataset.indagineId;
+            const nodoId = btn.dataset.nodoId;
+
+            try {
+                const resp = await fetch(`/indagini/${indagineId}/nodi/${nodoId}/sblocca`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ manuale: true })
+                });
+
+                if (resp.ok) {
+                    btn.style.backgroundColor = 'rgba(201, 163, 92, 0.2)'; // Var(--gold) con opacità
+                    btn.style.borderColor = 'var(--gold)';
+                    btn.style.color = 'var(--gold-bright)';
+                    btn.innerHTML = btn.innerHTML + ' ✓';
+                    btn.disabled = true;
+                    btn.style.cursor = 'default';
+                } else {
+                    alert('Errore durante lo sblocco dell\'indizio.');
+                }
+            } catch (err) {
+                console.error("Errore:", err);
+                alert('Errore di rete durante lo sblocco.');
+            }
+        });
+
+        // Gestione bottoni scena inline
+        document.body.addEventListener('click', async function(e) {
+            const btn = e.target.closest('.btn-inline-scena');
+            if (!btn) return;
+
+            const indagineId = btn.dataset.indagineId;
+            const scenaId = btn.dataset.scenaId;
+
+            try {
+                const resp = await fetch(`/indagini/${indagineId}/avanza-scena`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scena_corrente: parseInt(scenaId, 10) })
+                });
+
+                if (resp.ok) {
+                    btn.style.backgroundColor = 'rgba(201, 163, 92, 0.2)';
+                    btn.style.borderColor = 'var(--gold)';
+                    btn.style.color = 'var(--gold-bright)';
+                    btn.innerHTML = btn.innerHTML + ' ✓';
+                    btn.disabled = true;
+                    btn.style.cursor = 'default';
+                } else {
+                    alert('Errore durante l\'avanzamento della scena.');
+                }
+            } catch (err) {
+                console.error("Errore:", err);
+                alert('Errore di rete durante il cambio scena.');
+            }
+        });
+
+        // Gestione bottoni sipario inline
+        document.body.addEventListener('click', async function(e) {
+            const btn = e.target.closest('.btn-inline-sipario');
+            if (!btn) return;
+
+            try {
+                const resp = await fetch(`/impostazioni/sipario_globale_toggle`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+
+                if (resp.ok) {
+                    btn.style.backgroundColor = 'rgba(201, 163, 92, 0.2)';
+                    btn.style.borderColor = 'var(--gold)';
+                    btn.style.color = 'var(--gold-bright)';
+                    btn.innerHTML = btn.innerHTML + ' ✓';
+                    btn.disabled = true;
+                    btn.style.cursor = 'default';
+                } else {
+                    alert('Errore durante il toggle del sipario.');
+                }
+            } catch (err) {
+                console.error("Errore:", err);
+                alert('Errore di rete durante il toggle del sipario.');
+            }
+        });
     })();
 </script>
 {% endif %}

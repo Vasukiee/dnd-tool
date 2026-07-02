@@ -1,18 +1,19 @@
 import json
 import os
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, Response, abort
 from urllib.parse import urlparse
-from werkzeug.security import check_password_hash
-import db
-import copioni
 
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, Response, abort
+from werkzeug.security import check_password_hash
+
+import copioni
+import db
 
 app = Flask(__name__)
 app.secret_key = "campagna-locale-non-serve-sicurezza-vera"
 
 # reset a True a ogni avvio del processo
-modalita_giocatrice_attiva = True
+modalita_giocatrice_attiva = False
 
 @app.context_processor
 def inietta_modalita_giocatrice():
@@ -132,6 +133,22 @@ def copioni_modifica(numero_sessione):
     titolo = copioni.estrai_titolo(testo) or f"Sessione {numero_sessione}"
     tracce = db.get_all_tracce_audio()
     nome_file_label = f"sessione_{numero_sessione}.md ({'DB' if db.get_storage_mode() == 'db' else 'Disk'})"
+    
+    indagini_db = db.get_all_indagini()
+    indagini_con_nodi = []
+    for ind in indagini_db:
+        nodi = db.get_nodi_indagine(ind["id"])
+        # estrai le scene (es. nodo 12 -> scena 1)
+        scene = sorted(list(set(n["numero_nodo"] // 10 for n in nodi)))
+        # Aggiungiamo sempre la scena 0 ("intro") all'inizio
+        if 0 not in scene:
+            scene.insert(0, 0)
+        indagini_con_nodi.append({
+            "indagine": ind,
+            "nodi": nodi,
+            "scene": scene
+        })
+
     return render_template(
         "copioni_modifica.html",
         active="copioni",
@@ -139,7 +156,8 @@ def copioni_modifica(numero_sessione):
         nome_file=nome_file_label,
         titolo=titolo,
         contenuto=testo,
-        tracce=tracce
+        tracce=tracce,
+        indagini_con_nodi=indagini_con_nodi
     )
 
 
@@ -789,7 +807,7 @@ def indagini_live(indagine_id):
     collegamenti = db.get_collegamenti(indagine_id)
     cronologia_attiva = db.get_cronologia_attiva(indagine_id)
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"]) if cronologia_attiva else {}
-    scena_corrente_val = cronologia_attiva.get("scena_corrente", 1) if cronologia_attiva else 1
+    scena_corrente_val = cronologia_attiva.get("scena_corrente", 0) if cronologia_attiva else 0
     nodi = _merge_sblocco_in_nodi(nodi, stati_sblocco)
     stati = _calcola_stati_nodi(nodi, collegamenti, stati_sblocco, scena_corrente=scena_corrente_val)
     cronologie = db.get_cronologie_indagine(indagine_id)
@@ -841,7 +859,7 @@ def indagini_sblocca_nodo(indagine_id, nodo_id):
     nodi = db.get_nodi_indagine(indagine_id)
     collegamenti = db.get_collegamenti(indagine_id)
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"])
-    scena_corrente_val = cronologia_attiva.get("scena_corrente", 1)
+    scena_corrente_val = cronologia_attiva.get("scena_corrente", 0)
     nodi = _merge_sblocco_in_nodi(nodi, stati_sblocco)
     stati = _calcola_stati_nodi(nodi, collegamenti, stati_sblocco, scena_corrente=scena_corrente_val)
     return jsonify({
@@ -886,7 +904,9 @@ def indagini_rinomina_cronologia(indagine_id, cronologia_id):
 def indagini_avanza_scena(indagine_id):
     if modalita_giocatrice_attiva:
         return jsonify({"error": "non autorizzato"}), 403
-    nuova_scena = (request.json.get("scena_corrente") if request.is_json else None) or 2
+        
+    req_scena = request.json.get("scena_corrente") if request.is_json else None
+    nuova_scena = int(req_scena) if req_scena is not None else 2
 
     cronologia_attiva = db.get_cronologia_attiva(indagine_id)
     cronologia_nuova = None
@@ -896,6 +916,8 @@ def indagini_avanza_scena(indagine_id):
         cronologia_attiva = cronologia_nuova
 
     db.avanza_scena_cronologia(cronologia_attiva["id"], nuova_scena)
+    if nuova_scena == 0:
+        db.set_sipario_aperto(cronologia_attiva["id"], True)
 
     nodi = db.get_nodi_indagine(indagine_id)
     collegamenti = db.get_collegamenti(indagine_id)
@@ -926,7 +948,7 @@ def indagini_player(indagine_id):
     collegamenti = db.get_collegamenti(indagine_id)
     cronologia_attiva = db.get_cronologia_attiva(indagine_id)
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"]) if cronologia_attiva else {}
-    scena_corrente_val = cronologia_attiva.get("scena_corrente", 1) if cronologia_attiva else 1
+    scena_corrente_val = cronologia_attiva.get("scena_corrente", 0) if cronologia_attiva else 0
     nodi = _merge_sblocco_in_nodi(nodi, stati_sblocco)
     scoperti_ids = [nid for nid, stato in stati_sblocco.items() if stato.get("scoperto")]
     scene_gifs = _scene_gifs_display(indagine_id)
@@ -937,6 +959,7 @@ def indagini_player(indagine_id):
         "collegamenti": collegamenti,
         "scoperti_ids": scoperti_ids,
         "scena_corrente": scena_corrente_val,
+        "sipario_aperto": cronologia_attiva.get("sipario_aperto", False) if cronologia_attiva else False,
         "scene_gifs": scene_gifs_str,
     }, default=str)
     return render_template(
@@ -955,13 +978,59 @@ def indagini_stato_player(indagine_id):
         return jsonify({"error": "non trovata"}), 404
     cronologia_attiva = db.get_cronologia_attiva(indagine_id)
     if not cronologia_attiva:
-        return jsonify({"scoperti_ids": [], "scena_corrente": 1})
+        return jsonify({"scoperti_ids": [], "scena_corrente": 0})
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"])
     scoperti_ids = [nodo_id for nodo_id, stato in stati_sblocco.items() if stato.get("scoperto")]
     return jsonify({
         "scoperti_ids": scoperti_ids,
-        "scena_corrente": cronologia_attiva.get("scena_corrente", 1),
+        "scena_corrente": cronologia_attiva.get("scena_corrente", 0),
+        "sipario_aperto": cronologia_attiva.get("sipario_aperto", False),
     })
+
+@app.route("/indagini/<int:indagine_id>/sipario", methods=["POST"])
+def indagini_sipario(indagine_id):
+    if modalita_giocatrice_attiva:
+        return "Accesso negato", 403
+    azione = request.json.get("azione")
+    cronologia = db.get_cronologia_attiva(indagine_id)
+    if not cronologia:
+        return jsonify({"error": "Nessuna cronologia attiva"}), 400
+        
+    nuovo_stato = db.toggle_sipario(indagine_id)
+    return jsonify({"success": True, "sipario_aperto": nuovo_stato})
+
+@app.route("/impostazioni/sipario_globale_toggle", methods=["POST"])
+def sipario_globale_toggle():
+    if modalita_giocatrice_attiva:
+        return "Accesso negato", 403
+    nuovo_stato = db.toggle_sipario_globale()
+    return jsonify({"success": True, "sipario_aperto": nuovo_stato})
+
+@app.route("/impostazioni/sfondo_default", methods=["GET", "POST"])
+def sfondo_default():
+    if request.method == "POST":
+        if modalita_giocatrice_attiva:
+            return "Accesso negato", 403
+        file = request.files.get("file")
+        if file and file.filename:
+            data = file.read()
+            mime = file.mimetype
+            db.set_impostazione_bytea("sfondo_default", data, mime)
+            flash("Sfondo di default aggiornato con successo.")
+        return redirect(url_for('indagini_list'))
+        
+    else:
+        # GET return the image
+        img = db.get_impostazione("sfondo_default")
+        if img and img.get("valore_bytea"):
+            response = make_response(img["valore_bytea"])
+            response.headers.set("Content-Type", img["valore_mime"])
+            # Cache headers
+            response.headers.set("Cache-Control", "public, max-age=31536000")
+            return response
+        else:
+            return redirect(url_for('static', filename='sfondo_default.jpg'))
+
 
 
 # --- STATO DEL PG ---
