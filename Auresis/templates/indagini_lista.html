@@ -11,7 +11,7 @@
 
 <div class="actions-row" style="margin-bottom: 28px; justify-content: space-between;">
     {% if not modalita_giocatrice %}
-    <a class="btn" href="{{ url_for('nuova_indagine') }}">+ Nuova indagine</a>
+    <a class="btn" href="{{ url_for('indagini.nuova_indagine') }}">+ Nuova indagine</a>
     
     <form method="POST" action="{{ url_for('sfondo_default') }}" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: center;">
         <label style="font-size: 0.85rem; color: var(--bone-dim);">Sfondo di default globale:</label>
@@ -41,12 +41,12 @@
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             {% if modalita_giocatrice %}
-            <a class="btn" href="{{ url_for('indagini_player', indagine_id=ind.id) }}" style="border-color: var(--gold); color: var(--gold-bright);">Bacheca Indizi</a>
+            <a class="btn" href="{{ url_for('indagini.indagini_player', indagine_id=ind.id) }}" style="border-color: var(--gold); color: var(--gold-bright);">Bacheca Indizi</a>
             {% else %}
-            <a class="btn" href="{{ url_for('indagini_editor', indagine_id=ind.id) }}">Editor</a>
-            <a class="btn" href="{{ url_for('indagini_live', indagine_id=ind.id) }}" style="border-color: var(--gold); color: var(--gold-bright);">Vista live</a>
-            <a class="btn" href="{{ url_for('edita_indagine', indagine_id=ind.id) }}" style="font-size: 0.75rem; padding: 5px 10px;">Modifica</a>
-            <form method="POST" action="{{ url_for('elimina_indagine', indagine_id=ind.id) }}" onsubmit="return confirm('Eliminare l\'indagine e tutti i suoi nodi?');">
+            <a class="btn" href="{{ url_for('indagini.indagini_editor', indagine_id=ind.id) }}">Editor</a>
+            <a class="btn" href="{{ url_for('indagini.indagini_live', indagine_id=ind.id) }}" style="border-color: var(--gold); color: var(--gold-bright);">Vista live</a>
+            <a class="btn" href="{{ url_for('indagini.edita_indagine', indagine_id=ind.id) }}" style="font-size: 0.75rem; padding: 5px 10px;">Modifica</a>
+            <form method="POST" action="{{ url_for('indagini.elimina_indagine', indagine_id=ind.id) }}" onsubmit="return confirm('Eliminare l\'indagine e tutti i suoi nodi?');">
                 <button type="submit" class="btn btn--danger" style="font-size: 0.75rem; padding: 5px 10px;">Elimina</button>
             </form>
             {% endif %}

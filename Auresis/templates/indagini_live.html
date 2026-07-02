@@ -283,7 +283,7 @@
 <div class="live-wrapper">
     <!-- HEADER -->
     <div class="live-header">
-        <a href="{{ url_for('lista_indagini') }}" style="color: var(--bone-dim); font-size: 0.85rem;">← Indagini</a>
+        <a href="{{ url_for('indagini.lista_indagini') }}" style="color: var(--bone-dim); font-size: 0.85rem;">← Indagini</a>
         <h1 style="margin: 0; font-family: var(--font-display); font-size: 1.1rem; color: var(--gold-bright);">{{ indagine.titolo }}</h1>
         <span style="font-size: 0.75rem; color: var(--bone-dim); font-family: var(--font-mono);">vista live</span>
         <div style="margin-left: auto; display: flex; gap: 10px; align-items: center;">
@@ -292,12 +292,12 @@
             <button id="siparioBtn" class="btn" onclick="toggleSipario()" style="font-size: 0.78rem; padding: 5px 12px; border: 1px solid var(--ink-line); {% if cronologia and cronologia.sipario_aperto %}background: var(--verdigris); color: #000;{% else %}background: var(--ink); color: var(--bone);{% endif %}">{% if cronologia and cronologia.sipario_aperto %}🎭 Sipario Aperto{% else %}🎭 Sipario{% endif %}</button>
             {% endif %}
             <button id="avanzaBtn" class="btn" onclick="avanzaScena()" style="font-size:0.82rem; padding:5px 14px; display:none;">Avanza →</button>
-            <form method="POST" action="{{ url_for('indagini_reset', indagine_id=indagine.id) }}"
+            <form method="POST" action="{{ url_for('indagini.indagini_reset', indagine_id=indagine.id) }}"
                   onsubmit="return confirm('Sei sicuro? La cronologia attuale verrà archiviata e si ripartirà da zero.');">
                 <button type="submit" class="btn btn--danger" style="font-size: 0.72rem; padding: 4px 10px;">↺ Nuova run</button>
             </form>
-            <a href="{{ url_for('indagini_player', indagine_id=indagine.id) }}" target="_blank" class="btn" style="font-size: 0.78rem; padding: 5px 12px;" title="Apri la bacheca indizi per lo screenshare">Player View ↗</a>
-            <a href="{{ url_for('indagini_editor', indagine_id=indagine.id) }}" class="btn" style="font-size: 0.78rem; padding: 5px 12px;">Editor</a>
+            <a href="{{ url_for('indagini.indagini_player', indagine_id=indagine.id) }}" target="_blank" class="btn" style="font-size: 0.78rem; padding: 5px 12px;" title="Apri la bacheca indizi per lo screenshare">Player View ↗</a>
+            <a href="{{ url_for('indagini.indagini_editor', indagine_id=indagine.id) }}" class="btn" style="font-size: 0.78rem; padding: 5px 12px;">Editor</a>
         </div>
     </div>
 
@@ -334,11 +334,11 @@
                 {% if cron.attiva %}<span class="tag-attuale">ATTUALE</span>{% endif %}
                 <span class="cronologia-data">{{ cron.creata_il | string | truncate(16, True, '') }}</span>
                 {% if not cron.attiva %}
-                <form method="POST" action="{{ url_for('indagini_attiva_cronologia', indagine_id=indagine.id, cronologia_id=cron.id) }}" style="margin:0;">
+                <form method="POST" action="{{ url_for('indagini.indagini_attiva_cronologia', indagine_id=indagine.id, cronologia_id=cron.id) }}" style="margin:0;">
                     <button type="submit" class="btn" style="font-size:0.65rem;padding:2px 8px;white-space:nowrap;">Attiva</button>
                 </form>
                 {% endif %}
-                <form method="POST" action="{{ url_for('indagini_elimina_cronologia', indagine_id=indagine.id, cronologia_id=cron.id) }}"
+                <form method="POST" action="{{ url_for('indagini.indagini_elimina_cronologia', indagine_id=indagine.id, cronologia_id=cron.id) }}"
                       onsubmit="return confirm('Eliminare questa cronologia?');" style="margin:0;">
                     <button type="submit" class="btn btn--danger" style="font-size:0.65rem;padding:2px 8px;">✕</button>
                 </form>
