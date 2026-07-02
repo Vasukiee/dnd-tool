@@ -70,8 +70,31 @@
     overflow: hidden;
     background: var(--ink);
     cursor: grab;
+    position: relative;
 }
-.player-graph svg { display: block; width: 100%; height: 100%; }
+.graph-scene-bg {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+    pointer-events: none;
+    z-index: 0;
+}
+.graph-scene-bg.attivo { opacity: 1; }
+.graph-scene-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.58);
+    opacity: 0;
+    transition: opacity 0.6s ease;
+    pointer-events: none;
+    z-index: 1;
+}
+.graph-scene-overlay.attivo { opacity: 1; }
+.player-graph svg { display: block; width: 100%; height: 100%; position: relative; z-index: 2; }
 
 /* --- Pannello dettaglio nodo (versione player) --- */
 .player-detail {
@@ -234,6 +257,8 @@
     <!-- GRAFO + PANNELLO DETTAGLIO -->
     <div class="player-body">
         <div class="player-graph">
+            <div class="graph-scene-bg" id="graphSceneBg"></div>
+            <div class="graph-scene-overlay" id="graphSceneOverlay"></div>
             <svg id="playerSvg">
                 <defs>
                     <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
@@ -260,6 +285,23 @@
     const RAW = {{ graph_data | safe }};
     const INDAGINE_ID = {{ indagine.id }};
     const POLL_MS = 2000;
+    const SCENE_GIFS = RAW.scene_gifs || {};
+
+    // --- Gestione sfondo scena ---
+    const graphSceneBg = document.getElementById("graphSceneBg");
+    const graphSceneOverlay = document.getElementById("graphSceneOverlay");
+
+    function aggiornaSfondoScena(nuovaScena) {
+        const img = SCENE_GIFS[String(nuovaScena)];
+        if (img) {
+            graphSceneBg.style.backgroundImage = `url(${JSON.stringify(img)})`;
+            graphSceneBg.classList.add("attivo");
+            graphSceneOverlay.classList.add("attivo");
+        } else {
+            graphSceneBg.classList.remove("attivo");
+            graphSceneOverlay.classList.remove("attivo");
+        }
+    }
     const NODE_W = 170;
     const NODE_H = 80;
     const PAD = 40;
@@ -932,6 +974,7 @@
     // Render iniziale
     // ----------------------------------------------------------------
     renderTutti(null, null, null, null, null);
+    aggiornaSfondoScena(scenaCorrente);
 
     // ----------------------------------------------------------------
     // POLLING: aggiornamento automatico ogni 2 secondi
@@ -963,6 +1006,7 @@
             // Scena cambiata
             if (nuovaScena !== scenaCorrente) {
                 cambiato = true;
+                aggiornaSfondoScena(nuovaScena);
             }
 
             if (!cambiato) return;

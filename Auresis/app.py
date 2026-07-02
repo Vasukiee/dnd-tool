@@ -4,6 +4,7 @@ from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from urllib.parse import urlparse
 from werkzeug.security import check_password_hash
+from werkzeug.utils import secure_filename
 import db
 import copioni
 from prompt_builder import costruisci_prompt
@@ -580,6 +581,8 @@ def indagini_editor(indagine_id):
         return redirect(url_for("lista_indagini"))
     nodi = db.get_nodi_indagine(indagine_id)
     collegamenti = db.get_collegamenti(indagine_id)
+    scene_gifs = db.get_scene_gifs(indagine_id)
+    scene_numeri = sorted(set(n["numero_nodo"] // 10 for n in nodi)) if nodi else []
     graph_data = json.dumps({
         "nodi": nodi,
         "collegamenti": collegamenti,
@@ -591,7 +594,34 @@ def indagini_editor(indagine_id):
         nodi=nodi,
         collegamenti=collegamenti,
         graph_data=graph_data,
+        scene_numeri=scene_numeri,
+        scene_gifs=scene_gifs,
     )
+
+
+_ALLOWED_IMAGE_EXTS = {".gif", ".jpg", ".jpeg", ".png"}
+
+@app.route("/indagini/<int:indagine_id>/scene/<int:numero_scena>/gif", methods=["POST"])
+def indagini_salva_scena_gif(indagine_id, numero_scena):
+    if modalita_giocatrice_attiva:
+        return redirect(url_for("home"))
+
+    uploaded = request.files.get("gif_file")
+    gif_url = request.form.get("gif_url", "").strip()
+
+    if uploaded and uploaded.filename:
+        ext = os.path.splitext(uploaded.filename)[1].lower()
+        if ext not in _ALLOWED_IMAGE_EXTS:
+            flash("Formato non supportato. Usa GIF, JPG o PNG.")
+            return redirect(url_for("indagini_editor", indagine_id=indagine_id))
+        filename = secure_filename(f"indagine{indagine_id}_scena{numero_scena}{ext}")
+        save_path = os.path.join(app.root_path, "static", "gif", filename)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        uploaded.save(save_path)
+        gif_url = url_for("static", filename=f"gif/{filename}")
+
+    db.upsert_scena_gif(indagine_id, numero_scena, gif_url)
+    return redirect(url_for("indagini_editor", indagine_id=indagine_id))
 
 
 @app.route("/indagini/<int:indagine_id>/nodi/nuovo", methods=["POST"])
@@ -822,11 +852,15 @@ def indagini_player(indagine_id):
     scena_corrente_val = cronologia_attiva.get("scena_corrente", 1) if cronologia_attiva else 1
     nodi = _merge_sblocco_in_nodi(nodi, stati_sblocco)
     scoperti_ids = [nid for nid, stato in stati_sblocco.items() if stato.get("scoperto")]
+    scene_gifs = db.get_scene_gifs(indagine_id)
+    # converti chiavi in stringhe per compatibilità JSON
+    scene_gifs_str = {str(k): v for k, v in scene_gifs.items()}
     graph_data = json.dumps({
         "nodi": nodi,
         "collegamenti": collegamenti,
         "scoperti_ids": scoperti_ids,
         "scena_corrente": scena_corrente_val,
+        "scene_gifs": scene_gifs_str,
     }, default=str)
     return render_template(
         "indagini_player.html",
