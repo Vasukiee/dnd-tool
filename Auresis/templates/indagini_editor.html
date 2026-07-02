@@ -55,10 +55,10 @@
 </style>
 
 <div style="padding: 16px 20px; border-bottom: 1px solid var(--ink-line); display: flex; align-items: center; gap: 16px; background: var(--ink-raised);">
-    <a href="{{ url_for('lista_indagini') }}" style="color: var(--bone-dim); font-size: 0.85rem;">← Indagini</a>
+    <a href="{{ url_for('indagini.lista_indagini') }}" style="color: var(--bone-dim); font-size: 0.85rem;">← Indagini</a>
     <h1 style="margin: 0; font-family: var(--font-display); font-size: 1.1rem; color: var(--gold-bright);">{{ indagine.titolo }}</h1>
     <span style="font-size: 0.75rem; color: var(--bone-dim); font-family: var(--font-mono);">editor</span>
-    <a href="{{ url_for('indagini_live', indagine_id=indagine.id) }}" class="btn" style="margin-left: auto; font-size: 0.78rem; padding: 5px 12px; border-color: var(--gold); color: var(--gold-bright);">Vista live →</a>
+    <a href="{{ url_for('indagini.indagini_live', indagine_id=indagine.id) }}" class="btn" style="margin-left: auto; font-size: 0.78rem; padding: 5px 12px; border-color: var(--gold); color: var(--gold-bright);">Vista live →</a>
 </div>
 
 <div class="indagini-layout">
@@ -135,7 +135,7 @@
         <!-- Nuovo nodo -->
         <div class="panel-section">
             <p class="panel-title">Aggiungi nodo</p>
-            <form method="POST" action="{{ url_for('indagini_nuovo_nodo', indagine_id=indagine.id) }}"
+            <form method="POST" action="{{ url_for('indagini.indagini_nuovo_nodo', indagine_id=indagine.id) }}"
                   class="form-grid" style="gap: 8px;">
                 <div class="form-field">
                     <label>Numero nodo</label>
@@ -170,7 +170,7 @@
         {% if nodi | length >= 2 %}
         <div class="panel-section">
             <p class="panel-title">Aggiungi collegamento</p>
-            <form method="POST" action="{{ url_for('indagini_nuovo_collegamento', indagine_id=indagine.id) }}"
+            <form method="POST" action="{{ url_for('indagini.indagini_nuovo_collegamento', indagine_id=indagine.id) }}"
                   class="form-grid" style="gap: 8px;">
                 <div class="form-field">
                     <label>Da (genitore)</label>
@@ -204,7 +204,7 @@
                 <div>
                     <label style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--bone-dim); letter-spacing: 0.05em; display: block; margin-bottom: 4px;">Scena {{ s }}</label>
                     <form method="POST" enctype="multipart/form-data"
-                          action="{{ url_for('indagini_salva_scena_gif', indagine_id=indagine.id, numero_scena=s) }}"
+                          action="{{ url_for('indagini.indagini_salva_scena_gif', indagine_id=indagine.id, numero_scena=s) }}"
                           style="display: flex; flex-direction: column; gap: 5px;">
                         <div style="display: flex; gap: 6px; align-items: center;">
                             <input type="url" name="gif_url"
@@ -242,7 +242,7 @@
                 {% set fig = nodi_map.get(c.nodo_figlio_id) %}
                 <div style="display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--bone-dim);">
                     <span style="flex:1;">[{{ gen.numero_nodo if gen }}] {{ gen.titolo if gen }} → [{{ fig.numero_nodo if fig }}] {{ fig.titolo if fig }}</span>
-                    <form method="POST" action="{{ url_for('indagini_elimina_collegamento', indagine_id=indagine.id, collegamento_id=c.id) }}">
+                    <form method="POST" action="{{ url_for('indagini.indagini_elimina_collegamento', indagine_id=indagine.id, collegamento_id=c.id) }}">
                         <button type="submit" class="btn btn--danger" style="font-size:0.65rem; padding: 3px 7px;">✕</button>
                     </form>
                 </div>
