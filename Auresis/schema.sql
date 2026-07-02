@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS locations (
 );
 
 -- NPC
+CREATE TABLE IF NOT EXISTS palette_personalizzata (
+    variabile VARCHAR(100) PRIMARY KEY,
+    valore VARCHAR(50) NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS npc (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT NOT NULL,

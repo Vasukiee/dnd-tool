@@ -37,6 +37,11 @@ CREATE TABLE IF NOT EXISTS locations (
 );
 
 -- NPC
+CREATE TABLE IF NOT EXISTS palette_personalizzata (
+    variabile VARCHAR(100) PRIMARY KEY,
+    valore VARCHAR(50) NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS npc (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     nome TEXT NOT NULL,
@@ -270,3 +275,7 @@ CREATE TABLE IF NOT EXISTS scene_indagine (
 ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS gif_data BYTEA;
 ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS gif_mime TEXT;
 ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS gif_data_aggiornata TIMESTAMPTZ;
+
+-- Migrazione per testo dei copioni salvato nel database
+ALTER TABLE sessioni_copioni ADD COLUMN IF NOT EXISTS testo_md TEXT;
+ALTER TABLE sessioni_copioni ADD COLUMN IF NOT EXISTS data_modifica TIMESTAMP DEFAULT NOW();
