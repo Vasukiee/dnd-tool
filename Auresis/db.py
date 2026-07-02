@@ -1313,5 +1313,36 @@ def sblocca_nodo(nodo_id, manuale, cronologia_id):
     conn.close()
 
 
+def get_scene_gifs(indagine_id):
+    """Restituisce {numero_scena: gif_url} per un'indagine."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        "SELECT numero_scena, gif_url FROM scene_indagine WHERE indagine_id = %s",
+        (indagine_id,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {row["numero_scena"]: row["gif_url"] for row in rows}
+
+
+def upsert_scena_gif(indagine_id, numero_scena, gif_url):
+    """Salva o aggiorna la GIF di sfondo per una scena."""
+    conn = get_connection()
+    cur = conn.cursor()
+    gif_val = gif_url.strip() if gif_url and gif_url.strip() else None
+    cur.execute(
+        """INSERT INTO scene_indagine (indagine_id, numero_scena, gif_url)
+           VALUES (%s, %s, %s)
+           ON CONFLICT (indagine_id, numero_scena)
+           DO UPDATE SET gif_url = EXCLUDED.gif_url""",
+        (indagine_id, numero_scena, gif_val),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
 if __name__ == "__main__":
     init_db()
