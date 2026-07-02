@@ -243,6 +243,265 @@
         .page-header { flex-direction: column; border-bottom: none; }
         .copione-action-buttons { justify-content: center; width: 100%; margin-top: 20px; }
     }
+
+    /* ═══════════════════════════════
+       SOUNDBOARD
+    ═══════════════════════════════ */
+    .soundboard-panel {
+        width: 100%;
+        max-width: 290px;
+        border: 1px solid var(--ink-line);
+        border-radius: 10px;
+        padding: 14px;
+        background: var(--ink-raised);
+        box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+        box-sizing: border-box;
+    }
+    .soundboard-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--ink-line);
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--ink-main);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .soundboard-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 7px;
+    }
+    .sb-slot {
+        aspect-ratio: 1 / 1;
+        border-radius: 8px;
+        border: 1.5px solid var(--ink-line);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+        transition: border-color 0.18s, background 0.18s, transform 0.12s;
+        background: transparent;
+        padding: 6px;
+        box-sizing: border-box;
+        min-width: 0;
+    }
+    .sb-slot:hover {
+        border-color: var(--gold, #c9a35c);
+        background: rgba(201, 163, 92, 0.07);
+        transform: scale(1.03);
+    }
+    .sb-slot.sb-slot--vuoto .sb-plus {
+        font-size: 1.5rem;
+        color: var(--bone-dim);
+        transition: color 0.18s;
+    }
+    .sb-slot.sb-slot--vuoto:hover .sb-plus {
+        color: var(--gold, #c9a35c);
+    }
+    .sb-slot.sb-slot--pieno {
+        border-color: var(--ink-line);
+        background: rgba(255,255,255,0.04);
+    }
+    .sb-slot.sb-slot--attivo {
+        border-color: var(--gold, #c9a35c);
+        background: rgba(201, 163, 92, 0.13);
+    }
+    .sb-nome {
+        font-size: 0.6rem;
+        line-height: 1.25;
+        text-align: center;
+        color: var(--bone);
+        word-break: break-word;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        max-height: 3.75em;
+        margin-bottom: 2px;
+    }
+    .sb-play-icon {
+        font-size: 0.9rem;
+        margin-top: 2px;
+        color: var(--bone-dim);
+        transition: color 0.15s;
+    }
+    .sb-slot.sb-slot--pieno:hover .sb-play-icon {
+        color: var(--gold, #c9a35c);
+    }
+    /* Pulsante 3 punti */
+    .sb-menu-btn {
+        position: absolute;
+        top: 3px;
+        right: 3px;
+        background: none;
+        border: none;
+        padding: 2px 4px;
+        cursor: pointer;
+        font-size: 0.75rem;
+        color: var(--bone-dim);
+        line-height: 1;
+        border-radius: 4px;
+        transition: background 0.15s, color 0.15s;
+        z-index: 2;
+    }
+    .sb-menu-btn:hover {
+        background: var(--ink-line);
+        color: var(--bone);
+    }
+    /* Mini dropdown */
+    .sb-dropdown {
+        position: absolute;
+        top: 22px;
+        right: 3px;
+        background: var(--ink-raised);
+        border: 1px solid var(--ink-line);
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        z-index: 100;
+        min-width: 90px;
+        overflow: hidden;
+        display: none;
+    }
+    .sb-dropdown.sb-dropdown--aperto {
+        display: block;
+    }
+    .sb-dropdown button {
+        display: block;
+        width: 100%;
+        padding: 7px 10px;
+        background: none;
+        border: none;
+        text-align: left;
+        font-size: 0.72rem;
+        cursor: pointer;
+        color: var(--bone);
+        transition: background 0.12s;
+    }
+    .sb-dropdown button:hover {
+        background: rgba(255,255,255,0.08);
+    }
+    .sb-dropdown button.sb-rimuovi {
+        color: #c0392b;
+    }
+
+    /* ═══════════════════════════════
+       MODALE SELEZIONE TRACCIA
+    ═══════════════════════════════ */
+    #sb-modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.55);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+    }
+    #sb-modal-overlay.aperto {
+        display: flex;
+    }
+    #sb-modal {
+        background: var(--ink-raised);
+        border: 1px solid var(--ink-line);
+        border-radius: 12px;
+        width: min(480px, 92vw);
+        max-height: 75vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+        overflow: hidden;
+    }
+    .sb-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px 12px;
+        border-bottom: 1px solid var(--ink-line);
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--bone);
+    }
+    .sb-modal-close {
+        background: none;
+        border: none;
+        font-size: 1.3rem;
+        cursor: pointer;
+        color: var(--ink-light);
+        line-height: 1;
+        padding: 0;
+        transition: color 0.15s;
+    }
+    .sb-modal-close:hover { color: var(--ink-main); }
+    #sb-search {
+        margin: 12px 20px;
+        padding: 8px 12px;
+        border: 1px solid var(--ink-line);
+        border-radius: 6px;
+        font-size: 0.82rem;
+        background: rgba(255,255,255,0.05);
+        color: var(--bone);
+        width: calc(100% - 40px);
+        box-sizing: border-box;
+        outline: none;
+        transition: border-color 0.15s;
+    }
+    #sb-search::placeholder { color: var(--bone-dim); }
+    #sb-search:focus { border-color: var(--gold, #c9a35c); }
+    #sb-tracce-list {
+        overflow-y: auto;
+        padding: 0 12px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        scrollbar-width: thin;
+    }
+    .sb-traccia-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 12px;
+        border-radius: 7px;
+        cursor: pointer;
+        transition: background 0.14s;
+        border: 1px solid transparent;
+    }
+    .sb-traccia-item:hover {
+        background: rgba(201, 163, 92, 0.1);
+        border-color: var(--gold, #c9a35c);
+    }
+    .sb-traccia-icon {
+        font-size: 1rem;
+        flex-shrink: 0;
+        color: var(--ink-light);
+    }
+    .sb-traccia-info {
+        min-width: 0;
+    }
+    .sb-traccia-nome {
+        font-size: 0.82rem;
+        color: var(--bone);
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .sb-traccia-tags {
+        font-size: 0.68rem;
+        color: var(--bone-dim);
+        margin-top: 2px;
+    }
+    .sb-nessuna {
+        text-align: center;
+        color: var(--bone-dim);
+        font-size: 0.8rem;
+        padding: 20px;
+    }
 </style>
 {% endblock %}
 
@@ -300,11 +559,22 @@
 
 <!-- CORPO E OUTLINE -->
 <div class="copione-flex-layout">
-    <!-- Colonna sinistra: Audio Player -->
+    <!-- Colonna sinistra: Soundboard + Audio Player -->
     <div class="copione-col-left">
         <div class="copione-audio-wrapper">
-            <!-- Audio Player Widget -->
-            <div id="audio-player-widget">
+
+            <!-- Soundboard 3×3 -->
+            <div class="soundboard-panel" id="soundboard-panel">
+                <div class="soundboard-header">
+                    <span>🎵</span> Soundboard
+                </div>
+                <div class="soundboard-grid" id="soundboard-grid">
+                    <!-- Gli slot vengono generati via JS -->
+                </div>
+            </div>
+
+            <!-- Audio Player Widget (compare solo quando si riproduce) -->
+            <div id="audio-player-widget" style="margin-top: 12px;">
                 <div class="audio-widget-header">
                     <span class="audio-widget-title" id="audio-widget-title" title="">Titolo Traccia</span>
                     <button class="audio-widget-close" id="audio-widget-close" title="Chiudi e ferma">×</button>
@@ -342,7 +612,306 @@
     </div>
 </div>
 
+<!-- MODALE SELEZIONE TRACCIA SOUNDBOARD -->
+<div id="sb-modal-overlay">
+    <div id="sb-modal" role="dialog" aria-modal="true" aria-label="Scegli una traccia">
+        <div class="sb-modal-header">
+            <span>Scegli una traccia</span>
+            <button class="sb-modal-close" id="sb-modal-close" title="Chiudi">×</button>
+        </div>
+        <input type="text" id="sb-search" placeholder="Cerca per nome o tag…" autocomplete="off">
+        <div id="sb-tracce-list">
+            <!-- Popolato via JS -->
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    'use strict';
+
+    const SESSION_KEY = 'soundboard_sessione_{{ numero_sessione }}';
+    const NUM_SLOT = 9;
+
+    // ── Stato ────────────────────────────────────────────────────────
+    let slots = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+    if (!Array.isArray(slots) || slots.length !== NUM_SLOT) {
+        slots = Array(NUM_SLOT).fill(null);
+    }
+    let slotTarget = null;
+    let tutteTracce = [];
+    let bucketError = false; // true = errore di connessione, false = OK (anche se vuoto)
+    let dropdownAperto = null;
+
+    // ── Salvataggio ──────────────────────────────────────────────────
+    function salva() {
+        localStorage.setItem(SESSION_KEY, JSON.stringify(slots));
+    }
+
+    // ── Render griglia ───────────────────────────────────────────────
+    function renderGriglia() {
+        const grid = document.getElementById('soundboard-grid');
+        if (!grid) return;
+        grid.innerHTML = '';
+
+        slots.forEach((traccia, i) => {
+            const slot = document.createElement('div');
+            slot.className = 'sb-slot ' + (traccia ? 'sb-slot--pieno' : 'sb-slot--vuoto');
+            slot.dataset.idx = i;
+
+            if (!traccia) {
+                const plus = document.createElement('span');
+                plus.className = 'sb-plus';
+                plus.textContent = '+';
+                slot.appendChild(plus);
+                slot.addEventListener('click', () => apriModale(i));
+            } else {
+                const nome = document.createElement('div');
+                nome.className = 'sb-nome';
+                nome.textContent = traccia.name || traccia.nome;
+
+                const playIcon = document.createElement('div');
+                playIcon.className = 'sb-play-icon';
+                playIcon.textContent = '▶';
+
+                const menuBtn = document.createElement('button');
+                menuBtn.className = 'sb-menu-btn';
+                menuBtn.title = 'Opzioni';
+                menuBtn.textContent = '⋯';
+
+                const dropdown = document.createElement('div');
+                dropdown.className = 'sb-dropdown';
+
+                const btnCambia = document.createElement('button');
+                btnCambia.textContent = '🔄 Cambia';
+                btnCambia.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    chiudiDropdown();
+                    apriModale(i);
+                });
+
+                const btnRimuovi = document.createElement('button');
+                btnRimuovi.textContent = '✕ Rimuovi';
+                btnRimuovi.className = 'sb-rimuovi';
+                btnRimuovi.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    chiudiDropdown();
+                    slots[i] = null;
+                    salva();
+                    renderGriglia();
+                });
+
+                dropdown.appendChild(btnCambia);
+                dropdown.appendChild(btnRimuovi);
+
+                menuBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggleDropdown(dropdown);
+                });
+
+                slot.appendChild(menuBtn);
+                slot.appendChild(nome);
+                slot.appendChild(playIcon);
+                slot.appendChild(dropdown);
+
+                slot.addEventListener('click', (e) => {
+                    if (e.target.closest('.sb-menu-btn') || e.target.closest('.sb-dropdown')) return;
+                    riproduci(traccia, i);
+                });
+            }
+
+            grid.appendChild(slot);
+        });
+    }
+
+    // ── Dropdown 3 punti ─────────────────────────────────────────────
+    function toggleDropdown(dropdown) {
+        if (dropdownAperto && dropdownAperto !== dropdown) {
+            dropdownAperto.classList.remove('sb-dropdown--aperto');
+        }
+        dropdown.classList.toggle('sb-dropdown--aperto');
+        dropdownAperto = dropdown.classList.contains('sb-dropdown--aperto') ? dropdown : null;
+    }
+
+    function chiudiDropdown() {
+        if (dropdownAperto) {
+            dropdownAperto.classList.remove('sb-dropdown--aperto');
+            dropdownAperto = null;
+        }
+    }
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.sb-slot')) chiudiDropdown();
+    });
+
+    // ── Modale ───────────────────────────────────────────────────────
+    function apriModale(idx) {
+        slotTarget = idx;
+        const overlay = document.getElementById('sb-modal-overlay');
+        overlay.classList.add('aperto');
+        document.getElementById('sb-search').value = '';
+        caricaTracce('');
+        setTimeout(() => document.getElementById('sb-search').focus(), 80);
+    }
+
+    function chiudiModale() {
+        document.getElementById('sb-modal-overlay').classList.remove('aperto');
+        slotTarget = null;
+    }
+
+    document.getElementById('sb-modal-close').addEventListener('click', chiudiModale);
+    document.getElementById('sb-modal-overlay').addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) chiudiModale();
+    });
+    document.getElementById('sb-search').addEventListener('input', (e) => {
+        caricaTracce(e.target.value.trim().toLowerCase());
+    });
+
+    // ── Caricamento SFX dal bucket Supabase ──────────────────────────
+    async function fetchTracce() {
+        if (tutteTracce.length > 0 || bucketError) return tutteTracce;
+        try {
+            const resp = await fetch('/audio/bucket-files');
+            const data = await resp.json();
+            if (data.error) {
+                console.error('Soundboard bucket error:', data.error);
+                bucketError = true;
+                tutteTracce = [];
+            } else {
+                bucketError = false;
+                tutteTracce = data; // [{name, file, url}, ...]
+            }
+        } catch(err) {
+            console.error('Soundboard: errore caricamento bucket', err);
+            bucketError = true;
+            tutteTracce = [];
+        }
+        return tutteTracce;
+    }
+
+    async function caricaTracce(filtro) {
+        const lista = document.getElementById('sb-tracce-list');
+        lista.innerHTML = '<div class="sb-nessuna">Caricamento…</div>';
+        const tracce = await fetchTracce();
+
+        if (bucketError) {
+            lista.innerHTML = '<div class="sb-nessuna" style="color:#c0392b">⚠ Errore di connessione al bucket.<br><small>Controlla la console per i dettagli.</small></div>';
+            return;
+        }
+        if (tracce.length === 0) {
+            lista.innerHTML = '<div class="sb-nessuna" style="opacity:0.7">Il bucket SFX è vuoto.<br><small>Carica file audio su Supabase Storage.</small></div>';
+            return;
+        }
+
+        const filtrate = filtro
+            ? tracce.filter(t => t.name.toLowerCase().includes(filtro))
+            : tracce;
+
+        lista.innerHTML = '';
+
+        if (filtrate.length === 0) {
+            lista.innerHTML = '<div class="sb-nessuna">Nessun file trovato.</div>';
+            return;
+        }
+
+        filtrate.forEach(t => {
+            const item = document.createElement('div');
+            item.className = 'sb-traccia-item';
+
+            const icon = document.createElement('span');
+            icon.className = 'sb-traccia-icon';
+            icon.textContent = '🎵';
+
+            const info = document.createElement('div');
+            info.className = 'sb-traccia-info';
+
+            const nomeEl = document.createElement('div');
+            nomeEl.className = 'sb-traccia-nome';
+            nomeEl.textContent = t.name;
+            info.appendChild(nomeEl);
+
+            // Mostra il filename originale come sottotitolo
+            const fileEl = document.createElement('div');
+            fileEl.className = 'sb-traccia-tags';
+            fileEl.textContent = t.file;
+            info.appendChild(fileEl);
+
+            item.appendChild(icon);
+            item.appendChild(info);
+
+            item.addEventListener('click', () => {
+                if (slotTarget !== null) {
+                    slots[slotTarget] = t; // salva {name, file, url}
+                    salva();
+                    renderGriglia();
+                }
+                chiudiModale();
+            });
+
+            lista.appendChild(item);
+        });
+    }
+
+    // ── Riproduzione (URL diretto dal bucket Supabase) ────────────────
+    function riproduci(traccia, slotIdx) {
+        const widget = document.getElementById('audio-player-widget');
+        const widgetTitle = document.getElementById('audio-widget-title');
+        const widgetContent = document.getElementById('audio-widget-content');
+
+        widgetTitle.textContent = traccia.name;
+        widgetTitle.title = traccia.name;
+        widgetContent.innerHTML = '';
+
+        if (traccia.url) {
+            const audio = document.createElement('audio');
+            audio.controls = true;
+            audio.volume = 0.4;
+            audio.autoplay = true;
+            audio.loop = false;
+            audio.src = traccia.url;
+            widgetContent.appendChild(audio);
+        } else {
+            widgetContent.innerHTML = '<span style="font-size:0.8rem;color:var(--bone-dim)">URL non valido.</span>';
+        }
+
+        // Evidenzia slot attivo, deseleziona gli altri
+        document.querySelectorAll('.sb-slot').forEach(s => s.classList.remove('sb-slot--attivo'));
+        const el = document.querySelector(`.sb-slot[data-idx="${slotIdx}"]`);
+        if (el) el.classList.add('sb-slot--attivo');
+
+        widget.style.display = 'flex';
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────
+    renderGriglia();
+    fetchTracce(); // pre-carica in background per un modale reattivo
+
+    // Espone la funzione per resettare lo slot attivo (usata dal close handler del widget)
+    window._sbResetSlotAttivo = function() {
+        document.querySelectorAll('.sb-slot').forEach(s => s.classList.remove('sb-slot--attivo'));
+    };
+
+    // ── Fallback close widget (attivo solo se lo script heading_list non è caricato) ──
+    // Questo garantisce che il pulsante × funzioni anche sui copioni senza scene.
+    document.addEventListener('DOMContentLoaded', () => {
+        const closeBtn = document.getElementById('audio-widget-close');
+        if (closeBtn && !closeBtn._hasListener) {
+            closeBtn._hasListener = true;
+            closeBtn.addEventListener('click', () => {
+                const widget = document.getElementById('audio-player-widget');
+                if (widget) { widget.style.display = 'none'; }
+                const content = document.getElementById('audio-widget-content');
+                if (content) { content.innerHTML = ''; }
+                window._sbResetSlotAttivo();
+            });
+        }
+    });
+
+})();
+</script>
+
 {% if heading_list %}
+
 <script>
     (function () {
         const outline = document.getElementById('copione-outline');
@@ -553,9 +1122,12 @@
         const audioWidgetClose = document.getElementById('audio-widget-close');
 
         if (audioWidgetClose) {
+            audioWidgetClose._hasListener = true;
             audioWidgetClose.addEventListener('click', () => {
                 audioWidget.style.display = 'none';
                 audioWidgetContent.innerHTML = ''; // Ferma la riproduzione
+                // Rimuove evidenziazione slot soundboard
+                if (typeof window._sbResetSlotAttivo === 'function') window._sbResetSlotAttivo();
             });
         }
 
