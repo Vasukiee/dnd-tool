@@ -291,12 +291,33 @@
     const graphSceneBg = document.getElementById("graphSceneBg");
     const graphSceneOverlay = document.getElementById("graphSceneOverlay");
 
+    let currentBgImg = null;
+    let bgTimeout = null;
+
     function aggiornaSfondoScena(nuovaScena) {
         const img = SCENE_GIFS[String(nuovaScena)];
-        if (img) {
-            graphSceneBg.style.backgroundImage = `url(${JSON.stringify(img)})`;
-            graphSceneBg.classList.add("attivo");
-            graphSceneOverlay.classList.add("attivo");
+        const targetUrl = img ? `url(${JSON.stringify(img)})` : null;
+        
+        if (targetUrl === currentBgImg) return;
+        currentBgImg = targetUrl;
+        
+        clearTimeout(bgTimeout);
+
+        if (targetUrl) {
+            if (graphSceneBg.classList.contains("attivo")) {
+                // Svanisce a nero (durata 0.6s) prima di caricare la nuova
+                graphSceneBg.classList.remove("attivo");
+                bgTimeout = setTimeout(() => {
+                    if (currentBgImg === targetUrl) {
+                        graphSceneBg.style.backgroundImage = targetUrl;
+                        graphSceneBg.classList.add("attivo");
+                    }
+                }, 600);
+            } else {
+                graphSceneBg.style.backgroundImage = targetUrl;
+                graphSceneBg.classList.add("attivo");
+                graphSceneOverlay.classList.add("attivo");
+            }
         } else {
             graphSceneBg.classList.remove("attivo");
             graphSceneOverlay.classList.remove("attivo");
