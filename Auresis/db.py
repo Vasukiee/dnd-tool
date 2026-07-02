@@ -1,3 +1,5 @@
+import base64
+import datetime
 import os
 import secrets
 import sqlite3
@@ -229,6 +231,94 @@ def toggle_sipario_globale():
     cur.close()
     conn.close()
     return nuovo_stato
+
+# --- RICERCA GLOBALE ---
+
+# (tabella, campi di testo in cui cercare, colonna di visibilità per la modalità giocatrice)
+_SPECIFICHE_RICERCA = [
+    ("npc", ["nome", "ruolo", "descrizione_breve", "note_caratteriali", "note"], "visibile_giocatrice"),
+    ("fazioni", ["nome", "nome_popolare", "ideologia", "territorio", "stato_attuale", "note"], None),
+    ("locations", ["nome", "tipo", "descrizione_breve", "stato_attuale", "note"], "visibile_giocatrice"),
+    ("quest", ["nome", "riassunto", "obiettivo_attuale", "note"], "visibile_giocatrice"),
+    ("eventi", ["riassunto", "conseguenze_attive"], None),
+    ("fatti_accertati", ["descrizione", "note"], None),
+    ("indagini", ["titolo", "descrizione"], "visibile_giocatrice"),
+    ("tracce_audio", ["nome", "note"], None),
+]
+
+
+def ricerca_globale(testo, solo_visibili=False):
+    """Cerca il testo (case-insensitive) in tutte le entità della campagna.
+
+    Ritorna {tabella: [righe]} con le sole tabelle che hanno risultati.
+    Con solo_visibili=True (modalità giocatrice) filtra gli elementi nascosti.
+    """
+    like = f"%{testo}%"
+    risultati = {}
+    conn = get_connection()
+    for tabella, campi, colonna_visibilita in _SPECIFICHE_RICERCA:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        condizioni = " OR ".join(f"{campo} ILIKE %s" for campo in campi)
+        query = f"SELECT * FROM {tabella} WHERE ({condizioni})"
+        if solo_visibili and colonna_visibilita:
+            query += f" AND {colonna_visibilita} = TRUE"
+        try:
+            cur.execute(query, [like] * len(campi))
+            righe = _dictify(cur.fetchall())
+        except Exception:
+            # tabella o colonna assente in questo schema: la saltiamo
+            conn.rollback()
+            righe = []
+        cur.close()
+        if righe:
+            risultati[tabella] = righe
+    conn.close()
+    return risultati
+
+
+# --- BACKUP / EXPORT ---
+
+# impostazioni_sicurezza è esclusa di proposito: hash password e secret key
+# non servono a ripristinare la campagna e non vanno messi in un file scaricabile.
+_TABELLE_EXPORT = [
+    "fazioni", "locations", "npc", "quest", "quest_npc", "eventi",
+    "pg_stato", "fatti_accertati", "tracce_audio", "tag_audio",
+    "traccia_audio_tag", "sessioni_copioni", "palette_personalizzata",
+    "indagini", "nodi_indagine", "collegamenti_nodi", "cronologie_indagine",
+    "stato_nodi_cronologia", "scene_indagine", "impostazioni_globali",
+]
+
+
+def _valore_esportabile(v):
+    if isinstance(v, (bytes, memoryview)):
+        return {"__base64__": base64.b64encode(bytes(v)).decode("ascii")}
+    if isinstance(v, (datetime.datetime, datetime.date)):
+        return v.isoformat()
+    return v
+
+
+def export_tutto():
+    """Dump di tutte le tabelle in un dict JSON-serializzabile, per il backup."""
+    dump = {}
+    conn = get_connection()
+    for tabella in _TABELLE_EXPORT:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        try:
+            cur.execute(f"SELECT * FROM {tabella}")
+            righe = [
+                {k: _valore_esportabile(v) for k, v in dict(r).items()}
+                for r in cur.fetchall()
+            ]
+            if tabella == "impostazioni_globali":
+                righe = [r for r in righe if r.get("chiave") != "secret_key"]
+            dump[tabella] = righe
+        except Exception:
+            # tabella assente in questo schema (db creato con versioni vecchie)
+            conn.rollback()
+        cur.close()
+    conn.close()
+    return dump
+
 
 # ------------------------------------------------------------------
 # QUERY DI LETTURA (per generare il context pack)

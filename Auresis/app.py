@@ -1,3 +1,5 @@
+import datetime
+import json
 import os
 from functools import wraps
 from urllib.parse import urlparse
@@ -599,6 +601,95 @@ def sfondo_default():
         else:
             return redirect(url_for('static', filename='sfondo_default.jpg'))
 
+
+
+# --- RICERCA GLOBALE ---
+
+def _snippet(testo_campo, ricerca, contesto=70):
+    """Estratto del campo attorno alla prima occorrenza della ricerca, o None."""
+    if not testo_campo:
+        return None
+    pos = testo_campo.lower().find(ricerca.lower())
+    if pos < 0:
+        return None
+    inizio = max(0, pos - contesto)
+    fine = min(len(testo_campo), pos + len(ricerca) + contesto)
+    frammento = " ".join(testo_campo[inizio:fine].split())
+    prefisso = "…" if inizio > 0 else ""
+    suffisso = "…" if fine < len(testo_campo) else ""
+    return f"{prefisso}{frammento}{suffisso}"
+
+
+@app.route("/cerca")
+def cerca():
+    testo = request.args.get("q", "").strip()
+    player = bool(session.get("modalita_giocatrice"))
+
+    categorie = {
+        "npc": ("Personaggi", lambda r: (r["nome"], url_for("dettaglio_npc", npc_id=r["id"]))),
+        "fazioni": ("Fazioni", lambda r: (r["nome"], url_for("dettaglio_fazione", fazione_id=r["id"]))),
+        "locations": ("Luoghi", lambda r: (r["nome"], url_for("dettaglio_location", location_id=r["id"]))),
+        "quest": ("Incarichi", lambda r: (r["nome"], url_for("dettaglio_quest", quest_id=r["id"]))),
+        "eventi": ("Cronaca", lambda r: (f"Evento — Sessione {r['sessione']}", url_for("lista_eventi"))),
+        "fatti_accertati": ("Verità accertate", lambda r: (r["descrizione"][:80], url_for("lista_fatti"))),
+        "indagini": ("Indagini", lambda r: (r["titolo"], url_for("indagini.lista_indagini"))),
+        "tracce_audio": ("Audio", lambda r: (r["nome"], url_for("audio_lista"))),
+    }
+
+    gruppi = []
+    if len(testo) >= 2:
+        risultati = db.ricerca_globale(testo, solo_visibili=player)
+        for tabella, (etichetta, presenta) in categorie.items():
+            voci = []
+            for r in risultati.get(tabella, []):
+                titolo_voce, url = presenta(r)
+                # come snippet usiamo il primo campo testuale (diverso dal titolo) che contiene la ricerca
+                snippet = None
+                for valore in r.values():
+                    if isinstance(valore, str) and valore != titolo_voce:
+                        snippet = _snippet(valore, testo)
+                        if snippet:
+                            break
+                voci.append({"titolo": titolo_voce, "url": url, "snippet": snippet})
+            if voci:
+                gruppi.append({"etichetta": etichetta, "voci": voci})
+
+        completate_map = db.get_sessioni_completate_map()
+        voci_copioni = []
+        for s in copioni.elenca_sessioni():
+            if player and not (s["numero"] == SESSIONE_TEMPLATE_NUMERO or completate_map.get(s["numero"])):
+                continue
+            snippet = _snippet(copioni.get_testo_sessione(s["numero"]), testo)
+            if snippet:
+                voci_copioni.append({
+                    "titolo": s.get("titolo") or f"Sessione {s['numero']}",
+                    "url": url_for("copioni_dettaglio", numero_sessione=s["numero"]),
+                    "snippet": snippet,
+                })
+        if voci_copioni:
+            gruppi.append({"etichetta": "Copioni", "voci": voci_copioni})
+
+    return render_template("cerca.html", active="cerca", q=testo, gruppi=gruppi)
+
+
+# --- BACKUP ---
+
+@app.route("/esporta-backup")
+@solo_master
+def esporta_backup():
+    dump = db.export_tutto()
+    if db.get_storage_mode() == "disk":
+        # su disco i copioni sono file .md fuori dal database: li includiamo a parte
+        dump["_copioni_markdown"] = {
+            s["numero"]: copioni.get_testo_sessione(s["numero"])
+            for s in copioni.elenca_sessioni()
+        }
+    payload = json.dumps(dump, ensure_ascii=False, indent=1, default=str)
+    nome_file = f"backup_campagna_{datetime.date.today().isoformat()}.json"
+    response = make_response(payload)
+    response.headers.set("Content-Type", "application/json; charset=utf-8")
+    response.headers.set("Content-Disposition", f"attachment; filename={nome_file}")
+    return response
 
 
 # --- STATO DEL PG ---

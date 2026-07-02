@@ -19,12 +19,7 @@ dnd_tool/
     ├── static/                 ← stile (CSS), script (JS) e risorse multimediali (audio, gif)
     ├── copioni/                ← i file testuali delle sessioni (.md)
     │
-    ├── aggiorna_sessione.py    ← ALTERNATIVA DA TERMINALE: registra eventi
-    │
-    └── documenti_statici/
-        ├── bible_universo.md     ← la Bible di Aetheleon (da popolare tu)
-        ├── bible_pianeta.md      ← la Bible di Auresis (da popolare tu)
-        └── regole_risoluzione.md ← le regole di combattimento/risoluzione (da popolare tu)
+    └── aggiorna_sessione.py    ← ALTERNATIVA DA TERMINALE: registra eventi
 ```
 
 ## Setup iniziale (una volta sola)
