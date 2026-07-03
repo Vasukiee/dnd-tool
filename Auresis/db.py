@@ -1,6 +1,7 @@
 import base64
 import datetime
 import os
+import re
 import secrets
 import sqlite3
 
@@ -93,6 +94,19 @@ def get_connection():
             
         conn.cursor = patched_cursor
         return conn
+
+_RE_IDENTIFICATORE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _valida_nomi_colonna(nomi):
+    """Difesa in profondità per le query che interpolano nomi di colonna presi
+    dalle chiavi di **kwargs: i nomi devono essere identificatori SQL semplici.
+    I chiamanti attuali passano già chiavi fisse; questo blocca a monte qualsiasi
+    futura chiamata che inoltri chiavi controllate dall'utente (SQL injection)."""
+    for nome in nomi:
+        if not _RE_IDENTIFICATORE.match(nome):
+            raise ValueError(f"Nome colonna non valido: {nome!r}")
+
 
 def _dictify(rows):
     """psycopg2.extras.RealDictRow o sqlite3.Row si comporta già come un dict, ma lo
@@ -678,6 +692,7 @@ def add_traccia_audio(nome, categoria, youtube_id=None, timestamp_inizio=0,
 def update_traccia_audio(traccia_id, **campi):
     if not campi:
         return
+    _valida_nomi_colonna(campi)
     colonne = ", ".join(f"{k} = %s" for k in campi)
     valori = list(campi.values()) + [traccia_id]
     conn = get_connection()
@@ -937,6 +952,7 @@ def get_stats_riepilogo(solo_visibili=False):
 # ------------------------------------------------------------------
 
 def upsert_fazione(nome, **kwargs):
+    _valida_nomi_colonna(kwargs)
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT id FROM fazioni WHERE nome = %s", (nome,))
@@ -955,6 +971,7 @@ def upsert_fazione(nome, **kwargs):
 
 
 def upsert_location(nome, **kwargs):
+    _valida_nomi_colonna(kwargs)
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT id FROM locations WHERE nome = %s", (nome,))
@@ -973,6 +990,7 @@ def upsert_location(nome, **kwargs):
 
 
 def upsert_npc(nome, **kwargs):
+    _valida_nomi_colonna(kwargs)
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT id FROM npc WHERE nome = %s", (nome,))
@@ -997,6 +1015,7 @@ def upsert_npc(nome, **kwargs):
 
 
 def upsert_quest(nome, **kwargs):
+    _valida_nomi_colonna(kwargs)
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT id FROM quest WHERE nome = %s", (nome,))
@@ -1048,6 +1067,7 @@ def add_evento(sessione, riassunto, conseguenze_attive=None, location_id=None):
 
 
 def set_pg_stato(**kwargs):
+    _valida_nomi_colonna(kwargs)
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT id FROM pg_stato WHERE id = 1")
@@ -1295,6 +1315,7 @@ def add_indagine(titolo, descrizione=None, attiva=True, visibile_giocatrice=Fals
 def update_indagine(indagine_id, **kwargs):
     if not kwargs:
         return
+    _valida_nomi_colonna(kwargs)
     cols = ", ".join(f"{k} = %s" for k in kwargs)
     vals = list(kwargs.values()) + [indagine_id]
     conn = get_connection()
@@ -1445,6 +1466,7 @@ def add_nodo(indagine_id, numero_nodo, titolo, descrizione=None,
 def update_nodo(nodo_id, **kwargs):
     if not kwargs:
         return
+    _valida_nomi_colonna(kwargs)
     cols = ", ".join(f"{k} = %s" for k in kwargs)
     vals = list(kwargs.values()) + [nodo_id]
     conn = get_connection()
