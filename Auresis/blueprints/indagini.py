@@ -3,8 +3,8 @@ import os
 from datetime import datetime
 
 import db
-from auth import richiedi_master
-from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for, \
+from auth import richiedi_master, vista_ristretta
+from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, url_for, \
     Response
 
 bp = Blueprint("indagini", __name__, url_prefix="/indagini")
@@ -87,7 +87,7 @@ def _url_sfondo_interno(gif_url, indagine_id, numero_scena):
 
 @bp.route("/")
 def lista_indagini():
-    indagini = db.get_all_indagini(solo_visibili=session.get("modalita_giocatrice"))
+    indagini = db.get_all_indagini(solo_visibili=vista_ristretta())
     return render_template("indagini_lista.html", active="indagini", indagini=indagini)
 
 

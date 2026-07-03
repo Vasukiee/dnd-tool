@@ -154,15 +154,17 @@ def _processa_audio_tags(testo_md):
     pattern = re.compile(r"@audio:\s*([^\n]+)")
     
     def sostituisci(m):
-        nome_traccia = m.group(1).strip()
-        traccia = db.get_traccia_audio_by_nome(nome_traccia)
+        # escaping come in _processa_immagini: nome e campi della traccia
+        # finiscono dentro attributi/testo HTML e non devono poterli rompere
+        nome_traccia = escape(m.group(1).strip())
+        traccia = db.get_traccia_audio_by_nome(m.group(1).strip())
         if traccia:
             traccia_id = traccia['id']
-            tipo = traccia['tipo_sorgente']
-            path = traccia.get('file_path', '') or ''
-            yt_id = traccia.get('youtube_id', '') or ''
+            tipo = escape(traccia['tipo_sorgente'])
+            path = escape(traccia.get('file_path', '') or '')
+            yt_id = escape(traccia.get('youtube_id', '') or '')
             start_time = traccia.get('timestamp_inizio', 0) or 0
-            
+
             return (f'<span class="audio-recommendation-wrapper">'
                     f'<span class="audio-recommendation-label">Musica consigliata:</span> '
                     f'<button class="btn-inline-audio btn-audio-large" '
@@ -188,10 +190,10 @@ def _processa_indizi_tags(testo_md):
     pattern = re.compile(r"@indizio:\s*(\d+)-(\d+)\s*\|\s*([^\n]+)")
     
     def sostituisci(m):
-        indagine_id = m.group(1)
-        nodo_id = m.group(2)
-        nome = m.group(3).strip()
-        
+        indagine_id = escape(m.group(1))
+        nodo_id = escape(m.group(2))
+        nome = escape(m.group(3).strip())
+
         return (f'<span class="audio-recommendation-wrapper">'
                 f'<span class="audio-recommendation-label" style="color:var(--gold);">Indizio da sbloccare:</span> '
                 f'<button class="btn-inline-indizio btn-audio-large" '
@@ -207,10 +209,10 @@ def _processa_scene_tags(testo_md):
     pattern = re.compile(r"@scena:\s*(\d+)-(\d+)\s*\|\s*([^\n]+)")
     
     def sostituisci(m):
-        indagine_id = m.group(1)
-        scena_id = m.group(2)
-        nome = m.group(3).strip()
-        
+        indagine_id = escape(m.group(1))
+        scena_id = escape(m.group(2))
+        nome = escape(m.group(3).strip())
+
         return (f'<span class="audio-recommendation-wrapper">'
                 f'<span class="audio-recommendation-label" style="color:var(--gold);">Cambio scena:</span> '
                 f'<button class="btn-inline-scena btn-audio-large" '
