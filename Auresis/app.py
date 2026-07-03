@@ -704,6 +704,8 @@ def cerca():
     if len(testo) >= 2:
         risultati = db.ricerca_globale(testo, solo_visibili=player)
         for tabella, (etichetta, presenta) in categorie.items():
+            if player and tabella == "tracce_audio":
+                continue
             voci = []
             for r in risultati.get(tabella, []):
                 titolo_voce, url = presenta(r)
@@ -856,6 +858,7 @@ def _salva_tag_da_form(traccia_id, stringa_tag):
 
 
 @app.route("/audio")
+@solo_master
 def audio_lista():
     tag_filtro = request.args.get("tag")
     tracce = db.get_all_tracce_audio(tag=tag_filtro)
@@ -978,6 +981,7 @@ def audio_elimina(traccia_id):
 
 
 @app.route("/audio/tag")
+@solo_master
 def audio_tag_lista():
     tag = db.get_tag_con_conteggio_uso()
     return render_template("audio_tag_lista.html", active="audio", tag=tag)
@@ -991,6 +995,7 @@ def audio_tag_elimina(tag_id):
 
 
 @app.route("/audio/bucket-files")
+@solo_master
 def audio_bucket_files():
     """
     Lista i file nel bucket Supabase SFX leggendo da storage.objects via Postgres.
@@ -1033,6 +1038,7 @@ def audio_bucket_files():
 
 
 @app.route("/audio/json")
+@solo_master
 def audio_json():
     """Endpoint leggero per la soundboard: restituisce tutte le tracce come JSON."""
     tracce = db.get_all_tracce_audio()

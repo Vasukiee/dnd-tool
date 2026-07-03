@@ -563,6 +563,7 @@
     <div class="copione-col-left">
         <div class="copione-audio-wrapper">
 
+            {% if not modalita_giocatrice %}
             <!-- Soundboard 3×3 -->
             <div class="soundboard-panel" id="soundboard-panel">
                 <div class="soundboard-header">
@@ -572,6 +573,7 @@
                     <!-- Gli slot vengono generati via JS -->
                 </div>
             </div>
+            {% endif %}
 
             <!-- Audio Player Widget (compare solo quando si riproduce) -->
             <div id="audio-player-widget" style="margin-top: 12px;">
@@ -612,6 +614,7 @@
     </div>
 </div>
 
+{% if not modalita_giocatrice %}
 <!-- MODALE SELEZIONE TRACCIA SOUNDBOARD -->
 <div id="sb-modal-overlay">
     <div id="sb-modal" role="dialog" aria-modal="true" aria-label="Scegli una traccia">
@@ -908,6 +911,23 @@
     });
 
 })();
+</script>
+{% endif %}
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const closeBtn = document.getElementById('audio-widget-close');
+        if (closeBtn && !closeBtn._hasListener) {
+            closeBtn._hasListener = true;
+            closeBtn.addEventListener('click', () => {
+                const widget = document.getElementById('audio-player-widget');
+                if (widget) { widget.style.display = 'none'; }
+                const content = document.getElementById('audio-widget-content');
+                if (content) { content.innerHTML = ''; }
+                if (typeof window._sbResetSlotAttivo === 'function') window._sbResetSlotAttivo();
+            });
+        }
+    });
 </script>
 
 {% if heading_list %}

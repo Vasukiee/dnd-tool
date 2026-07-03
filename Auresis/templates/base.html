@@ -145,6 +145,7 @@
                 </svg>
                 <span class="nav__label">Copioni</span>
             </a>
+            {% if not modalita_giocatrice %}
             <a href="{{ url_for('audio_lista') }}"
                class="nav__item {% if active=='audio' %}active{% endif %}" title="Audio">
                 <svg class="nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -153,7 +154,6 @@
                 </svg>
                 <span class="nav__label">Audio</span>
             </a>
-            {% if not modalita_giocatrice %}
             <a href="{{ url_for('esporta_backup') }}" class="nav__item" title="Scarica backup della campagna">
                 <svg class="nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
