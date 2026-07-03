@@ -16,6 +16,16 @@ def utente_e_master():
     return bool(session.get("sbloccato"))
 
 
+def vista_ristretta():
+    """True se all'utente vanno mostrati SOLO i contenuti visibili alla giocatrice.
+
+    Default-deny: chiunque non sia master autenticato (visitatori anonimi
+    inclusi) è trattato come se fosse in modalità giocatrice. Il master vede
+    tutto, a meno che non abbia attivato esplicitamente la modalità giocatrice.
+    """
+    return not utente_e_master() or bool(session.get("modalita_giocatrice"))
+
+
 def _richiesta_json():
     return request.is_json or request.accept_mimetypes.best == "application/json"
 

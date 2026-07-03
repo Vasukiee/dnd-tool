@@ -3,6 +3,7 @@ import hmac
 import json
 import os
 import secrets
+import time
 from urllib.parse import urlparse
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, make_response, abort
@@ -10,7 +11,7 @@ from werkzeug.security import check_password_hash
 
 import copioni
 import db
-from auth import richiedi_master, utente_e_master
+from auth import richiedi_master, utente_e_master, vista_ristretta
 from blueprints.indagini import bp as indagini_bp
 
 app = Flask(__name__)
@@ -18,6 +19,27 @@ app = Flask(__name__)
 # Tetto massimo per il corpo di una richiesta (upload inclusi): rete di sicurezza
 # globale contro upload sproporzionati a esaurire memoria/disco.
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+
+# In produzione l'app gira su Render (che imposta sempre la env RENDER) dietro
+# il suo proxy HTTPS: lì request.remote_addr sarebbe l'IP del proxy — uguale per
+# tutti — e il rate-limit per IP finirebbe in un unico bucket condiviso.
+# ProxyFix recupera il vero client da X-Forwarded-For/-Proto; va attivato SOLO
+# dietro un proxy fidato, mai in locale, altrimenti l'header è spoofabile.
+_dietro_proxy_render = bool(os.environ.get("RENDER"))
+if _dietro_proxy_render:
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+
+# Irrobustimento del cookie di sessione: mai leggibile da JavaScript, mai
+# inviato su richieste cross-site "mutanti". Secure è automatico su Render
+# (sempre HTTPS) e opt-in via variabile d'ambiente altrove, perché in locale
+# si gira su http:// e il cookie sparirebbe.
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = (
+    _dietro_proxy_render
+    or os.environ.get("SESSION_COOKIE_SECURE", "").lower() in ("1", "true", "yes")
+)
 
 # Estensioni immagine consentite per gli upload e relativo MIME "di fiducia":
 # il Content-Type servito NON deve mai derivare dal valore fornito dal client.
@@ -43,7 +65,9 @@ app.secret_key = _secret_key
 
 @app.context_processor
 def inietta_modalita_giocatrice():
-    return {"modalita_giocatrice": session.get("modalita_giocatrice")}
+    # I template ricevono la vista effettiva, non il flag grezzo di sessione:
+    # un visitatore anonimo vede l'interfaccia giocatrice, non quella master.
+    return {"modalita_giocatrice": vista_ristretta()}
 
 
 @app.before_request
@@ -91,7 +115,7 @@ SESSIONE_TEMPLATE_NUMERO = 0
 
 @app.route("/")
 def home():
-    stats = db.get_stats_riepilogo(solo_visibili=bool(session.get("modalita_giocatrice")))
+    stats = db.get_stats_riepilogo(solo_visibili=vista_ristretta())
     eventi_recenti = db.get_eventi_recenti(n=6)
     return render_template("home.html", active="home", stats=stats, eventi_recenti=eventi_recenti)
 
@@ -102,7 +126,7 @@ def copioni_indice():
     sessioni = copioni.elenca_sessioni()
     completate_map = db.get_sessioni_completate_map()
 
-    if session.get("modalita_giocatrice"):
+    if vista_ristretta():
         sessioni = [
             s for s in sessioni
             if s["numero"] == SESSIONE_TEMPLATE_NUMERO
@@ -121,7 +145,7 @@ def copioni_dettaglio(numero_sessione):
     is_template = (numero_sessione == SESSIONE_TEMPLATE_NUMERO)
     completata = db.get_sessione_completata(numero_sessione)
 
-    if session.get("modalita_giocatrice") and not is_template and not completata:
+    if vista_ristretta() and not is_template and not completata:
         flash("Questa sessione non è ancora disponibile.")
         return redirect(url_for("copioni_indice"))
 
@@ -218,7 +242,7 @@ def copioni_toggle_completata(numero_sessione):
 @app.route("/npc")
 def lista_npc():
     npc_list = db.get_all_npc_full()
-    if session.get("modalita_giocatrice"):
+    if vista_ristretta():
         npc_list = [n for n in npc_list if n.get("visibile_giocatrice")]
     return render_template("npc_lista.html", active="npc", npc_list=npc_list)
 
@@ -229,7 +253,7 @@ def dettaglio_npc(npc_id):
     if not npc:
         flash("Personaggio non trovato.")
         return redirect(url_for("lista_npc"))
-    if session.get("modalita_giocatrice") and not npc.get("visibile_giocatrice"):
+    if vista_ristretta() and not npc.get("visibile_giocatrice"):
         flash("Questo personaggio non è ancora disponibile.")
         return redirect(url_for("lista_npc"))
     return render_template("npc_dettaglio.html", active="npc", npc=npc)
@@ -361,7 +385,7 @@ def elimina_fazione(fazione_id):
 @app.route("/locations")
 def lista_locations():
     locations_list = db.get_all_locations_full()
-    if session.get("modalita_giocatrice"):
+    if vista_ristretta():
         locations_list = [l for l in locations_list if l.get("visibile_giocatrice")]
     return render_template("locations_lista.html", active="locations", locations_list=locations_list)
 
@@ -372,7 +396,7 @@ def dettaglio_location(location_id):
     if not location:
         flash("Luogo non trovato.")
         return redirect(url_for("lista_locations"))
-    if session.get("modalita_giocatrice") and not location.get("visibile_giocatrice"):
+    if vista_ristretta() and not location.get("visibile_giocatrice"):
         flash("Questo luogo non è ancora disponibile.")
         return redirect(url_for("lista_locations"))
     return render_template("locations_dettaglio.html", active="locations", location=location)
@@ -432,7 +456,7 @@ def location_toggle_visibile(location_id):
 @app.route("/quest")
 def lista_quest():
     quest_list = db.get_all_quest_full()
-    if session.get("modalita_giocatrice"):
+    if vista_ristretta():
         quest_list = [q for q in quest_list if q.get("visibile_giocatrice")]
     return render_template("quest_lista.html", active="quest", quest_list=quest_list)
 
@@ -443,7 +467,7 @@ def dettaglio_quest(quest_id):
     if not quest:
         flash("Incarico non trovato.")
         return redirect(url_for("lista_quest"))
-    if session.get("modalita_giocatrice") and not quest.get("visibile_giocatrice"):
+    if vista_ristretta() and not quest.get("visibile_giocatrice"):
         flash("Questo incarico non è ancora disponibile.")
         return redirect(url_for("lista_quest"))
     return render_template("quest_dettaglio.html", active="quest", quest=quest)
@@ -663,7 +687,7 @@ def _snippet(testo_campo, ricerca, contesto=70):
 @app.route("/cerca")
 def cerca():
     testo = request.args.get("q", "").strip()
-    player = bool(session.get("modalita_giocatrice"))
+    player = vista_ristretta()
 
     categorie = {
         "npc": ("Personaggi", lambda r: (r["nome"], url_for("dettaglio_npc", npc_id=r["id"]))),
@@ -771,6 +795,24 @@ def toggle_modalita_giocatrice():
     return redirect(request.referrer or url_for("home"))
 
 
+# Anti-forza-bruta sulla password master: massimo N tentativi falliti per IP
+# in una finestra temporale, poi lockout fino allo scadere della finestra.
+# In memoria di processo: azzerato al riavvio, sufficiente per un tool locale.
+_MAX_TENTATIVI_SBLOCCO = 5
+_FINESTRA_SBLOCCO_SEC = 15 * 60
+_tentativi_sblocco = {}  # ip -> [timestamp dei fallimenti recenti]
+
+
+def _sblocco_in_lockout(ip):
+    adesso = time.time()
+    recenti = [t for t in _tentativi_sblocco.get(ip, []) if adesso - t < _FINESTRA_SBLOCCO_SEC]
+    if recenti:
+        _tentativi_sblocco[ip] = recenti
+    else:
+        _tentativi_sblocco.pop(ip, None)
+    return len(recenti) >= _MAX_TENTATIVI_SBLOCCO
+
+
 @app.route("/sblocca-modalita", methods=["GET", "POST"])
 def sblocca_modalita():
     next_url = request.args.get("next") or "/"
@@ -781,15 +823,21 @@ def sblocca_modalita():
         next_url = request.form.get("next") or "/"
         if not next_url.startswith("/"):
             next_url = "/"
+        ip = request.remote_addr or "?"
+        if _sblocco_in_lockout(ip):
+            flash("Troppi tentativi falliti. Riprova tra qualche minuto.")
+            return render_template("sblocca_modalita.html", next_url=next_url), 429
         password = request.form.get("password", "")
         hash_salvato = db.get_password_master()
         if not hash_salvato:
             flash("Nessuna password impostata. Usa imposta_password.py per configurarla.")
             return render_template("sblocca_modalita.html", next_url=next_url)
         if check_password_hash(hash_salvato, password):
+            _tentativi_sblocco.pop(ip, None)
             session.pop("modalita_giocatrice", None)
             session["sbloccato"] = True
             return render_template("sblocca_redirect.html", next_url=next_url)
+        _tentativi_sblocco.setdefault(ip, []).append(time.time())
         flash("Password non corretta.")
         return render_template("sblocca_modalita.html", next_url=next_url)
 
