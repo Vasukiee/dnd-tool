@@ -3,10 +3,25 @@ import os
 from datetime import datetime
 
 import db
+from auth import richiedi_master
 from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, session, url_for, \
     Response
 
 bp = Blueprint("indagini", __name__, url_prefix="/indagini")
+
+
+def _json_per_script(obj):
+    """Serializza in JSON reso sicuro per l'inserimento dentro un tag <script>.
+    json.dumps NON escapa <, >, &: senza questo un valore utente come
+    '</script>...' potrebbe chiudere il tag e iniettare HTML (XSS)."""
+    return (
+        json.dumps(obj, default=str)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace(" ", "\\u2028")
+        .replace(" ", "\\u2029")
+    )
 
 
 def _calcola_stati_nodi(nodi, collegamenti, stati_sblocco, scena_corrente=None):
@@ -77,9 +92,8 @@ def lista_indagini():
 
 
 @bp.route("/nuova", methods=["GET", "POST"])
+@richiedi_master
 def nuova_indagine():
-    if session.get("modalita_giocatrice"):
-        return redirect(url_for("home"))
     if request.method == "POST":
         titolo = request.form["titolo"].strip()
         descrizione = request.form.get("descrizione", "").strip() or None
@@ -92,9 +106,8 @@ def nuova_indagine():
 
 
 @bp.route("/<int:indagine_id>/edita", methods=["GET", "POST"])
+@richiedi_master
 def edita_indagine(indagine_id):
-    if session.get("modalita_giocatrice"):
-        return redirect(url_for("home"))
     indagine = db.get_indagine(indagine_id)
     if not indagine:
         flash("Indagine non trovata.")
@@ -111,19 +124,16 @@ def edita_indagine(indagine_id):
 
 
 @bp.route("/<int:indagine_id>/elimina", methods=["POST"])
+@richiedi_master
 def elimina_indagine(indagine_id):
-    if session.get("modalita_giocatrice"):
-        return redirect(url_for("home"))
     db.delete_indagine(indagine_id)
     flash("Indagine eliminata.")
     return redirect(url_for(".lista_indagini"))
 
 
 @bp.route("/<int:indagine_id>/editor")
+@richiedi_master
 def indagini_editor(indagine_id):
-    if session.get("modalita_giocatrice"):
-        flash("Sezione non disponibile in modalità giocatrice.")
-        return redirect(url_for("home"))
     indagine = db.get_indagine(indagine_id)
     if not indagine:
         flash("Indagine non trovata.")
@@ -132,10 +142,10 @@ def indagini_editor(indagine_id):
     collegamenti = db.get_collegamenti(indagine_id)
     scene_gifs = _scene_gifs_display(indagine_id)
     scene_numeri = sorted(set(n["numero_nodo"] // 10 for n in nodi)) if nodi else []
-    graph_data = json.dumps({
+    graph_data = _json_per_script({
         "nodi": nodi,
         "collegamenti": collegamenti,
-    }, default=str)
+    })
     return render_template(
         "indagini_editor.html",
         active="indagini",
@@ -149,10 +159,8 @@ def indagini_editor(indagine_id):
 
 
 @bp.route("/<int:indagine_id>/scene/<int:numero_scena>/gif", methods=["POST"])
+@richiedi_master
 def indagini_salva_scena_gif(indagine_id, numero_scena):
-    if session.get("modalita_giocatrice"):
-        return redirect(url_for("home"))
-
     uploaded = request.files.get("gif_file")
     gif_url = request.form.get("gif_url", "").strip()
 
@@ -198,9 +206,8 @@ def indagini_scena_sfondo(indagine_id, numero_scena):
 
 
 @bp.route("/<int:indagine_id>/nodi/nuovo", methods=["POST"])
+@richiedi_master
 def indagini_nuovo_nodo(indagine_id):
-    if session.get("modalita_giocatrice"):
-        return redirect(url_for("home"))
     titolo = request.form["titolo"].strip()
     numero_nodo = int(request.form.get("numero_nodo") or 0)
     descrizione = request.form.get("descrizione", "").strip() or None
@@ -212,9 +219,8 @@ def indagini_nuovo_nodo(indagine_id):
 
 
 @bp.route("/<int:indagine_id>/nodi/<int:nodo_id>/edita", methods=["POST"])
+@richiedi_master
 def indagini_edita_nodo(indagine_id, nodo_id):
-    if session.get("modalita_giocatrice"):
-        return redirect(url_for("home"))
     titolo = request.form["titolo"].strip()
     numero_nodo = int(request.form.get("numero_nodo") or 0)
     descrizione = request.form.get("descrizione", "").strip() or None
@@ -238,25 +244,22 @@ def indagini_edita_nodo(indagine_id, nodo_id):
 
 
 @bp.route("/<int:indagine_id>/nodi/<int:nodo_id>/ricalcola-sfx", methods=["POST"])
+@richiedi_master
 def indagini_ricalcola_sfx(indagine_id, nodo_id):
-    if session.get("modalita_giocatrice"):
-        return redirect(url_for("home"))
     db.ricalcola_livello_sfx_singolo(nodo_id)
     return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
 
 
 @bp.route("/<int:indagine_id>/nodi/<int:nodo_id>/elimina", methods=["POST"])
+@richiedi_master
 def indagini_elimina_nodo(indagine_id, nodo_id):
-    if session.get("modalita_giocatrice"):
-        return redirect(url_for("home"))
     db.delete_nodo(nodo_id)
     return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
 
 
 @bp.route("/<int:indagine_id>/collegamenti/nuovo", methods=["POST"])
+@richiedi_master
 def indagini_nuovo_collegamento(indagine_id):
-    if session.get("modalita_giocatrice"):
-        return redirect(url_for("home"))
     genitore_id = int(request.form["nodo_genitore_id"])
     figlio_id = int(request.form["nodo_figlio_id"])
     if genitore_id != figlio_id:
@@ -265,18 +268,15 @@ def indagini_nuovo_collegamento(indagine_id):
 
 
 @bp.route("/<int:indagine_id>/collegamenti/<int:collegamento_id>/elimina", methods=["POST"])
+@richiedi_master
 def indagini_elimina_collegamento(indagine_id, collegamento_id):
-    if session.get("modalita_giocatrice"):
-        return redirect(url_for("home"))
     db.delete_collegamento(collegamento_id)
     return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
 
 
 @bp.route("/<int:indagine_id>/live")
+@richiedi_master
 def indagini_live(indagine_id):
-    if session.get("modalita_giocatrice"):
-        flash("Sezione non disponibile in modalità giocatrice.")
-        return redirect(url_for("home"))
     indagine = db.get_indagine(indagine_id)
     if not indagine:
         flash("Indagine non trovata.")
@@ -289,13 +289,13 @@ def indagini_live(indagine_id):
     nodi = _merge_sblocco_in_nodi(nodi, stati_sblocco)
     stati = _calcola_stati_nodi(nodi, collegamenti, stati_sblocco, scena_corrente=scena_corrente_val)
     cronologie = db.get_cronologie_indagine(indagine_id)
-    graph_data = json.dumps({
+    graph_data = _json_per_script({
         "nodi": nodi,
         "collegamenti": collegamenti,
         "stati": stati,
         "cronologia_id": cronologia_attiva["id"] if cronologia_attiva else None,
         "scena_corrente": scena_corrente_val,
-    }, default=str)
+    })
     return render_template(
         "indagini_live.html",
         active="indagini",
@@ -307,18 +307,16 @@ def indagini_live(indagine_id):
 
 
 @bp.route("/<int:indagine_id>/reset", methods=["POST"])
+@richiedi_master
 def indagini_reset(indagine_id):
-    if session.get("modalita_giocatrice"):
-        return redirect(url_for("home"))
     db.disattiva_cronologia_attiva(indagine_id)
     flash("Cronologia archiviata. La prossima indagine partirà da zero al primo sblocco.")
     return redirect(url_for(".indagini_live", indagine_id=indagine_id))
 
 
 @bp.route("/<int:indagine_id>/nodi/<int:nodo_id>/sblocca", methods=["POST"])
+@richiedi_master
 def indagini_sblocca_nodo(indagine_id, nodo_id):
-    if session.get("modalita_giocatrice"):
-        return jsonify({"error": "non autorizzato"}), 403
     nodo = db.get_nodo(nodo_id)
     if not nodo or nodo["indagine_id"] != indagine_id:
         return jsonify({"error": "nodo non trovato"}), 404
@@ -351,25 +349,22 @@ def indagini_sblocca_nodo(indagine_id, nodo_id):
 
 
 @bp.route("/<int:indagine_id>/cronologie/<int:cronologia_id>/attiva", methods=["POST"])
+@richiedi_master
 def indagini_attiva_cronologia(indagine_id, cronologia_id):
-    if session.get("modalita_giocatrice"):
-        return redirect(url_for("home"))
     db.attiva_cronologia(cronologia_id, indagine_id)
     return redirect(url_for(".indagini_live", indagine_id=indagine_id))
 
 
 @bp.route("/<int:indagine_id>/cronologie/<int:cronologia_id>/elimina", methods=["POST"])
+@richiedi_master
 def indagini_elimina_cronologia(indagine_id, cronologia_id):
-    if session.get("modalita_giocatrice"):
-        return redirect(url_for("home"))
     db.elimina_cronologia(cronologia_id)
     return redirect(url_for(".indagini_live", indagine_id=indagine_id))
 
 
 @bp.route("/<int:indagine_id>/cronologie/<int:cronologia_id>/rinomina", methods=["POST"])
+@richiedi_master
 def indagini_rinomina_cronologia(indagine_id, cronologia_id):
-    if session.get("modalita_giocatrice"):
-        return jsonify({"error": "non autorizzato"}), 403
     nome = (request.json.get("nome", "") if request.is_json else request.form.get("nome", "")).strip()
     if not nome:
         return jsonify({"error": "nome vuoto"}), 400
@@ -378,10 +373,8 @@ def indagini_rinomina_cronologia(indagine_id, cronologia_id):
 
 
 @bp.route("/<int:indagine_id>/avanza-scena", methods=["POST"])
+@richiedi_master
 def indagini_avanza_scena(indagine_id):
-    if session.get("modalita_giocatrice"):
-        return jsonify({"error": "non autorizzato"}), 403
-
     req_scena = request.json.get("scena_corrente") if request.is_json else None
     nuova_scena = int(req_scena) if req_scena is not None else 2
 
@@ -430,14 +423,14 @@ def indagini_player(indagine_id):
     scoperti_ids = [nid for nid, stato in stati_sblocco.items() if stato.get("scoperto")]
     scene_gifs = _scene_gifs_display(indagine_id)
     scene_gifs_str = {str(k): v for k, v in scene_gifs.items()}
-    graph_data = json.dumps({
+    graph_data = _json_per_script({
         "nodi": nodi,
         "collegamenti": collegamenti,
         "scoperti_ids": scoperti_ids,
         "scena_corrente": scena_corrente_val,
         "sipario_aperto": cronologia_attiva.get("sipario_aperto", False) if cronologia_attiva else False,
         "scene_gifs": scene_gifs_str,
-    }, default=str)
+    })
     return render_template(
         "indagini_player.html",
         indagine=indagine,
@@ -465,9 +458,8 @@ def indagini_stato_player(indagine_id):
 
 
 @bp.route("/<int:indagine_id>/sipario", methods=["POST"])
+@richiedi_master
 def indagini_sipario(indagine_id):
-    if session.get("modalita_giocatrice"):
-        return "Accesso negato", 403
     cronologia = db.get_cronologia_attiva(indagine_id)
     if not cronologia:
         return jsonify({"error": "Nessuna cronologia attiva"}), 400
