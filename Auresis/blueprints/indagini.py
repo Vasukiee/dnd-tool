@@ -46,6 +46,30 @@ def _calcola_stati_nodi(nodi, collegamenti, stati_sblocco, scena_corrente=None):
     return stati
 
 
+def _redigi_nodi_non_scoperti(nodi):
+    """Versione player-safe della lista nodi: i non scoperti diventano stub
+    con i soli campi necessari al layout (id, numero_nodo). Titoli, descrizioni
+    e immagini dei nodi non ancora rivelati NON devono raggiungere il browser:
+    la player view è pubblica e il sorgente della pagina è leggibile da chiunque.
+    """
+    redatti = []
+    for n in nodi:
+        if n.get("scoperto"):
+            redatti.append(n)
+        else:
+            redatti.append({
+                "id": n["id"],
+                "numero_nodo": n["numero_nodo"],
+                "titolo": "",
+                "descrizione": None,
+                "immagine_url": None,
+                "tipo_speciale": None,
+                "scoperto": False,
+                "sbloccato_manualmente": False,
+            })
+    return redatti
+
+
 def _merge_sblocco_in_nodi(nodi, stati_sblocco):
     """Inietta scoperto/sbloccato_manualmente dalla cronologia nei dict nodo."""
     for n in nodi:
@@ -419,7 +443,7 @@ def indagini_player(indagine_id):
     cronologia_attiva = db.get_cronologia_attiva(indagine_id)
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"]) if cronologia_attiva else {}
     scena_corrente_val = cronologia_attiva.get("scena_corrente", 0) if cronologia_attiva else 0
-    nodi = _merge_sblocco_in_nodi(nodi, stati_sblocco)
+    nodi = _redigi_nodi_non_scoperti(_merge_sblocco_in_nodi(nodi, stati_sblocco))
     scoperti_ids = [nid for nid, stato in stati_sblocco.items() if stato.get("scoperto")]
     scene_gifs = _scene_gifs_display(indagine_id)
     scene_gifs_str = {str(k): v for k, v in scene_gifs.items()}
@@ -450,10 +474,16 @@ def indagini_stato_player(indagine_id):
         return jsonify({"scoperti_ids": [], "scena_corrente": 0})
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"])
     scoperti_ids = [nodo_id for nodo_id, stato in stati_sblocco.items() if stato.get("scoperto")]
+    # La pagina player riceve al primo caricamento solo stub dei nodi non
+    # scoperti: qui alleghiamo i dati completi dei nodi ormai scoperti, così
+    # il frontend può renderizzare quelli rivelati durante la sessione.
+    nodi = _merge_sblocco_in_nodi(db.get_nodi_indagine(indagine_id), stati_sblocco)
+    nodi_scoperti = [n for n in nodi if n.get("scoperto")]
     return jsonify({
         "scoperti_ids": scoperti_ids,
         "scena_corrente": cronologia_attiva.get("scena_corrente", 0),
         "sipario_aperto": cronologia_attiva.get("sipario_aperto", False),
+        "nodi": nodi_scoperti,
     })
 
 

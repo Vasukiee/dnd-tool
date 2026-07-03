@@ -1182,6 +1182,10 @@
             const btn = e.target.closest('.btn-inline-indizio');
             if (!btn) return;
 
+            {% if modalita_giocatrice %}
+            return;
+            {% endif %}
+
             const indagineId = btn.dataset.indagineId;
             const nodoId = btn.dataset.nodoId;
 
@@ -1213,6 +1217,10 @@
             const btn = e.target.closest('.btn-inline-scena');
             if (!btn) return;
 
+            {% if modalita_giocatrice %}
+            return;
+            {% endif %}
+
             const indagineId = btn.dataset.indagineId;
             const scenaId = btn.dataset.scenaId;
 
@@ -1243,6 +1251,10 @@
         document.body.addEventListener('click', async function(e) {
             const btn = e.target.closest('.btn-inline-sipario');
             if (!btn) return;
+
+            {% if modalita_giocatrice %}
+            return;
+            {% endif %}
 
             try {
                 const resp = await fetch(`/impostazioni/sipario_globale_toggle`, {

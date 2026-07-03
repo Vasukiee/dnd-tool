@@ -1032,6 +1032,17 @@
             if (!resp.ok) return;
             const data = await resp.json();
 
+            // Il caricamento iniziale contiene solo stub dei nodi non scoperti
+            // (il server non manda titoli/descrizioni non rivelati): i dati
+            // completi arrivano qui, insieme allo stato, quando vengono scoperti.
+            if (data.nodi) {
+                data.nodi.forEach(n => {
+                    const idx = NODI.findIndex(x => x.id === n.id);
+                    if (idx >= 0) NODI[idx] = n; else NODI.push(n);
+                    nodoById[n.id] = n;
+                });
+            }
+
             const nuoviScopertiIds = new Set(data.scoperti_ids.map(Number));
             const nuovaScena = data.scena_corrente;
 
