@@ -2,6 +2,7 @@ import os
 import re
 
 import markdown as md_lib
+from markupsafe import escape
 
 import db
 
@@ -265,7 +266,7 @@ def _processa_immagini(testo_md):
             stile += ["margin-left:auto", "margin-right:0"]
         else:
             stile += ["margin-left:0", "margin-right:auto"]
-        return f'<img src="{src}" alt="{alt}" style="{";".join(stile)}">'
+        return f'<img src="{escape(src)}" alt="{escape(alt)}" style="{";".join(stile)}">'
     return _RE_IMG.sub(sostituisci, testo_md)
 
 

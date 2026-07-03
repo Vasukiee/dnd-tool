@@ -1,17 +1,35 @@
 import datetime
+import hmac
 import json
 import os
-from functools import wraps
+import secrets
 from urllib.parse import urlparse
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, make_response
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, make_response, abort
 from werkzeug.security import check_password_hash
 
 import copioni
 import db
+from auth import richiedi_master, utente_e_master
 from blueprints.indagini import bp as indagini_bp
 
 app = Flask(__name__)
+
+# Tetto massimo per il corpo di una richiesta (upload inclusi): rete di sicurezza
+# globale contro upload sproporzionati a esaurire memoria/disco.
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+
+# Estensioni immagine consentite per gli upload e relativo MIME "di fiducia":
+# il Content-Type servito NON deve mai derivare dal valore fornito dal client.
+_MIME_PER_EXT_IMMAGINE = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+_MIME_IMMAGINE_CONSENTITI = set(_MIME_PER_EXT_IMMAGINE.values())
+_MAX_SFONDO_BYTES = 8 * 1024 * 1024
 
 _secret_key = os.environ.get("SECRET_KEY")
 if not _secret_key:
@@ -27,19 +45,32 @@ app.secret_key = _secret_key
 def inietta_modalita_giocatrice():
     return {"modalita_giocatrice": session.get("modalita_giocatrice")}
 
+
+@app.before_request
+def _csrf_protezione():
+    """CSRF minimale: genera un token per-sessione e lo pretende su ogni
+    richiesta mutante (POST/PUT/PATCH/DELETE), da campo form `csrf_token` o
+    header `X-CSRFToken`. L'iniezione lato client è centralizzata in base.html."""
+    if "_csrf_token" not in session:
+        session["_csrf_token"] = secrets.token_hex(32)
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        atteso = session.get("_csrf_token")
+        inviato = request.form.get("csrf_token") or request.headers.get("X-CSRFToken")
+        if not atteso or not inviato or not hmac.compare_digest(str(atteso), str(inviato)):
+            abort(400, description="Token CSRF mancante o non valido.")
+
+
+@app.context_processor
+def _inietta_csrf_token():
+    return {"csrf_token": session.get("_csrf_token", "")}
+
+
 app.register_blueprint(indagini_bp)
 
-def solo_master(view):
-    """Blocca la rotta quando è attiva la modalità giocatrice."""
-    @wraps(view)
-    def wrapped(*args, **kwargs):
-        if session.get("modalita_giocatrice"):
-            if request.is_json or request.accept_mimetypes.best == "application/json":
-                return jsonify({"ok": False, "errore": "Accesso negato"}), 403
-            flash("Questa azione non è disponibile in modalità giocatrice.")
-            return redirect(url_for("home"))
-        return view(*args, **kwargs)
-    return wrapped
+# `solo_master` ora richiede l'autenticazione master (session["sbloccato"]),
+# non più il semplice "non è attiva la modalità giocatrice": il default anonimo
+# è sola lettura. È un alias di richiedi_master, condiviso con i blueprint.
+solo_master = richiedi_master
 
 
 def _int_or_none(value):
@@ -572,22 +603,38 @@ def sipario_globale_toggle():
 @app.route("/impostazioni/sfondo_default", methods=["GET", "POST"])
 def sfondo_default():
     if request.method == "POST":
-        if session.get("modalita_giocatrice"):
+        if not utente_e_master():
             return "Accesso negato", 403
         file = request.files.get("file")
         if file and file.filename:
+            # Il MIME è derivato dall'estensione (whitelist), MAI dal client:
+            # evita che un file HTML dichiarato text/html venga poi servito
+            # come tale (XSS persistente same-origin).
+            ext = os.path.splitext(file.filename)[1].lower()
+            mime = _MIME_PER_EXT_IMMAGINE.get(ext)
+            if not mime:
+                flash("Formato non supportato. Usa JPG, PNG, GIF o WEBP.")
+                return redirect(url_for('indagini.lista_indagini'))
             data = file.read()
-            mime = file.mimetype
+            if len(data) > _MAX_SFONDO_BYTES:
+                flash("Immagine troppo grande (max 8 MB).")
+                return redirect(url_for('indagini.lista_indagini'))
             db.set_impostazione_bytea("sfondo_default", data, mime)
             flash("Sfondo di default aggiornato con successo.")
         return redirect(url_for('indagini.lista_indagini'))
-        
+
     else:
         # GET return the image
         img = db.get_impostazione("sfondo_default")
         if img and img.get("valore_bytea"):
             response = make_response(img["valore_bytea"])
-            response.headers.set("Content-Type", img["valore_mime"])
+            # Non fidarsi del mime salvato (righe legacy potrebbero contenere un
+            # tipo arbitrario): si serve solo se è un tipo immagine noto.
+            mime = img.get("valore_mime")
+            if mime not in _MIME_IMMAGINE_CONSENTITI:
+                mime = "application/octet-stream"
+            response.headers.set("Content-Type", mime)
+            response.headers.set("X-Content-Type-Options", "nosniff")
             # Cache headers
             response.headers.set("Cache-Control", "public, max-age=31536000")
             return response
@@ -690,8 +737,8 @@ def esporta_backup():
 @app.route("/soggetto", methods=["GET", "POST"])
 def pg_stato_page():
     if request.method == "POST":
-        if session.get("modalita_giocatrice"):
-            flash("Questa azione non è disponibile in modalità giocatrice.")
+        if not utente_e_master():
+            flash("Sblocca la modalità master per eseguire questa azione.")
             return redirect(url_for("pg_stato_page"))
         kwargs = _kwargs_da_form(request.form, [
             "nome", "condizione_fisica", "ferite_attive", "equipaggiamento", "risorse", "abilita_acquisite", "note"
@@ -961,4 +1008,6 @@ def ping():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    # Il debugger interattivo di Werkzeug espone una console che può leggere
+    # app.config (SECRET_KEY inclusa): attivo solo su richiesta esplicita.
+    app.run(debug=os.environ.get("FLASK_DEBUG") == "1", port=5000)

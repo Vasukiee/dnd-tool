@@ -2,6 +2,10 @@ __pycache__/
 *.pyc
 .env
 
+# Config MCP: contiene il riferimento al progetto Supabase, non va versionato
+.mcp.json
+Auresis/.mcp.json
+
 # File e cartelle locali generate dinamicamente
 Auresis/campagna.db
 Auresis/copioni/
