@@ -15,6 +15,7 @@ from auth import richiedi_master, utente_e_master, vista_ristretta
 from blueprints.indagini import bp as indagini_bp
 
 app = Flask(__name__)
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 # Tetto massimo per il corpo di una richiesta (upload inclusi): rete di sicurezza
 # globale contro upload sproporzionati a esaurire memoria/disco.
@@ -115,9 +116,93 @@ SESSIONE_TEMPLATE_NUMERO = 0
 
 @app.route("/")
 def home():
-    stats = db.get_stats_riepilogo(solo_visibili=vista_ristretta())
-    eventi_recenti = db.get_eventi_recenti(n=6)
-    return render_template("home.html", active="home", stats=stats, eventi_recenti=eventi_recenti)
+    solo_visibili = vista_ristretta()
+    home_data = db.get_home_dashboard_data(solo_visibili=solo_visibili)
+
+    return render_template(
+        "home.html",
+        active="home",
+        stats=home_data["stats"],
+        eventi_recenti=home_data["eventi_recenti"],
+        dashboard=home_data["dashboard"],
+    )
+
+
+@app.route("/sessione-live")
+def sessione_live():
+    return redirect(url_for("home"))
+
+
+@app.route("/mappa-relazioni")
+def mappa_relazioni():
+    return render_template("mappa_relazioni.html", active="mappa")
+
+
+@app.route("/mappa-relazioni.json")
+def mappa_relazioni_json():
+    solo_visibili = vista_ristretta()
+    npc_list = db.get_all_npc_full()
+    quest_list = db.get_all_quest_full()
+    locations = db.get_all_locations_full()
+    fazioni = db.get_all_fazioni_full()
+
+    if solo_visibili:
+        npc_list = [n for n in npc_list if n.get("visibile_giocatrice")]
+        quest_list = [q for q in quest_list if q.get("visibile_giocatrice")]
+        locations = [l for l in locations if l.get("visibile_giocatrice")]
+
+    npc_ids = {n["id"] for n in npc_list}
+    quest_ids = {q["id"] for q in quest_list}
+    location_ids = {l["id"] for l in locations}
+    fazione_ids = {f["id"] for f in fazioni}
+
+    nodes = []
+    links = []
+
+    def add_node(kind, raw_id, label, url, subtitle=""):
+        nodes.append({
+            "id": f"{kind}:{raw_id}",
+            "kind": kind,
+            "label": label or "Senza nome",
+            "subtitle": subtitle or "",
+            "url": url,
+        })
+
+    def add_link(source, target, kind, label=""):
+        if source and target:
+            links.append({"source": source, "target": target, "kind": kind, "label": label})
+
+    for f in fazioni:
+        add_node("fazione", f["id"], f.get("nome"), url_for("dettaglio_fazione", fazione_id=f["id"]),
+                 f.get("relazione_pg") or "")
+
+    for l in locations:
+        add_node("luogo", l["id"], l.get("nome"), url_for("dettaglio_location", location_id=l["id"]),
+                 l.get("tipo") or l.get("stato_attuale") or "")
+        if l.get("fazione_controllante_id") in fazione_ids:
+            add_link(f"luogo:{l['id']}", f"fazione:{l['fazione_controllante_id']}", "controllo", "controllato da")
+        if l.get("location_padre_id") in location_ids:
+            add_link(f"luogo:{l['id']}", f"luogo:{l['location_padre_id']}", "gerarchia", "dentro")
+
+    for n in npc_list:
+        add_node("npc", n["id"], n.get("nome"), url_for("dettaglio_npc", npc_id=n["id"]),
+                 n.get("ruolo") or n.get("stato") or "")
+        if n.get("fazione_id") in fazione_ids:
+            add_link(f"npc:{n['id']}", f"fazione:{n['fazione_id']}", "appartenenza", "fazione")
+        if n.get("location_attuale_id") in location_ids:
+            add_link(f"npc:{n['id']}", f"luogo:{n['location_attuale_id']}", "presenza", "si trova a")
+
+    for q in quest_list:
+        add_node("quest", q["id"], q.get("nome"), url_for("dettaglio_quest", quest_id=q["id"]),
+                 q.get("stato") or q.get("tipo") or "")
+        for l in db.get_locations_per_quest(q["id"]):
+            if l.get("id") in location_ids:
+                add_link(f"quest:{q['id']}", f"luogo:{l['id']}", "scenario", "luogo")
+        for n in db.get_npc_per_quest(q["id"]):
+            if n.get("id") in npc_ids:
+                add_link(f"quest:{q['id']}", f"npc:{n['id']}", "coinvolge", n.get("ruolo_nella_quest") or "coinvolge")
+
+    return jsonify({"nodes": nodes, "links": links})
 
 # --- COPIONI ---
 
@@ -480,13 +565,17 @@ def nuova_quest():
         kwargs = _kwargs_da_form(request.form, ["riassunto", "obiettivo_attuale", "note"])
         kwargs["tipo"] = request.form.get("tipo", "side")
         kwargs["stato"] = request.form.get("stato", "attiva")
-        if request.form.get("location_id"):
-            kwargs["location_id"] = int(request.form["location_id"])
+        location_ids = request.form.getlist("location_ids")
+        if not location_ids and request.form.get("location_id"):
+            location_ids = [request.form["location_id"]]
+        if location_ids:
+            kwargs["location_id"] = int(location_ids[0])
         if request.form.get("sessione_inizio"):
             kwargs["sessione_inizio"] = int(request.form["sessione_inizio"])
         if request.form.get("sessione_fine"):
             kwargs["sessione_fine"] = int(request.form["sessione_fine"])
         quest_id = db.upsert_quest(request.form["nome"], **kwargs)
+        db.set_locations_per_quest(quest_id, location_ids)
         flash(f"Incarico '{request.form['nome']}' salvato.")
         return redirect(url_for("dettaglio_quest", quest_id=quest_id))
 
@@ -506,10 +595,14 @@ def edita_quest(quest_id):
         kwargs = _kwargs_da_form(request.form, ["riassunto", "obiettivo_attuale", "note"])
         kwargs["tipo"] = request.form.get("tipo", "side")
         kwargs["stato"] = request.form.get("stato", "attiva")
-        kwargs["location_id"] = _int_or_none(request.form.get("location_id"))
+        location_ids = request.form.getlist("location_ids")
+        if not location_ids and request.form.get("location_id"):
+            location_ids = [request.form["location_id"]]
+        kwargs["location_id"] = int(location_ids[0]) if location_ids else None
         kwargs["sessione_inizio"] = _int_or_none(request.form.get("sessione_inizio"))
         kwargs["sessione_fine"] = _int_or_none(request.form.get("sessione_fine"))
-        db.upsert_quest(request.form["nome"], **kwargs)
+        updated_id = db.update_quest(quest_id, request.form["nome"], **kwargs)
+        db.set_locations_per_quest(updated_id, location_ids)
         flash(f"Incarico '{request.form['nome']}' aggiornato.")
         return redirect(url_for("dettaglio_quest", quest_id=quest_id))
 

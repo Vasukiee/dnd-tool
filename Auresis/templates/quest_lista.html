@@ -12,11 +12,29 @@
 </div>
 
 {% if quest_list %}
-<div class="entry-grid">
+<div class="list-tools" data-list-tools>
+    <label class="list-tools__search">
+        <span>Cerca</span>
+        <input data-list-search placeholder="Nome, obiettivo, luogo..." type="search">
+    </label>
+    <div aria-label="Filtri incarichi" class="list-tools__filters">
+        <button class="list-filter is-active" data-list-filter="all" type="button">Tutti</button>
+        <button class="list-filter" data-list-filter="status:attiva" type="button">Attivi</button>
+        <button class="list-filter" data-list-filter="status:completata" type="button">Completati</button>
+        <button class="list-filter" data-list-filter="type:main" type="button">Main</button>
+        <button class="list-filter" data-list-filter="type:side" type="button">Side</button>
+        {% if not modalita_giocatrice %}
+        <button class="list-filter" data-list-filter="visible:false" type="button">Nascosti</button>
+        {% endif %}
+    </div>
+</div>
+<div class="entry-grid" data-list>
     {% for q in quest_list %}
-    <div class="card">
+    <div class="card" data-list-item data-status="{{ q.stato }}" data-type="{{ q.tipo }}"
+         data-visible="{{ 'true' if q.visibile_giocatrice else 'false' }}">
         <h3 class="card__title"><a href="{{ url_for('dettaglio_quest', quest_id=q.id) }}">{{ q.nome }}</a></h3>
-        <p class="card__subtitle">{% if q.location_nome %}{{ q.location_nome }}{% endif %}</p>
+        <p class="card__subtitle">{% if q.location_nomi %}{{ q.location_nomi }}{% elif q.location_nome %}{{
+            q.location_nome }}{% endif %}</p>
         {% if q.riassunto %}<p class="card__desc">{{ q.riassunto }}</p>{% endif %}
         <div class="card__footer">
             <span class="tag tag--{{ q.tipo }}">{{ q.tipo }}</span>
@@ -33,6 +51,7 @@
     </div>
     {% endfor %}
 </div>
+<p class="list-empty" data-list-empty hidden>Nessun incarico corrisponde ai filtri.</p>
 {% else %}
 <div class="empty-state">
     <p class="empty-state__title">Nessun incarico ancora registrato.</p>

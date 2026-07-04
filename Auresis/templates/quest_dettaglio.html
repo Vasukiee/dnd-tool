@@ -10,7 +10,15 @@
 
 <div class="detail-section">
     <p class="detail-section__label">Dati</p>
-    <div class="field-row"><span class="field-row__label">Location</span><span>{{ quest.location_nome or '—' }}</span></div>
+    <div class="field-row"><span class="field-row__label">Luoghi</span><span>
+        {% if quest.locations_collegate %}
+            {% for l in quest.locations_collegate %}
+            <a href="{{ url_for('dettaglio_location', location_id=l.id) }}">{{ l.nome }}</a>{% if not loop.last %}, {% endif %}
+            {% endfor %}
+        {% else %}
+            —
+        {% endif %}
+    </span></div>
     <div class="field-row"><span class="field-row__label">Sessione inizio</span><span>{{ quest.sessione_inizio or '—' }}</span></div>
     <div class="field-row"><span class="field-row__label">Sessione fine</span><span>{{ quest.sessione_fine or '—' }}</span></div>
 </div>
