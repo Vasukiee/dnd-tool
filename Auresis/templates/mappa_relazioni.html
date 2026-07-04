@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Mappa relazioni - Auresis{% endblock %}
+{% block content %}
+
+<section aria-labelledby="relation-map-title" class="relation-map">
+    <header class="relation-map__header">
+        <div>
+            <p class="page-eyebrow">Mappa relazionale</p>
+            <h1 class="page-title" id="relation-map-title">Legami della campagna</h1>
+            <p class="page-meta">NPC, luoghi, fazioni e incarichi nello stesso quadro operativo.</p>
+        </div>
+        <div aria-label="Filtri mappa" class="relation-map__tools">
+            <label class="relation-map__search">
+                <span>Cerca</span>
+                <input data-map-search placeholder="Nome nodo..." type="search">
+            </label>
+            <label class="relation-map__search relation-map__quest-filter">
+                <span>Incarico</span>
+                <select data-map-quest-filter>
+                    <option value="all">Tutti gli incarichi</option>
+                </select>
+            </label>
+            <div aria-label="Tipo nodo" class="relation-map__filter-group">
+                <button class="list-filter is-active" data-map-filter="all" type="button">Tutto</button>
+                <button class="list-filter" data-map-filter="npc" type="button">NPC</button>
+                <button class="list-filter" data-map-filter="quest" type="button">Quest</button>
+                <button class="list-filter" data-map-filter="luogo" type="button">Luoghi</button>
+                <button class="list-filter" data-map-filter="fazione" type="button">Fazioni</button>
+            </div>
+            <div aria-label="Tipo relazione" class="relation-map__filter-group">
+                <button class="list-filter is-active" data-link-filter="all" type="button">Relazioni</button>
+                <button class="list-filter" data-link-filter="coinvolge" type="button">Coinvolge</button>
+                <button class="list-filter" data-link-filter="presenza" type="button">Presenza</button>
+                <button class="list-filter" data-link-filter="appartenenza" type="button">Fazioni</button>
+                <button class="list-filter" data-link-filter="scenario" type="button">Luoghi</button>
+            </div>
+            <div aria-label="Vista" class="relation-map__filter-group">
+                <button class="list-filter" data-map-focus type="button">Focus</button>
+                <button class="list-filter" data-map-reset type="button">Reset vista</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="relation-map__workspace">
+        <div class="relation-map__canvas" data-relation-map data-source="{{ url_for('mappa_relazioni_json') }}">
+            <svg aria-label="Grafo delle relazioni della campagna" class="relation-map__svg" role="img"></svg>
+            <p class="relation-map__loading">Caricamento mappa...</p>
+            <p class="relation-map__hint">Trascina lo sfondo per muoverti, usa la rotella per lo zoom, trascina i nodi
+                per riordinare.</p>
+        </div>
+        <aside class="relation-map__detail" data-map-detail>
+            <p class="relation-map__detail-eyebrow">Nodo selezionato</p>
+            <h2>Seleziona un elemento</h2>
+            <p>Usa la mappa per leggere i legami principali tra personaggi, luoghi, fazioni e incarichi.</p>
+            <div aria-live="polite" class="relation-map__react-slot"
+                 data-relation-react-overlay data-source="{{ url_for('mappa_relazioni_json') }}"></div>
+        </aside>
+    </div>
+</section>
+
+
+{% endblock %}

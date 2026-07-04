@@ -123,6 +123,19 @@
                 </svg>
                 <span class="nav__label">Cronaca</span>
             </a>
+            <a class="nav__item {% if active == 'mappa' %}active{% endif %}" href="{{ url_for('mappa_relazioni') }}"
+               title="Mappa relazioni">
+                <svg class="nav__icon" fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
+                     stroke-width="2" viewBox="0 0 24 24" width="16">
+                    <circle cx="6" cy="6" r="2"/>
+                    <circle cx="18" cy="6" r="2"/>
+                    <circle cx="12" cy="18" r="2"/>
+                    <path d="M8 7l8 0"/>
+                    <path d="M7 8l4 8"/>
+                    <path d="M17 8l-4 8"/>
+                </svg>
+                <span class="nav__label">Mappa</span>
+            </a>
             <a class="nav__item {% if active == 'indagini' %}active{% endif %}" href="{{ url_for('indagini.lista_indagini') }}" title="Indagini">
                 <svg class="nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="11" cy="11" r="8"/>
@@ -215,6 +228,9 @@
         </button>
     </nav>
     <main class="main">
+        <button class="command-trigger" id="commandTrigger" title="Apri ricerca rapida" type="button">
+            <span>Ctrl</span><span>K</span>
+        </button>
         {% with messages = get_flashed_messages() %}
         {% if messages %}
         {% for message in messages %}
@@ -225,9 +241,109 @@
         {% block content %}{% endblock %}
     </main>
 </div>
+<div aria-hidden="true" id="react-motion-root"></div>
+<div class="command-palette" hidden id="commandPalette">
+    <div class="command-palette__backdrop" data-command-close></div>
+    <div aria-labelledby="commandPaletteTitle" aria-modal="true" class="command-palette__dialog" role="dialog">
+        <p class="command-palette__title" id="commandPaletteTitle">Vai a</p>
+        <input autocomplete="off" class="command-palette__input" id="commandPaletteInput" placeholder="Cerca sezioni, schede, strumenti..."
+               type="search">
+        <div class="command-palette__list" id="commandPaletteList" role="listbox">
+            <a class="command-palette__item" data-command="sommario dashboard home stato registro"
+               href="{{ url_for('home') }}" role="option">
+                <span>Sommario</span><small>Stato operativo</small>
+            </a>
+            <a class="command-palette__item" data-command="mappa relazioni grafo npc quest luoghi fazioni"
+               href="{{ url_for('mappa_relazioni') }}" role="option">
+                <span>Mappa relazioni</span><small>Grafo della campagna</small>
+            </a>
+            <a class="command-palette__item" data-command="cerca ricerca globale archivio registro"
+               href="{{ url_for('cerca') }}" role="option">
+                <span>Ricerca</span><small>Tutto il registro</small>
+            </a>
+            <a class="command-palette__item" data-command="personaggi npc soggetti contatti"
+               href="{{ url_for('lista_npc') }}" role="option">
+                <span>Personaggi</span><small>NPC e relazioni</small>
+            </a>
+            <a class="command-palette__item" data-command="quest incarichi missioni obiettivi"
+               href="{{ url_for('lista_quest') }}" role="option">
+                <span>Incarichi</span><small>Obiettivi attivi</small>
+            </a>
+            <a class="command-palette__item" data-command="luoghi locations mappa posti"
+               href="{{ url_for('lista_locations') }}" role="option">
+                <span>Luoghi</span><small>Mappe e scene</small>
+            </a>
+            <a class="command-palette__item" data-command="fazioni gruppi poteri alleanze"
+               href="{{ url_for('lista_fazioni') }}" role="option">
+                <span>Fazioni</span><small>Forze in campo</small>
+            </a>
+            <a class="command-palette__item" data-command="cronaca eventi sessioni storia"
+               href="{{ url_for('lista_eventi') }}" role="option">
+                <span>Cronaca</span><small>Eventi registrati</small>
+            </a>
+            <a class="command-palette__item" data-command="indagini misteri indizi deduzioni"
+               href="{{ url_for('indagini.lista_indagini') }}" role="option">
+                <span>Indagini</span><small>Misteri e indizi</small>
+            </a>
+            <a class="command-palette__item" data-command="copioni sessioni scene preparazione"
+               href="{{ url_for('copioni_indice') }}" role="option">
+                <span>Copioni</span><small>Scene preparate</small>
+            </a>
+            <a class="command-palette__item" data-command="fatti accertati verita scoperte"
+               href="{{ url_for('lista_fatti') }}" role="option">
+                <span>Fatti accertati</span><small>Verità emerse</small>
+            </a>
+            <a class="command-palette__item" data-command="soggetto personaggio stato pg contaminazione"
+               href="{{ url_for('pg_stato_page') }}" role="option">
+                <span>Il Soggetto</span><small>Stato speciale</small>
+            </a>
+            {% if not modalita_giocatrice %}
+            <a class="command-palette__item" data-command="nuovo npc personaggio soggetto crea"
+               href="{{ url_for('nuovo_npc') }}" role="option">
+                <span>Nuovo personaggio</span><small>Crea NPC</small>
+            </a>
+            <a class="command-palette__item" data-command="nuova quest incarico missione crea"
+               href="{{ url_for('nuova_quest') }}" role="option">
+                <span>Nuovo incarico</span><small>Crea quest</small>
+            </a>
+            <a class="command-palette__item" data-command="nuovo luogo location posto crea"
+               href="{{ url_for('nuova_location') }}" role="option">
+                <span>Nuovo luogo</span><small>Crea location</small>
+            </a>
+            <a class="command-palette__item" data-command="nuova fazione gruppo potere crea"
+               href="{{ url_for('nuova_fazione') }}" role="option">
+                <span>Nuova fazione</span><small>Crea fazione</small>
+            </a>
+            <a class="command-palette__item" data-command="nuovo fatto accertato verita crea"
+               href="{{ url_for('nuovo_fatto') }}" role="option">
+                <span>Nuovo fatto accertato</span><small>Aggiungi verita</small>
+            </a>
+            <a class="command-palette__item" data-command="nuovo evento registra cronaca"
+               href="{{ url_for('nuovo_evento') }}" role="option">
+                <span>Registra evento</span><small>Nuova voce in cronaca</small>
+            </a>
+            <a class="command-palette__item" data-command="audio musica tracce suoni atmosfera"
+               href="{{ url_for('audio_lista') }}" role="option">
+                <span>Audio</span><small>Tracce e atmosfera</small>
+            </a>
+            <a class="command-palette__item" data-command="nuovo audio traccia musica suono crea"
+               href="{{ url_for('audio_nuova') }}" role="option">
+                <span>Nuova traccia audio</span><small>Aggiungi atmosfera</small>
+            </a>
+            {% endif %}
+        </div>
+        <p class="command-palette__empty" hidden id="commandPaletteEmpty">Nessun risultato.</p>
+    </div>
+</div>
+
+<script defer src="{{ url_for('static', filename='site-motion-loader.js') }}"></script>
+
 <!-- heartbeat: keeps Render free-tier instance warm while the tab is visible -->
 <script src="{{ url_for('static', filename='heartbeat.js') }}"></script>
 <script src="{{ url_for('static', filename='textarea-resize.js') }}"></script>
+<script src="{{ url_for('static', filename='list-tools.js') }}"></script>
+<script src="{{ url_for('static', filename='list-drawer.js') }}"></script>
+<script src="{{ url_for('static', filename='relation-map.js') }}"></script>
 <script>
 (function () {
     var sidebar    = document.getElementById('sidebar');
@@ -394,6 +510,100 @@
         });
     }
 })();
+</script>
+<script>
+    (function () {
+        var palette = document.getElementById('commandPalette');
+        var input = document.getElementById('commandPaletteInput');
+        var list = document.getElementById('commandPaletteList');
+        var empty = document.getElementById('commandPaletteEmpty');
+        if (!palette || !input || !list) return;
+
+        var items = Array.prototype.slice.call(list.querySelectorAll('.command-palette__item'));
+        var activeIndex = 0;
+
+        function visibleItems() {
+            return items.filter(function (item) { return item.offsetParent !== null; });
+        }
+
+        function setActive(index) {
+            var visible = visibleItems();
+            if (!visible.length) return;
+            activeIndex = (index + visible.length) % visible.length;
+            items.forEach(function (item) { item.classList.remove('is-active'); });
+            visible[activeIndex].classList.add('is-active');
+            visible[activeIndex].scrollIntoView({ block: 'nearest' });
+        }
+
+        function filterItems() {
+            var query = input.value.trim().toLowerCase();
+            var found = 0;
+            items.forEach(function (item) {
+                var haystack = (item.textContent + ' ' + (item.dataset.command || '')).toLowerCase();
+                var match = !query || haystack.indexOf(query) !== -1;
+                item.hidden = !match;
+                if (match) found += 1;
+            });
+            empty.hidden = found !== 0;
+            activeIndex = 0;
+            setActive(0);
+        }
+
+        function openPalette() {
+            palette.hidden = false;
+            document.body.classList.add('has-command-palette');
+            input.value = '';
+            filterItems();
+            window.setTimeout(function () { input.focus(); }, 0);
+        }
+
+        function closePalette() {
+            palette.hidden = true;
+            document.body.classList.remove('has-command-palette');
+        }
+
+        var trigger = document.getElementById('commandTrigger');
+        if (trigger) trigger.addEventListener('click', openPalette);
+
+        document.addEventListener('keydown', function (event) {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+                event.preventDefault();
+                if (palette.hidden) openPalette(); else closePalette();
+                return;
+            }
+            if (palette.hidden) return;
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                closePalette();
+            } else if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                setActive(activeIndex + 1);
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                setActive(activeIndex - 1);
+            } else if (event.key === 'Enter') {
+                var visible = visibleItems();
+                if (visible[activeIndex]) {
+                    event.preventDefault();
+                    window.location.href = visible[activeIndex].href;
+                }
+            }
+        });
+
+        input.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                var visible = visibleItems();
+                if (visible[activeIndex]) {
+                    event.preventDefault();
+                    window.location.href = visible[activeIndex].href;
+                }
+            }
+        });
+        input.addEventListener('input', filterItems);
+        palette.addEventListener('click', function (event) {
+            if (event.target && event.target.hasAttribute('data-command-close')) closePalette();
+        });
+    })();
 </script>
 </body>
 </html>

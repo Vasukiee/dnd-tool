@@ -25,6 +25,8 @@ def get_storage_mode():
     return "disk" if is_sqlite() else "db"
 
 _pg_pool = None
+_indici_performance_assicurati = False
+_quest_locations_assicurata = False
 
 
 class _ConnessioneDalPool:
@@ -113,6 +115,51 @@ def _dictify(rows):
     convertiamo esplicitamente a dict puro per coerenza."""
     return [dict(r) for r in rows]
 
+
+_INDICI_PERFORMANCE = [
+    "CREATE INDEX IF NOT EXISTS idx_npc_fazione ON npc(fazione_id)",
+    "CREATE INDEX IF NOT EXISTS idx_npc_location ON npc(location_attuale_id)",
+    "CREATE INDEX IF NOT EXISTS idx_npc_stato ON npc(stato)",
+    "CREATE INDEX IF NOT EXISTS idx_npc_visibile ON npc(visibile_giocatrice)",
+    "CREATE INDEX IF NOT EXISTS idx_quest_stato ON quest(stato)",
+    "CREATE INDEX IF NOT EXISTS idx_quest_tipo ON quest(tipo)",
+    "CREATE INDEX IF NOT EXISTS idx_quest_location ON quest(location_id)",
+    "CREATE INDEX IF NOT EXISTS idx_quest_visibile ON quest(visibile_giocatrice)",
+    "CREATE INDEX IF NOT EXISTS idx_quest_locations_location ON quest_locations(location_id)",
+    "CREATE INDEX IF NOT EXISTS idx_quest_npc_npc ON quest_npc(npc_id)",
+    "CREATE INDEX IF NOT EXISTS idx_locations_fazione ON locations(fazione_controllante_id)",
+    "CREATE INDEX IF NOT EXISTS idx_locations_padre ON locations(location_padre_id)",
+    "CREATE INDEX IF NOT EXISTS idx_locations_visibile ON locations(visibile_giocatrice)",
+    "CREATE INDEX IF NOT EXISTS idx_eventi_location ON eventi(location_id)",
+    "CREATE INDEX IF NOT EXISTS idx_eventi_sessione ON eventi(sessione)",
+    "CREATE INDEX IF NOT EXISTS idx_audio_location ON tracce_audio(location_id)",
+    "CREATE INDEX IF NOT EXISTS idx_audio_quest ON tracce_audio(quest_id)",
+]
+
+
+def assicura_indici_performance(force=False):
+    """Crea gli indici utili anche sui database gia avviati.
+
+    Eseguiamo questo lavoro una sola volta per processo: CREATE INDEX IF NOT
+    EXISTS e i commit ripetuti sono troppo costosi per stare nel path caldo
+    della home o della mappa.
+    """
+    global _indici_performance_assicurati
+    if _indici_performance_assicurati and not force:
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    for query in _INDICI_PERFORMANCE:
+        try:
+            cur.execute(query)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+    cur.close()
+    conn.close()
+    _indici_performance_assicurati = True
+
+
 def init_db():
     """Crea le tabelle (se non esistono) applicando lo schema appropriato."""
     conn = get_connection()
@@ -128,6 +175,7 @@ def init_db():
     conn.commit()
     cur.close()
     conn.close()
+    assicura_indici_performance()
     print(f"Database inizializzato ({'SQLite' if is_sqlite() else 'Postgres'}).")
 
 # --- IMPOSTAZIONI GLOBALI ---
@@ -225,7 +273,7 @@ def toggle_sipario_globale():
     """Inverte lo stato del sipario per tutte le cronologie attive (solitamente 1)."""
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT id, sipario_aperto FROM cronologie_indagine WHERE attiva = TRUE")
+    cur.execute("SELECT id, sipario_aperto FROM cronologie_indagine WHERE attiva = 1")
     rows = cur.fetchall()
     
     # Se ce ne sono di miste, li portiamo tutti a False o True, per semplicità invertiamo il primo trovato e applichiamo a tutti
@@ -295,7 +343,7 @@ def ricerca_globale(testo, solo_visibili=False):
 # impostazioni_sicurezza è esclusa di proposito: hash password e secret key
 # non servono a ripristinare la campagna e non vanno messi in un file scaricabile.
 _TABELLE_EXPORT = [
-    "fazioni", "locations", "npc", "quest", "quest_npc", "eventi",
+    "fazioni", "locations", "npc", "quest", "quest_locations", "quest_npc", "eventi",
     "pg_stato", "fatti_accertati", "tracce_audio", "tag_audio",
     "traccia_audio_tag", "sessioni_copioni",
     "indagini", "nodi_indagine", "collegamenti_nodi", "cronologie_indagine",
@@ -365,14 +413,95 @@ def get_npc_in_location(location_id):
     return _dictify(rows)
 
 
+def assicura_quest_locations(force=False):
+    """Crea la tabella ponte incarichi-luoghi sui database esistenti.
+
+    Manteniamo quest.location_id come campo legacy/primario, ma la relazione
+    completa vive in quest_locations. Anche questo e' cacheato per processo,
+    per evitare DDL nel path caldo delle pagine.
+    """
+    global _quest_locations_assicurata
+    if _quest_locations_assicurata and not force:
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """CREATE TABLE IF NOT EXISTS quest_locations (
+            quest_id INTEGER NOT NULL,
+            location_id INTEGER NOT NULL,
+            ruolo TEXT,
+            PRIMARY KEY (quest_id, location_id),
+            FOREIGN KEY (quest_id) REFERENCES quest(id) ON DELETE CASCADE,
+            FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE
+        )"""
+    )
+    cur.execute(
+        """INSERT INTO quest_locations (quest_id, location_id)
+           SELECT id, location_id FROM quest
+           WHERE location_id IS NOT NULL
+           ON CONFLICT DO NOTHING"""
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    _quest_locations_assicurata = True
+    assicura_indici_performance()
+
+
+def set_locations_per_quest(quest_id, location_ids):
+    assicura_quest_locations()
+    ids = []
+    for raw in location_ids:
+        if raw in (None, ""):
+            continue
+        value = int(raw)
+        if value not in ids:
+            ids.append(value)
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM quest_locations WHERE quest_id = %s", (quest_id,))
+    for location_id in ids:
+        cur.execute(
+            "INSERT INTO quest_locations (quest_id, location_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+            (quest_id, location_id),
+        )
+    cur.execute("UPDATE quest SET location_id = %s WHERE id = %s", (ids[0] if ids else None, quest_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_locations_per_quest(quest_id):
+    assicura_quest_locations()
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        """SELECT locations.*
+           FROM quest_locations
+           JOIN locations ON quest_locations.location_id = locations.id
+           WHERE quest_locations.quest_id = %s
+           ORDER BY locations.nome""",
+        (quest_id,),
+    )
+    rows = _dictify(cur.fetchall())
+    cur.close()
+    conn.close()
+    return rows
+
 def get_quest_attive(location_id=None):
     """Quest attive, opzionalmente filtrate per location."""
+    assicura_quest_locations()
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     if location_id:
         cur.execute(
-            "SELECT * FROM quest WHERE stato = 'attiva' AND (location_id = %s OR location_id IS NULL)",
-            (location_id,)
+            """SELECT DISTINCT quest.*
+               FROM quest
+               LEFT JOIN quest_locations ON quest_locations.quest_id = quest.id
+               WHERE quest.stato = 'attiva'
+                 AND (quest.location_id = %s OR quest_locations.location_id = %s OR quest.location_id IS NULL)""",
+            (location_id, location_id),
         )
     else:
         cur.execute("SELECT * FROM quest WHERE stato = 'attiva'")
@@ -792,15 +921,22 @@ def get_fazione_full(fazione_id):
 
 
 def get_all_quest_full():
+    assicura_quest_locations()
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    aggregazione_luoghi = "GROUP_CONCAT(locations.nome, ', ')" if is_sqlite() else "STRING_AGG(locations.nome, ', ' ORDER BY locations.nome)"
     cur.execute(
-        """SELECT quest.*, locations.nome as location_nome
-           FROM quest LEFT JOIN locations ON quest.location_id = locations.id
-           ORDER BY
-               CASE quest.stato WHEN 'attiva' THEN 0 ELSE 1 END,
-               CASE quest.tipo WHEN 'main' THEN 0 ELSE 1 END,
-               quest.nome"""
+        f"""SELECT quest.*,
+                   MIN(locations.nome) as location_nome,
+                   {aggregazione_luoghi} as location_nomi
+            FROM quest
+            LEFT JOIN quest_locations ON quest_locations.quest_id = quest.id
+            LEFT JOIN locations ON quest_locations.location_id = locations.id
+            GROUP BY quest.id
+            ORDER BY
+                CASE quest.stato WHEN 'attiva' THEN 0 ELSE 1 END,
+                CASE quest.tipo WHEN 'main' THEN 0 ELSE 1 END,
+                quest.nome"""
     )
     rows = cur.fetchall()
     cur.close()
@@ -809,6 +945,7 @@ def get_all_quest_full():
 
 
 def get_quest_full(quest_id):
+    assicura_quest_locations()
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
@@ -823,6 +960,17 @@ def get_quest_full(quest_id):
         conn.close()
         return None
     quest = dict(row)
+    cur.execute(
+        """SELECT locations.*
+           FROM quest_locations
+           JOIN locations ON quest_locations.location_id = locations.id
+           WHERE quest_locations.quest_id = %s
+           ORDER BY locations.nome""",
+        (quest_id,),
+    )
+    quest["locations_collegate"] = _dictify(cur.fetchall())
+    quest["location_ids"] = [l["id"] for l in quest["locations_collegate"]]
+    quest["location_nomi"] = ", ".join(l["nome"] for l in quest["locations_collegate"])
     cur.execute(
         """SELECT npc.id, npc.nome, npc.stato, quest_npc.ruolo_nella_quest
            FROM quest_npc JOIN npc ON quest_npc.npc_id = npc.id
@@ -850,6 +998,7 @@ def get_all_locations_full():
 
 
 def get_location_full(location_id):
+    assicura_quest_locations()
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
@@ -866,7 +1015,14 @@ def get_location_full(location_id):
     location = dict(row)
     cur.execute("SELECT id, nome, stato FROM npc WHERE location_attuale_id = %s", (location_id,))
     location["npc_presenti"] = _dictify(cur.fetchall())
-    cur.execute("SELECT id, nome, stato FROM quest WHERE location_id = %s", (location_id,))
+    cur.execute(
+        """SELECT DISTINCT quest.id, quest.nome, quest.stato
+           FROM quest
+           LEFT JOIN quest_locations ON quest_locations.quest_id = quest.id
+           WHERE quest.location_id = %s OR quest_locations.location_id = %s
+           ORDER BY quest.nome""",
+        (location_id, location_id),
+    )
     location["quest_collegate"] = _dictify(cur.fetchall())
     cur.execute(
         "SELECT id, sessione, riassunto FROM eventi WHERE location_id = %s ORDER BY sessione DESC",
@@ -919,7 +1075,7 @@ def get_stats_riepilogo(solo_visibili=False):
     """Numeri di riepilogo per la home della dashboard.
 
     Con solo_visibili=True (modalità giocatrice) i conteggi contano solo
-    gli elementi con visibile_giocatrice = TRUE, coerentemente con quanto
+    gli elementi con visibile_giocatrice = 1, coerentemente con quanto
     mostrato nelle liste dell'interfaccia giocatrice.
     """
     conn = get_connection()
@@ -945,6 +1101,102 @@ def get_stats_riepilogo(solo_visibili=False):
     cur.close()
     conn.close()
     return stats
+
+
+def get_home_dashboard_data(solo_visibili=False):
+    """Dati della home in un solo giro DB.
+
+    La home e' la pagina piu vista: evitare molte aperture/pre-ping di
+    connessione riduce parecchio la latenza percepita su Render/Supabase.
+    """
+    assicura_quest_locations()
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    filtro_npc = " AND visibile_giocatrice = 1" if solo_visibili else ""
+    filtro_quest = " AND visibile_giocatrice = 1" if solo_visibili else ""
+    filtro_locations = " WHERE visibile_giocatrice = 1" if solo_visibili else ""
+    filtro_indagini = " AND visibile_giocatrice = TRUE" if solo_visibili else ""
+    filtro_npc_join = " AND npc.visibile_giocatrice = 1" if solo_visibili else ""
+    filtro_quest_join = " AND quest.visibile_giocatrice = 1" if solo_visibili else ""
+
+    def valore(query):
+        cur.execute(query)
+        row = cur.fetchone()
+        return list(row.values())[0] if isinstance(row, dict) else row[0]
+
+    stats = {
+        "npc_totali": valore(f"SELECT COUNT(*) AS valore FROM npc WHERE 1=1{filtro_npc}"),
+        "npc_vivi": valore(f"SELECT COUNT(*) AS valore FROM npc WHERE stato = 'vivo'{filtro_npc}"),
+        "quest_attive": valore(f"SELECT COUNT(*) AS valore FROM quest WHERE stato = 'attiva'{filtro_quest}"),
+        "quest_completate": valore(f"SELECT COUNT(*) AS valore FROM quest WHERE stato = 'completata'{filtro_quest}"),
+        "fazioni_totali": valore("SELECT COUNT(*) AS valore FROM fazioni WHERE attiva = 1"),
+        "locations_totali": valore(f"SELECT COUNT(*) AS valore FROM locations{filtro_locations}"),
+        "sessioni_giocate": valore("SELECT COALESCE(MAX(sessione), 0) AS valore FROM eventi"),
+    }
+
+    cur.execute("SELECT * FROM eventi ORDER BY sessione DESC, id DESC LIMIT 6")
+    eventi_recenti = _dictify(cur.fetchall())
+
+    aggregazione_luoghi = "GROUP_CONCAT(locations.nome, ', ')" if is_sqlite() else "STRING_AGG(locations.nome, ', ' ORDER BY locations.nome)"
+    cur.execute(
+        f"""SELECT quest.*,
+                   MIN(locations.nome) AS location_nome,
+                   {aggregazione_luoghi} AS location_nomi
+            FROM quest
+            LEFT JOIN quest_locations ON quest_locations.quest_id = quest.id
+            LEFT JOIN locations ON quest_locations.location_id = locations.id
+            WHERE quest.stato = 'attiva'{filtro_quest_join}
+            GROUP BY quest.id
+            ORDER BY CASE quest.tipo WHEN 'main' THEN 0 ELSE 1 END, quest.nome
+            LIMIT 4"""
+    )
+    quest_attive = _dictify(cur.fetchall())
+    cur.execute(f"SELECT COUNT(*) AS valore FROM quest WHERE stato = 'attiva'{filtro_quest}")
+    quest_attive_totale = cur.fetchone()["valore"]
+
+    cur.execute(
+        f"""SELECT * FROM indagini
+            WHERE attiva = TRUE{filtro_indagini}
+            ORDER BY id DESC
+            LIMIT 4"""
+    )
+    indagini_aperte = _dictify(cur.fetchall())
+    cur.execute(f"SELECT COUNT(*) AS valore FROM indagini WHERE attiva = TRUE{filtro_indagini}")
+    indagini_aperte_totale = cur.fetchone()["valore"]
+
+    cur.execute(
+        f"""SELECT npc.*, locations.nome AS location_nome
+            FROM npc
+            LEFT JOIN locations ON npc.location_attuale_id = locations.id
+            WHERE npc.stato = 'vivo'
+              AND COALESCE(npc.livello_contaminazione, 0) > 0{filtro_npc_join}
+            ORDER BY COALESCE(npc.livello_contaminazione, 0) DESC, COALESCE(npc.ultima_apparizione_sessione, 0) DESC
+            LIMIT 4"""
+    )
+    npc_critici = _dictify(cur.fetchall())
+    cur.execute(
+        f"""SELECT COUNT(*) AS valore FROM npc
+            WHERE stato = 'vivo'
+              AND COALESCE(livello_contaminazione, 0) > 0{filtro_npc}"""
+    )
+    npc_critici_totale = cur.fetchone()["valore"]
+
+    cur.close()
+    conn.close()
+
+    return {
+        "stats": stats,
+        "eventi_recenti": eventi_recenti,
+        "dashboard": {
+            "quest_attive": quest_attive,
+            "quest_attive_totale": quest_attive_totale,
+            "indagini_aperte": indagini_aperte,
+            "indagini_aperte_totale": indagini_aperte_totale,
+            "npc_critici": npc_critici,
+            "npc_critici_totale": npc_critici_totale,
+        },
+    }
 
 
 # ------------------------------------------------------------------
@@ -1013,6 +1265,20 @@ def upsert_npc(nome, **kwargs):
     conn.close()
     return npc_id
 
+
+def update_quest(quest_id, nome, **kwargs):
+    _valida_nomi_colonna(kwargs)
+    conn = get_connection()
+    cur = conn.cursor()
+    if kwargs:
+        set_clause = ", ".join(f"{k} = %s" for k in kwargs)
+        cur.execute(f"UPDATE quest SET nome = %s, {set_clause} WHERE id = %s", (nome, *kwargs.values(), quest_id))
+    else:
+        cur.execute("UPDATE quest SET nome = %s WHERE id = %s", (nome, quest_id))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return quest_id
 
 def upsert_quest(nome, **kwargs):
     _valida_nomi_colonna(kwargs)
@@ -1550,7 +1816,7 @@ def get_cronologia_attiva(indagine_id):
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
-        "SELECT * FROM cronologie_indagine WHERE indagine_id = %s AND attiva = TRUE LIMIT 1",
+        "SELECT * FROM cronologie_indagine WHERE indagine_id = %s AND attiva = 1 LIMIT 1",
         (indagine_id,),
     )
     row = cur.fetchone()
@@ -1578,7 +1844,7 @@ def crea_cronologia(indagine_id, nome):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        "UPDATE cronologie_indagine SET attiva = FALSE WHERE indagine_id = %s AND attiva = TRUE",
+        "UPDATE cronologie_indagine SET attiva = FALSE WHERE indagine_id = %s AND attiva = 1",
         (indagine_id,),
     )
     cur.execute(
@@ -1597,7 +1863,7 @@ def disattiva_cronologia_attiva(indagine_id):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        "UPDATE cronologie_indagine SET attiva = FALSE WHERE indagine_id = %s AND attiva = TRUE",
+        "UPDATE cronologie_indagine SET attiva = FALSE WHERE indagine_id = %s AND attiva = 1",
         (indagine_id,),
     )
     conn.commit()
@@ -1614,7 +1880,7 @@ def attiva_cronologia(cronologia_id, indagine_id):
         (indagine_id,),
     )
     cur.execute(
-        "UPDATE cronologie_indagine SET attiva = TRUE WHERE id = %s",
+        "UPDATE cronologie_indagine SET attiva = 1 WHERE id = %s",
         (cronologia_id,),
     )
     conn.commit()

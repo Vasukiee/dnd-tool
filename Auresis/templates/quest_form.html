@@ -32,13 +32,14 @@
     </div>
 
     <div class="form-field">
-        <label for="location_id">Location collegata</label>
-        <select id="location_id" name="location_id">
-            <option value="">— nessuna —</option>
+        <label for="location_ids">Luoghi collegati</label>
+        <select id="location_ids" multiple name="location_ids" size="6">
             {% for l in locations %}
-            <option value="{{ l.id }}" {% if quest and quest.location_id == l.id %}selected{% endif %}>{{ l.nome }}</option>
+            <option %} %}selected{% and endif if in l.id quest quest.location_ids value="{{ l.id }}" {%>{{ l.nome }}
+            </option>
             {% endfor %}
         </select>
+        <p class="form__hint">Puoi selezionare più luoghi con Ctrl/Cmd o Shift.</p>
     </div>
 
     <div class="form-field">

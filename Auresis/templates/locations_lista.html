@@ -12,9 +12,22 @@
 </div>
 
 {% if locations_list %}
-<div class="entry-grid">
+<div class="list-tools" data-list-tools>
+    <label class="list-tools__search">
+        <span>Cerca</span>
+        <input data-list-search placeholder="Nome, tipo, fazione, stato..." type="search">
+    </label>
+    <div aria-label="Filtri luoghi" class="list-tools__filters">
+        <button class="list-filter is-active" data-list-filter="all" type="button">Tutti</button>
+        {% if not modalita_giocatrice %}
+        <button class="list-filter" data-list-filter="visible:true" type="button">Visibili</button>
+        <button class="list-filter" data-list-filter="visible:false" type="button">Nascosti</button>
+        {% endif %}
+    </div>
+</div>
+<div class="entry-grid" data-list>
     {% for l in locations_list %}
-    <div class="card">
+    <div class="card" data-list-item data-visible="{{ 'true' if l.visibile_giocatrice else 'false' }}">
         <h3 class="card__title"><a href="{{ url_for('dettaglio_location', location_id=l.id) }}">{{ l.nome }}</a></h3>
         <p class="card__subtitle">{{ l.tipo or 'tipo non specificato' }} {% if l.fazione_nome %}· controllato da {{ l.fazione_nome }}{% endif %}</p>
         {% if l.descrizione_breve %}<p class="card__desc">{{ l.descrizione_breve }}</p>{% endif %}
@@ -34,6 +47,7 @@
     </div>
     {% endfor %}
 </div>
+<p class="list-empty" data-list-empty hidden>Nessun luogo corrisponde ai filtri.</p>
 {% else %}
 <div class="empty-state">
     <p class="empty-state__title">Nessun luogo ancora registrato.</p>

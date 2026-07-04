@@ -14,9 +14,28 @@
 </div>
 
 {% if npc_list %}
-<div class="entry-grid">
+<div class="list-tools" data-list-tools>
+    <label class="list-tools__search">
+        <span>Cerca</span>
+        <input data-list-search placeholder="Nome, ruolo, fazione, luogo..." type="search">
+    </label>
+    <div aria-label="Filtri personaggi" class="list-tools__filters">
+        <button class="list-filter is-active" data-list-filter="all" type="button">Tutti</button>
+        <button class="list-filter" data-list-filter="status:vivo" type="button">Vivi</button>
+        <button class="list-filter" data-list-filter="status:morto" type="button">Morti</button>
+        <button class="list-filter" data-list-filter="contaminato:true" type="button">Contaminati</button>
+        {% if not modalita_giocatrice %}
+        <button class="list-filter" data-list-filter="visible:true" type="button">Visibili</button>
+        <button class="list-filter" data-list-filter="visible:false" type="button">Nascosti</button>
+        {% endif %}
+    </div>
+</div>
+<div class="entry-grid" data-list>
     {% for n in npc_list %}
-    <div class="card card--contaminazione" style="--vena-width: {{ 2 + (n.livello_contaminazione or 0) * 3 }}px;">
+    <div class="card card--contaminazione" data-contaminato="{{ 'true' if n.livello_contaminazione and n.livello_contaminazione > 0 else 'false' }}" data-list-item
+         data-status="{{ n.stato }}"
+         data-visible="{{ 'true' if n.visibile_giocatrice else 'false' }}"
+         style="--vena-width: {{ 2 + (n.livello_contaminazione or 0) * 3 }}px;">
         <h3 class="card__title"><a href="{{ url_for('dettaglio_npc', npc_id=n.id) }}">{{ n.nome }}</a></h3>
         <p class="card__subtitle">
             {{ n.ruolo or 'ruolo non specificato' }}
@@ -43,6 +62,7 @@
     </div>
     {% endfor %}
 </div>
+<p class="list-empty" data-list-empty hidden>Nessun personaggio corrisponde ai filtri.</p>
 {% else %}
 <div class="empty-state">
     <p class="empty-state__title">Nessun personaggio ancora registrato.</p>
