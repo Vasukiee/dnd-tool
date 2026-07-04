@@ -1,54 +1,185 @@
 {% extends "base.html" %}
-{% block title %}Il Registro — Sommario{% endblock %}
+{% block title %}Auresis - Cabina di regia{% endblock %}
 {% block content %}
 
-<div class="page-header">
-    <p class="page-eyebrow">Sommario della campagna</p>
-    <h1 class="page-title">Stato del Registro</h1>
-    <p class="page-meta">Sessione corrente: {{ stats.sessioni_giocate }}</p>
-</div>
+<section aria-labelledby="dashboard-title" class="ops-hero">
+    <div class="ops-hero__copy">
+        <p class="page-eyebrow">Cabina di regia</p>
+        <h1 class="ops-hero__title" id="dashboard-title">Auresis è pronta per la prossima scena.</h1>
+        <p class="ops-hero__meta">Sessione corrente: {{ stats.sessioni_giocate }} · Vista {{ 'giocatrice' if
+            modalita_giocatrice else 'master' }}</p>
+    </div>
+    <div aria-label="Azioni rapide" class="ops-hero__actions">
+        <a class="quick-action quick-action--primary" href="{{ url_for('cerca') }}">
+            <span aria-hidden="true" class="quick-action__icon">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg>
+            </span>
+            <span>Cerca nel registro</span>
+        </a>
+        {% if not modalita_giocatrice %}
+        <a class="quick-action" href="{{ url_for('nuovo_evento') }}">
+            <span aria-hidden="true" class="quick-action__icon">
+                <svg viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            </span>
+            <span>Registra evento</span>
+        </a>
+        <a class="quick-action" href="{{ url_for('indagini.lista_indagini') }}">
+            <span aria-hidden="true" class="quick-action__icon">
+                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/><path d="M11 8v6"/><path
+                        d="M8 11h6"/></svg>
+            </span>
+            <span>Apri indagini</span>
+        </a>
+        {% endif %}
+    </div>
+</section>
 
-<div class="stat-grid">
-    <div class="stat-cell">
-        <div class="stat-cell__value">{{ stats.npc_vivi }}</div>
-        <div class="stat-cell__label">Soggetti vivi / {{ stats.npc_totali }} totali</div>
-    </div>
-    <div class="stat-cell">
-        <div class="stat-cell__value">{{ stats.quest_attive }}</div>
-        <div class="stat-cell__label">Incarichi attivi</div>
-    </div>
-    <div class="stat-cell">
-        <div class="stat-cell__value">{{ stats.fazioni_totali }}</div>
-        <div class="stat-cell__label">Fazioni registrate</div>
-    </div>
-    <div class="stat-cell">
-        <div class="stat-cell__value">{{ stats.locations_totali }}</div>
-        <div class="stat-cell__label">Luoghi catalogati</div>
-    </div>
-</div>
+<section aria-label="Stato operativo" class="ops-grid">
+    <a class="ops-metric ops-metric--subjects" href="{{ url_for('lista_npc') }}">
+        <span class="ops-metric__label">Soggetti vivi</span>
+        <strong class="ops-metric__value">{{ stats.npc_vivi }}</strong>
+        <span class="ops-metric__note">su {{ stats.npc_totali }} registrati</span>
+    </a>
+    <a class="ops-metric ops-metric--quests" href="{{ url_for('lista_quest') }}">
+        <span class="ops-metric__label">Incarichi attivi</span>
+        <strong class="ops-metric__value">{{ stats.quest_attive }}</strong>
+        <span class="ops-metric__note">da tenere in vista</span>
+    </a>
+    <a class="ops-metric ops-metric--factions" href="{{ url_for('lista_fazioni') }}">
+        <span class="ops-metric__label">Fazioni</span>
+        <strong class="ops-metric__value">{{ stats.fazioni_totali }}</strong>
+        <span class="ops-metric__note">forze in campo</span>
+    </a>
+    <a class="ops-metric ops-metric--places" href="{{ url_for('lista_locations') }}">
+        <span class="ops-metric__label">Luoghi</span>
+        <strong class="ops-metric__value">{{ stats.locations_totali }}</strong>
+        <span class="ops-metric__note">punti sulla mappa</span>
+    </a>
+</section>
 
-<div class="detail-section">
-    <p class="detail-section__label">Ultimi eventi della cronaca</p>
-    {% if eventi_recenti %}
-        <div class="timeline">
+
+<section aria-label="Pannelli di lavoro" class="control-deck">
+    <div class="control-panel control-panel--wide">
+        <div class="section-heading">
+            <p class="section-heading__label">Cronaca recente</p>
+            <a href="{{ url_for('lista_eventi') }}">Apri cronaca</a>
+        </div>
+        {% if eventi_recenti %}
+        <ol class="event-feed">
             {% for e in eventi_recenti %}
-            <div class="timeline-item">
-                <div class="timeline-item__session">Sess. {{ e.sessione }}</div>
-                <div class="timeline-item__body">
+            <li class="event-feed__item">
+                <div class="event-feed__pin">S{{ e.sessione }}</div>
+                <div class="event-feed__body">
                     <p>{{ e.riassunto }}</p>
                     {% if e.conseguenze_attive %}
-                    <p class="timeline-item__consequence">↳ {{ e.conseguenze_attive }}</p>
+                    <p class="event-feed__consequence">{{ e.conseguenze_attive }}</p>
                     {% endif %}
                 </div>
-            </div>
+            </li>
+            {% endfor %}
+        </ol>
+        {% else %}
+        <div class="empty-state empty-state--panel">
+            <p class="empty-state__title">Nessun evento ancora registrato.</p>
+            <p>Quando la campagna lascia tracce, compariranno qui in ordine di sessione.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <aside class="control-panel control-panel--stack">
+        <div class="section-heading">
+            <p class="section-heading__label">Accessi rapidi</p>
+        </div>
+        <nav aria-label="Accessi rapidi alle sezioni" class="workbench-links">
+            <a href="{{ url_for('copioni_indice') }}">
+                <span>Copioni</span>
+                <small>Preparazione e scene</small>
+            </a>
+            <a href="{{ url_for('lista_fatti') }}">
+                <span>Fatti accertati</span>
+                <small>Verità emerse al tavolo</small>
+            </a>
+            <a href="{{ url_for('pg_stato_page') }}">
+                <span>Il Soggetto</span>
+                <small>Stato del personaggio chiave</small>
+            </a>
+            {% if not modalita_giocatrice %}
+            <a href="{{ url_for('audio_lista') }}">
+                <span>Audio</span>
+                <small>Atmosfera e segnali</small>
+            </a>
+            {% endif %}
+        </nav>
+    </aside>
+</section>
+
+<section aria-label="Briefing pre-sessione" class="briefing-grid">
+    <div class="briefing-card">
+        <div class="section-heading">
+            <p class="section-heading__label">Incarichi da tenere in vista</p>
+            <a href="{{ url_for('lista_quest') }}">{{ dashboard.quest_attive_totale }} totali</a>
+        </div>
+        {% if dashboard.quest_attive %}
+        <div class="briefing-list">
+            {% for q in dashboard.quest_attive %}
+            <a class="briefing-row" href="{{ url_for('dettaglio_quest', quest_id=q.id) }}">
+                <span>
+                    <strong>{{ q.nome }}</strong>
+                    <small>{{ q.obiettivo_attuale or q.riassunto or 'Nessun obiettivo annotato' }}</small>
+                </span>
+                {% if q.location_nome %}<em>{{ q.location_nome }}</em>{% endif %}
+            </a>
             {% endfor %}
         </div>
-    {% else %}
-        <div class="empty-state">
-            <p class="empty-state__title">Il registro è ancora vuoto.</p>
-            <p>Nessun evento registrato. Inizia ad aggiungere personaggi, luoghi e incarichi dalle voci nel menu, oppure registra il primo evento dopo la tua prossima sessione.</p>
+        {% else %}
+        <p class="briefing-empty">Nessun incarico attivo.</p>
+        {% endif %}
+    </div>
+
+    <div class="briefing-card">
+        <div class="section-heading">
+            <p class="section-heading__label">Indagini aperte</p>
+            <a href="{{ url_for('indagini.lista_indagini') }}">{{ dashboard.indagini_aperte_totale }} totali</a>
         </div>
-    {% endif %}
-</div>
+        {% if dashboard.indagini_aperte %}
+        <div class="briefing-list">
+            {% for indagine in dashboard.indagini_aperte %}
+            <a class="briefing-row"
+               href="{{ url_for('indagini.indagini_player' if modalita_giocatrice else 'indagini.indagini_editor', indagine_id=indagine.id) }}">
+                <span>
+                    <strong>{{ indagine.titolo }}</strong>
+                    <small>{{ indagine.descrizione or 'Dossier aperto' }}</small>
+                </span>
+                {% if indagine.visibile_giocatrice %}<em>visibile</em>{% else %}<em>master</em>{% endif %}
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="briefing-empty">Nessuna indagine aperta.</p>
+        {% endif %}
+    </div>
+
+    <div class="briefing-card">
+        <div class="section-heading">
+            <p class="section-heading__label">Soggetti critici</p>
+            <a href="{{ url_for('lista_npc') }}">{{ dashboard.npc_critici_totale }} totali</a>
+        </div>
+        {% if dashboard.npc_critici %}
+        <div class="briefing-list">
+            {% for npc in dashboard.npc_critici %}
+            <a class="briefing-row" href="{{ url_for('dettaglio_npc', npc_id=npc.id) }}">
+                <span>
+                    <strong>{{ npc.nome }}</strong>
+                    <small>{{ npc.ruolo or npc.relazione_pg or npc.descrizione_breve or 'Soggetto contaminato' }}</small>
+                </span>
+                <em>C{{ npc.livello_contaminazione }}</em>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="briefing-empty">Nessun soggetto contaminato in evidenza.</p>
+        {% endif %}
+    </div>
+</section>
 
 {% endblock %}

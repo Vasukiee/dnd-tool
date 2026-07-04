@@ -68,6 +68,16 @@ CREATE TABLE IF NOT EXISTS quest (
 );
 
 -- Tabella ponte: NPC coinvolti in una quest (relazione molti-a-molti)
+
+CREATE TABLE IF NOT EXISTS quest_locations (
+    quest_id INTEGER NOT NULL,
+    location_id INTEGER NOT NULL,
+    ruolo TEXT,
+    PRIMARY KEY (quest_id, location_id),
+    FOREIGN KEY (quest_id) REFERENCES quest(id) ON DELETE CASCADE,
+    FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS quest_npc (
     quest_id INTEGER NOT NULL,
     npc_id INTEGER NOT NULL,
@@ -179,3 +189,21 @@ CREATE TABLE IF NOT EXISTS impostazioni_sicurezza (
     id INTEGER PRIMARY KEY,
     password_master TEXT
 );
+
+-- ============================================================
+-- INDICI PERFORMANCE / MAPPA RELAZIONALE
+-- ============================================================
+CREATE INDEX IF NOT EXISTS idx_npc_fazione ON npc(fazione_id);
+CREATE INDEX IF NOT EXISTS idx_npc_location ON npc(location_attuale_id);
+CREATE INDEX IF NOT EXISTS idx_npc_stato ON npc(stato);
+CREATE INDEX IF NOT EXISTS idx_quest_stato ON quest(stato);
+CREATE INDEX IF NOT EXISTS idx_quest_tipo ON quest(tipo);
+CREATE INDEX IF NOT EXISTS idx_quest_location ON quest(location_id);
+CREATE INDEX IF NOT EXISTS idx_quest_locations_location ON quest_locations(location_id);
+CREATE INDEX IF NOT EXISTS idx_quest_npc_npc ON quest_npc(npc_id);
+CREATE INDEX IF NOT EXISTS idx_locations_fazione ON locations(fazione_controllante_id);
+CREATE INDEX IF NOT EXISTS idx_locations_padre ON locations(location_padre_id);
+CREATE INDEX IF NOT EXISTS idx_eventi_location ON eventi(location_id);
+CREATE INDEX IF NOT EXISTS idx_eventi_sessione ON eventi(sessione);
+CREATE INDEX IF NOT EXISTS idx_audio_location ON tracce_audio(location_id);
+CREATE INDEX IF NOT EXISTS idx_audio_quest ON tracce_audio(quest_id);
