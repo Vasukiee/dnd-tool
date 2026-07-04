@@ -35,8 +35,7 @@
         <label for="location_ids">Luoghi collegati</label>
         <select id="location_ids" multiple name="location_ids" size="6">
             {% for l in locations %}
-            <option %} %}selected{% and endif if in l.id quest quest.location_ids value="{{ l.id }}" {%>{{ l.nome }}
-            </option>
+            <option value="{{ l.id }}" {% if quest and l.id in quest.location_ids %}selected{% endif %}>{{ l.nome }}</option>
             {% endfor %}
         </select>
         <p class="form__hint">Puoi selezionare più luoghi con Ctrl/Cmd o Shift.</p>
