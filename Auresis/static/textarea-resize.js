@@ -30,8 +30,11 @@
                     firstFire = false;
                     return;
                 }
-                var h = ta.offsetHeight;
-                if (h > 0) localStorage.setItem(key, h + 'px');
+                // Use requestAnimationFrame to avoid Forced Synchronous Layout
+                window.requestAnimationFrame(function() {
+                    var h = ta.offsetHeight;
+                    if (h > 0) localStorage.setItem(key, h + 'px');
+                });
             });
             ro.observe(ta);
         });

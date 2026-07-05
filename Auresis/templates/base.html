@@ -6,7 +6,8 @@
     <meta name="csrf-token" content="{{ csrf_token }}">
     <title>{% block title %}Il Registro{% endblock %}</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link as="style" href="{{ url_for('static', filename='style.min.css') }}" rel="preload">
+    <link href="{{ url_for('static', filename='style.min.css') }}" rel="stylesheet">
     <script>
     /* Applica la palette personalizzata salvata in locale, prima del paint, per evitare flash. */
     (function () {
@@ -390,11 +391,11 @@
 <script defer src="{{ url_for('static', filename='site-motion-loader.js') }}"></script>
 
 <!-- heartbeat: keeps Render free-tier instance warm while the tab is visible -->
-<script src="{{ url_for('static', filename='heartbeat.js') }}"></script>
-<script src="{{ url_for('static', filename='textarea-resize.js') }}"></script>
-<script src="{{ url_for('static', filename='list-tools.js') }}"></script>
-<script src="{{ url_for('static', filename='list-drawer.js') }}"></script>
-<script src="{{ url_for('static', filename='relation-map.js') }}"></script>
+<script defer src="{{ url_for('static', filename='heartbeat.js') }}"></script>
+<script defer src="{{ url_for('static', filename='textarea-resize.js') }}"></script>
+<script defer src="{{ url_for('static', filename='list-tools.js') }}"></script>
+<script defer src="{{ url_for('static', filename='list-drawer.js') }}"></script>
+<script defer src="{{ url_for('static', filename='relation-map.js') }}"></script>
 <script>
 (function () {
     var sidebar    = document.getElementById('sidebar');
