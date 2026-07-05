@@ -2,12 +2,17 @@
 {% block title %}Luoghi — Il Registro{% endblock %}
 {% block content %}
 
-<div class="page-header">
+<div class="page-header registry-header">
     <p class="page-eyebrow">Geografia della campagna</p>
     <h1 class="page-title">Luoghi</h1>
+    <p class="registry-header__summary">Punti sensibili e controllo territoriale.</p>
+    <div aria-label="Stato archivio luoghi" class="registry-header__meta">
+        <span>{{ locations_list|length }} luoghi</span>
+        <span>{{ 'vista giocatrice' if modalita_giocatrice else 'cabina master' }}</span>
+    </div>
 </div>
 
-<div class="actions-row" style="margin-bottom: 28px;">
+<div class="actions-row actions-row--spaced">
     <a class="btn" href="{{ url_for('nuova_location') }}">+ Nuovo luogo</a>
 </div>
 
@@ -25,19 +30,33 @@
         {% endif %}
     </div>
 </div>
-<div class="entry-grid" data-list>
+<div class="entry-grid dossier-grid" data-list>
     {% for l in locations_list %}
-    <div class="card" data-list-item data-visible="{{ 'true' if l.visibile_giocatrice else 'false' }}">
+    <div class="card dossier-card dossier-card--luogo" data-list-item
+         data-visible="{{ 'true' if l.visibile_giocatrice else 'false' }}">
+        <p class="dossier-card__kicker">Luogo censito</p>
         <h3 class="card__title"><a href="{{ url_for('dettaglio_location', location_id=l.id) }}">{{ l.nome }}</a></h3>
         <p class="card__subtitle">{{ l.tipo or 'tipo non specificato' }} {% if l.fazione_nome %}· controllato da {{ l.fazione_nome }}{% endif %}</p>
         {% if l.descrizione_breve %}<p class="card__desc">{{ l.descrizione_breve }}</p>{% endif %}
         {% if l.stato_attuale %}
         <div class="card__footer">
             <span class="tag">{{ l.stato_attuale }}</span>
+            {% if not modalita_giocatrice %}
+            <span class="tag {{ 'visibility-chip' if l.visibile_giocatrice else 'secret-chip' }}">
+                {{ 'visibile' if l.visibile_giocatrice else 'nascosto' }}
+            </span>
+            {% endif %}
+        </div>
+        {% elif not modalita_giocatrice %}
+        <div class="card__footer">
+            <span class="tag {{ 'visibility-chip' if l.visibile_giocatrice else 'secret-chip' }}">
+                {{ 'visibile' if l.visibile_giocatrice else 'nascosto' }}
+            </span>
         </div>
         {% endif %}
         {% if not modalita_giocatrice %}
-        <form method="post" action="{{ url_for('location_toggle_visibile', location_id=l.id) }}" style="margin-top: 10px;">
+        <form action="{{ url_for('location_toggle_visibile', location_id=l.id) }}" class="card__visibility-form"
+              method="post">
             <button type="submit" class="completata-toggle {% if l.visibile_giocatrice %}completata-toggle--attivo{% endif %}">
                 <span class="completata-toggle__check">{% if l.visibile_giocatrice %}✓{% endif %}</span>
                 {{ 'Mostrabile alla giocatrice' if l.visibile_giocatrice else 'Nascosto' }}

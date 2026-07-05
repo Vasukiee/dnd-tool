@@ -8,6 +8,9 @@
     max-width: none;
     padding: 0;
 }
+.command-trigger {
+    display: none;
+}
 .live-wrapper {
     display: flex;
     flex-direction: column;
@@ -282,22 +285,28 @@
 
 <div class="live-wrapper">
     <!-- HEADER -->
-    <div class="live-header">
-        <a href="{{ url_for('indagini.lista_indagini') }}" style="color: var(--bone-dim); font-size: 0.85rem;">← Indagini</a>
-        <h1 style="margin: 0; font-family: var(--font-display); font-size: 1.1rem; color: var(--gold-bright);">{{ indagine.titolo }}</h1>
-        <span style="font-size: 0.75rem; color: var(--bone-dim); font-family: var(--font-mono);">vista live</span>
-        <div style="margin-left: auto; display: flex; gap: 10px; align-items: center;">
-            <button id="muteSfxBtn" class="btn" onclick="toggleSfxMute()" style="font-size: 0.78rem; padding: 5px 12px; background: var(--ink); border: 1px solid var(--ink-line); color: var(--bone);">🔊 SFX On</button>
+    <div class="live-header stage-live-header">
+        <a class="stage-live-header__back" href="{{ url_for('indagini.lista_indagini') }}">← Indagini</a>
+        <h1 class="stage-live-header__title">{{ indagine.titolo }}</h1>
+        <span class="stage-live-header__mode">vista live</span>
+        <div class="stage-live-header__actions">
+            <button class="btn btn--compact" id="muteSfxBtn" onclick="toggleSfxMute()">🔊 SFX On</button>
             {% if not non_iniziata %}
-            <button id="siparioBtn" class="btn" onclick="toggleSipario()" style="font-size: 0.78rem; padding: 5px 12px; border: 1px solid var(--ink-line); {% if cronologia and cronologia.sipario_aperto %}background: var(--verdigris); color: #000;{% else %}background: var(--ink); color: var(--bone);{% endif %}">{% if cronologia and cronologia.sipario_aperto %}🎭 Sipario Aperto{% else %}🎭 Sipario{% endif %}</button>
+            <button class="btn btn--compact stage-sipario-btn {% if cronologia_attiva and cronologia_attiva.sipario_aperto %}is-open{% endif %}"
+                    id="siparioBtn"
+                    onclick="toggleSipario()">{% if cronologia_attiva and cronologia_attiva.sipario_aperto %}🎭 Sipario
+                Aperto{% else %}🎭 Sipario{% endif %}
+            </button>
             {% endif %}
-            <button id="avanzaBtn" class="btn" onclick="avanzaScena()" style="font-size:0.82rem; padding:5px 14px; display:none;">Avanza →</button>
+            <button class="btn btn--compact" hidden id="avanzaBtn" onclick="avanzaScena()">Avanza →</button>
             <form method="POST" action="{{ url_for('indagini.indagini_reset', indagine_id=indagine.id) }}"
                   onsubmit="return confirm('Sei sicuro? La cronologia attuale verrà archiviata e si ripartirà da zero.');">
-                <button type="submit" class="btn btn--danger" style="font-size: 0.72rem; padding: 4px 10px;">↺ Nuova run</button>
+                <button class="btn btn--danger btn--compact" type="submit">↺ Nuova run</button>
             </form>
-            <a href="{{ url_for('indagini.indagini_player', indagine_id=indagine.id) }}" target="_blank" class="btn" style="font-size: 0.78rem; padding: 5px 12px;" title="Apri la bacheca indizi per lo screenshare">Player View ↗</a>
-            <a href="{{ url_for('indagini.indagini_editor', indagine_id=indagine.id) }}" class="btn" style="font-size: 0.78rem; padding: 5px 12px;">Editor</a>
+            <a class="btn btn--compact" href="{{ url_for('indagini.indagini_player', indagine_id=indagine.id) }}"
+               target="_blank" title="Apri la bacheca indizi per lo screenshare">Player View ↗</a>
+            <a class="btn btn--compact"
+               href="{{ url_for('indagini.indagini_editor', indagine_id=indagine.id) }}">Editor</a>
         </div>
     </div>
 
@@ -334,18 +343,20 @@
                 {% if cron.attiva %}<span class="tag-attuale">ATTUALE</span>{% endif %}
                 <span class="cronologia-data">{{ cron.creata_il | string | truncate(16, True, '') }}</span>
                 {% if not cron.attiva %}
-                <form method="POST" action="{{ url_for('indagini.indagini_attiva_cronologia', indagine_id=indagine.id, cronologia_id=cron.id) }}" style="margin:0;">
-                    <button type="submit" class="btn" style="font-size:0.65rem;padding:2px 8px;white-space:nowrap;">Attiva</button>
+                <form action="{{ url_for('indagini.indagini_attiva_cronologia', indagine_id=indagine.id, cronologia_id=cron.id) }}"
+                      class="stage-inline-form"
+                      method="POST">
+                    <button class="btn btn--micro" type="submit">Attiva</button>
                 </form>
                 {% endif %}
                 <form method="POST" action="{{ url_for('indagini.indagini_elimina_cronologia', indagine_id=indagine.id, cronologia_id=cron.id) }}"
-                      onsubmit="return confirm('Eliminare questa cronologia?');" style="margin:0;">
-                    <button type="submit" class="btn btn--danger" style="font-size:0.65rem;padding:2px 8px;">✕</button>
+                      class="stage-inline-form" onsubmit="return confirm('Eliminare questa cronologia?');">
+                    <button class="btn btn--danger btn--micro" type="submit">✕</button>
                 </form>
             </div>
             {% endfor %}
             {% else %}
-            <p id="cronologieVuote" style="color: var(--bone-dim); font-size: 0.8rem; margin: 4px 0;">
+            <p class="stage-empty-note" id="cronologieVuote">
                 Nessuna cronologia — si crea automaticamente al primo sblocco.
             </p>
             {% endif %}
@@ -420,7 +431,9 @@
     detailClose.addEventListener("click", chiudiDettaglio);
 
     let cronologiaId = RAW.cronologia_id;
-    let scenaCorrente = RAW.scena_corrente || 1;
+    let scenaCorrente = RAW.scena_corrente ?? 1;
+    let siparioAperto = !!RAW.sipario_aperto;
+    const POLL_MS = 2000;
 
     const NODI = RAW.nodi;
     const COLL = RAW.collegamenti;
@@ -1046,7 +1059,58 @@
     function aggiornaBottoneAvanza() {
         const ultimaScena = tutteLeScene[tutteLeScene.length - 1];
         const btn = document.getElementById("avanzaBtn");
-        if (btn) btn.style.display = (tutteLeScene.length > 1 && scenaCorrente < ultimaScena) ? "" : "none";
+        if (btn) btn.hidden = !(tutteLeScene.length > 1 && scenaCorrente < ultimaScena);
+    }
+
+    function aggiornaBottoneSipario(aperto) {
+        siparioAperto = !!aperto;
+        const btn = document.getElementById("siparioBtn");
+        if (!btn) return;
+        btn.classList.toggle("is-open", siparioAperto);
+        btn.textContent = siparioAperto ? "🎭 Sipario Aperto" : "🎭 Sipario";
+    }
+
+    function statiDaPayload(stati) {
+        const normalizzati = {};
+        Object.entries(stati || {}).forEach(([k, v]) => { normalizzati[parseInt(k)] = v; });
+        return normalizzati;
+    }
+
+    function statiDiversi(a, b) {
+        const keys = new Set(Object.keys(a).concat(Object.keys(b)));
+        for (const key of keys) {
+            if (a[key] !== b[key]) return true;
+        }
+        return false;
+    }
+
+    function applicaStatoRemoto(data, opts) {
+        opts = opts || {};
+        const nuovaScena = data.scena_corrente ?? 0;
+        const nuoviStati = statiDaPayload(data.stati);
+        const scenaCambiata = nuovaScena !== scenaCorrente;
+        const statiCambiati = statiDiversi(statiCorrente, nuoviStati);
+        const siparioCambiato = typeof data.sipario_aperto === "boolean" && data.sipario_aperto !== siparioAperto;
+        if (data.cronologia_id) cronologiaId = data.cronologia_id;
+        if (siparioCambiato || opts.forceSipario) aggiornaBottoneSipario(data.sipario_aperto);
+        if (!scenaCambiata && !statiCambiati) return;
+
+        const statiPrecedenti = Object.assign({}, statiCorrente);
+        scenaCorrente = nuovaScena;
+        statiCorrente = nuoviStati;
+
+        const animNew = new Set();
+        const animRevealed = new Set();
+        Object.entries(statiCorrente).forEach(([idStr, nuovo]) => {
+            const id = parseInt(idStr);
+            const vecchio = statiPrecedenti[id];
+            if (vecchio === "ASSENTE" && nuovo !== "ASSENTE") animNew.add(id);
+            if (vecchio === "BLOCCATO_VISIBILE" && nuovo === "SCOPERTO") animRevealed.add(id);
+        });
+
+        renderTutti(animNew, animRevealed, null, null, null);
+        aggiornaBottoneAvanza();
+        if (scenaCambiata) scrollToScena(scenaCorrente);
     }
 
     function scrollToScena(scena) {
@@ -1081,14 +1145,14 @@
             if (!resp.ok) { console.error("Errore avanzamento scena"); return; }
             const data = await resp.json();
 
-            scenaCorrente = data.scena_corrente;
-
             // Traccia nodi che appaiono per la prima volta (nuova scena)
             const animNew = new Set();
             Object.entries(data.stati).forEach(([k, v]) => {
                 const id = parseInt(k);
                 if (statiPrecedenti[id] === "ASSENTE" && v !== "ASSENTE") animNew.add(id);
             });
+            scenaCorrente = data.scena_corrente;
+            aggiornaBottoneSipario(data.sipario_aperto);
             statiCorrente = {};
             Object.entries(data.stati).forEach(([k, v]) => { statiCorrente[parseInt(k)] = v; });
 
@@ -1151,25 +1215,34 @@
             });
             if (resp.ok) {
                 const data = await resp.json();
-                const btn = document.getElementById("siparioBtn");
-                if (btn) {
-                    if (data.sipario_aperto) {
-                        btn.style.backgroundColor = "var(--verdigris)";
-                        btn.style.color = "#000";
-                        btn.textContent = "🎭 Sipario Aperto";
-                    } else {
-                        btn.style.backgroundColor = "var(--ink)";
-                        btn.style.color = "var(--bone)";
-                        btn.textContent = "🎭 Sipario";
-                    }
-                }
+                aggiornaBottoneSipario(data.sipario_aperto);
             } else {
-                alert("Errore nel toggle del sipario");
+                let detail = "";
+                try {
+                    const data = await resp.json();
+                    detail = data.error ? `: ${data.error}` : "";
+                } catch (_) {}
+                alert("Errore nel toggle del sipario" + detail);
             }
         } catch (e) {
             console.error("Errore fetch sipario:", e);
         }
     };
+
+    let livePollingAttivo = true;
+    async function pollLiveState() {
+        if (!livePollingAttivo) return;
+        try {
+            const resp = await fetch(`/indagini/${INDAGINE_ID}/stato-live`);
+            if (!resp.ok) return;
+            applicaStatoRemoto(await resp.json());
+        } catch (e) {
+            console.warn("Polling live non riuscito:", e);
+        }
+    }
+    setInterval(pollLiveState, POLL_MS);
+    window.addEventListener("beforeunload", function () { livePollingAttivo = false; });
+    aggiornaBottoneSipario(siparioAperto);
 
     // ----------------------------------------------------------------
     // Sblocco AJAX
@@ -1293,8 +1366,8 @@
             <span class="tag-attuale">ATTUALE</span>
             <span class="cronologia-data">${cron.creata_il.slice(0, 16).replace('T', ' ')}</span>
             <form method="POST" action="/indagini/${INDAGINE_ID}/cronologie/${cron.id}/elimina"
-                  onsubmit="return confirm('Eliminare questa cronologia?');" style="margin:0;">
-                <button type="submit" class="btn btn--danger" style="font-size:0.65rem;padding:2px 8px;">✕</button>
+                  onsubmit="return confirm('Eliminare questa cronologia?');" class="stage-inline-form">
+                <button type="submit" class="btn btn--danger btn--micro">✕</button>
             </form>`;
         lista.prepend(riga);
     }

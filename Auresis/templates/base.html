@@ -57,14 +57,23 @@
     </script>
     {% block extra_head %}{% endblock %}
 </head>
-<body>
-<div class="shell">
-    <nav class="sidebar" id="sidebar">
+<body class="stage-shell">
+<div class="shell stage-shell__frame">
+    <nav class="sidebar theatre-sidebar" id="sidebar">
     <script>
-    /* Auto-hover è il default: sidebar sempre collassata all'avvio, senza flash */
-    (function(){
-        document.getElementById('sidebar').classList.add('collapsed', 'no-transition');
-    })();
+        /* Sincronizza lo stato della sidebar prima del paint, evitando chiudi-riapri tra pagine. */
+        (function(){
+            var sidebar = document.getElementById('sidebar');
+            var autoHover = localStorage.getItem('sidebar_auto_hover') !== '0';
+            var keepHoverOpen = autoHover && sessionStorage.getItem('sidebar_hover_active') === '1';
+
+            sidebar.classList.add('no-transition');
+            if (autoHover) {
+                if (!keepHoverOpen) sidebar.classList.add('collapsed');
+            } else if (localStorage.getItem('sidebar_collapsed') !== '0') {
+                sidebar.classList.add('collapsed');
+            }
+        })();
     </script>
 
         <p class="sidebar__title">Il Registro</p>
@@ -227,7 +236,7 @@
             </svg>
         </button>
     </nav>
-    <main class="main">
+    <main class="main stage-main">
         <button class="command-trigger" id="commandTrigger" title="Apri ricerca rapida" type="button">
             <span>Ctrl</span><span>K</span>
         </button>
@@ -355,7 +364,23 @@
     var SVG_AUTO   = '<path d="M4 4l7 18 3-7 7-3z"/>';
     var SVG_MANUAL = '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>';
 
-    var autoHover = true;
+    var autoHover = localStorage.getItem('sidebar_auto_hover') !== '0';
+    var hoverOpenTimer = null;
+    var hoverCloseTimer = null;
+    var HOVER_OPEN_DELAY = 180;
+    var HOVER_CLOSE_DELAY = 260;
+    var navigatingFromSidebar = false;
+
+    function clearHoverTimers() {
+        if (hoverOpenTimer) {
+            window.clearTimeout(hoverOpenTimer);
+            hoverOpenTimer = null;
+        }
+        if (hoverCloseTimer) {
+            window.clearTimeout(hoverCloseTimer);
+            hoverCloseTimer = null;
+        }
+    }
 
     /* Rimuove no-transition dopo il primo frame per abilitare le animazioni successive */
     requestAnimationFrame(function() {
@@ -366,13 +391,53 @@
 
     /* --- Hover automatico --- */
     function onMouseEnter() {
-        if (autoHover) sidebar.classList.remove('collapsed');
+        if (!autoHover) return;
+        sessionStorage.setItem('sidebar_hover_active', '1');
+        if (hoverCloseTimer) {
+            window.clearTimeout(hoverCloseTimer);
+            hoverCloseTimer = null;
+        }
+        if (!sidebar.classList.contains('collapsed')) return;
+        hoverOpenTimer = window.setTimeout(function () {
+            if (autoHover) {
+                sessionStorage.setItem('sidebar_hover_active', '1');
+                sidebar.classList.remove('collapsed');
+            }
+            hoverOpenTimer = null;
+        }, HOVER_OPEN_DELAY);
     }
     function onMouseLeave() {
-        if (autoHover) sidebar.classList.add('collapsed');
+        if (!autoHover) return;
+        if (!navigatingFromSidebar) {
+            sessionStorage.removeItem('sidebar_hover_active');
+        }
+        if (hoverOpenTimer) {
+            window.clearTimeout(hoverOpenTimer);
+            hoverOpenTimer = null;
+        }
+        if (navigatingFromSidebar) return;
+        hoverCloseTimer = window.setTimeout(function () {
+            if (autoHover) sidebar.classList.add('collapsed');
+            hoverCloseTimer = null;
+        }, HOVER_CLOSE_DELAY);
     }
     sidebar.addEventListener('mouseenter', onMouseEnter);
     sidebar.addEventListener('mouseleave', onMouseLeave);
+    function markSidebarNavigation(event) {
+        var link = event.target.closest && event.target.closest('a.nav__item');
+        if (!link || !autoHover || sidebar.classList.contains('collapsed')) return;
+        navigatingFromSidebar = true;
+        clearHoverTimers();
+        sessionStorage.setItem('sidebar_hover_active', '1');
+    }
+    sidebar.addEventListener('pointerdown', markSidebarNavigation, true);
+    sidebar.addEventListener('mousedown', markSidebarNavigation, true);
+    sidebar.addEventListener('click', markSidebarNavigation, true);
+    window.addEventListener('pagehide', function () {
+        if (autoHover && !sidebar.classList.contains('collapsed')) {
+            sessionStorage.setItem('sidebar_hover_active', '1');
+        }
+    });
 
     /* --- Toggle hover/manuale --- */
     function updateHoverUI() {
@@ -390,7 +455,10 @@
     }
 
     hoverBtn.addEventListener('click', function () {
+        clearHoverTimers();
         autoHover = !autoHover;
+        localStorage.setItem('sidebar_auto_hover', autoHover ? '1' : '0');
+        sessionStorage.removeItem('sidebar_hover_active');
         if (autoHover) {
             sidebar.classList.add('collapsed');
         } else {
@@ -413,6 +481,28 @@
     });
 
     updateHoverUI();
+
+    if (autoHover && !sidebar.classList.contains('collapsed')) {
+        sessionStorage.setItem('sidebar_hover_active', '1');
+        window.addEventListener('mousemove', function reconcileHoverCarry(event) {
+            if (!autoHover) {
+                window.removeEventListener('mousemove', reconcileHoverCarry);
+                return;
+            }
+            var rect = sidebar.getBoundingClientRect();
+            var insideSidebar =
+                event.clientX >= rect.left &&
+                event.clientX <= rect.right &&
+                event.clientY >= rect.top &&
+                event.clientY <= rect.bottom;
+
+            if (insideSidebar) return;
+
+            sessionStorage.removeItem('sidebar_hover_active');
+            sidebar.classList.add('collapsed');
+            window.removeEventListener('mousemove', reconcileHoverCarry);
+        });
+    }
 
     /* Modalità giocatrice toggle */
     var form = document.querySelector(".modalita-toggle");

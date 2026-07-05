@@ -2,12 +2,17 @@
 {% block title %}Personaggi — Il Registro{% endblock %}
 {% block content %}
 
-<div class="page-header">
+<div class="page-header registry-header">
     <p class="page-eyebrow">Catalogo dei soggetti</p>
     <h1 class="page-title">Personaggi</h1>
+    <p class="registry-header__summary">Soggetti censiti, contaminazione e visibilità al tavolo.</p>
+    <div aria-label="Stato archivio personaggi" class="registry-header__meta">
+        <span>{{ npc_list|length }} soggetti</span>
+        <span>{{ 'vista giocatrice' if modalita_giocatrice else 'cabina master' }}</span>
+    </div>
 </div>
 
-<div class="actions-row" style="margin-bottom: 28px;">
+<div class="actions-row actions-row--spaced">
     {% if not modalita_giocatrice %}
     <a class="btn" href="{{ url_for('nuovo_npc') }}">+ Nuovo personaggio</a>
     {% endif %}
@@ -30,12 +35,15 @@
         {% endif %}
     </div>
 </div>
-<div class="entry-grid" data-list>
+<div class="entry-grid dossier-grid" data-list>
     {% for n in npc_list %}
-    <div class="card card--contaminazione" data-contaminato="{{ 'true' if n.livello_contaminazione and n.livello_contaminazione > 0 else 'false' }}" data-list-item
+    <div class="card dossier-card dossier-card--npc card--contaminazione"
+         data-contaminato="{{ 'true' if n.livello_contaminazione and n.livello_contaminazione > 0 else 'false' }}"
+         data-list-item
          data-status="{{ n.stato }}"
          data-visible="{{ 'true' if n.visibile_giocatrice else 'false' }}"
          style="--vena-width: {{ 2 + (n.livello_contaminazione or 0) * 3 }}px;">
+        <p class="dossier-card__kicker">Soggetto registrato</p>
         <h3 class="card__title"><a href="{{ url_for('dettaglio_npc', npc_id=n.id) }}">{{ n.nome }}</a></h3>
         <p class="card__subtitle">
             {{ n.ruolo or 'ruolo non specificato' }}
@@ -48,11 +56,18 @@
         <div class="card__footer">
             <span class="tag tag--{{ n.stato }}">{{ n.stato }}</span>
             {% if n.livello_contaminazione and n.livello_contaminazione > 0 %}
-            <span class="tag" style="color: var(--gold-bright); border-color: var(--gold);">AC livello {{ n.livello_contaminazione }}</span>
+            <span class="tag contamination-chip">AC livello {{ n.livello_contaminazione }}</span>
+            {% else %}
+            <span class="tag dossier-chip--quiet">AC stabile</span>
+            {% endif %}
+            {% if not modalita_giocatrice %}
+            <span class="tag {{ 'visibility-chip' if n.visibile_giocatrice else 'secret-chip' }}">
+                {{ 'visibile' if n.visibile_giocatrice else 'nascosto' }}
+            </span>
             {% endif %}
         </div>
         {% if not modalita_giocatrice %}
-        <form method="post" action="{{ url_for('npc_toggle_visibile', npc_id=n.id) }}" style="margin-top: 10px;">
+        <form action="{{ url_for('npc_toggle_visibile', npc_id=n.id) }}" class="card__visibility-form" method="post">
             <button type="submit" class="completata-toggle {% if n.visibile_giocatrice %}completata-toggle--attivo{% endif %}">
                 <span class="completata-toggle__check">{% if n.visibile_giocatrice %}✓{% endif %}</span>
                 {{ 'Mostrabile alla giocatrice' if n.visibile_giocatrice else 'Nascosto' }}
