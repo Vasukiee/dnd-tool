@@ -152,9 +152,27 @@
         applyTransform();
     }
 
+    var tickingTransform = false;
     function applyTransform() {
         if (!viewport) return;
-        viewport.setAttribute('transform', 'translate(' + transform.x + ' ' + transform.y + ') scale(' + transform.scale + ')');
+        if (!tickingTransform) {
+            window.requestAnimationFrame(function() {
+                viewport.setAttribute('transform', 'translate(' + transform.x + ' ' + transform.y + ') scale(' + transform.scale + ')');
+                tickingTransform = false;
+            });
+            tickingTransform = true;
+        }
+    }
+
+    var tickingRender = false;
+    function requestRender() {
+        if (!tickingRender) {
+            window.requestAnimationFrame(function() {
+                render();
+                tickingRender = false;
+            });
+            tickingRender = true;
+        }
     }
 
     function render() {
@@ -223,7 +241,7 @@
                 var point = clientToSvg(event.clientX, event.clientY);
                 node.x = clamp(point.x, 72, width - 230);
                 node.y = clamp(point.y, 54, height - 92);
-                render();
+                requestRender();
             });
             group.addEventListener('pointerup', function () { draggingNode = null; });
             group.addEventListener('click', function () { selectNode(node, true); });

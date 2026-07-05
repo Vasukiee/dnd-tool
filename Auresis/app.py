@@ -13,9 +13,13 @@ import copioni
 import db
 from auth import richiedi_master, utente_e_master, vista_ristretta
 from blueprints.indagini import bp as indagini_bp
+from utils_assets import ottimizza_e_minimizza_assets
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
+
+# Ottimizza e minimizza automaticamente i file statici all'avvio
+ottimizza_e_minimizza_assets(app)
 
 # Tetto massimo per il corpo di una richiesta (upload inclusi): rete di sicurezza
 # globale contro upload sproporzionati a esaurire memoria/disco.
