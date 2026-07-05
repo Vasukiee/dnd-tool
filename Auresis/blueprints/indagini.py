@@ -319,6 +319,7 @@ def indagini_live(indagine_id):
         "stati": stati,
         "cronologia_id": cronologia_attiva["id"] if cronologia_attiva else None,
         "scena_corrente": scena_corrente_val,
+        "sipario_aperto": cronologia_attiva.get("sipario_aperto", False) if cronologia_attiva else False,
     })
     return render_template(
         "indagini_live.html",
@@ -328,6 +329,28 @@ def indagini_live(indagine_id):
         cronologie=cronologie,
         graph_data=graph_data,
     )
+
+
+@bp.route("/<int:indagine_id>/stato-live")
+@richiedi_master
+def indagini_stato_live(indagine_id):
+    """API JSON per sincronizzare la vista live master con comandi esterni
+    come copione, player controls e toggle sipario."""
+    indagine = db.get_indagine(indagine_id)
+    if not indagine:
+        return jsonify({"error": "non trovata"}), 404
+    nodi = db.get_nodi_indagine(indagine_id)
+    collegamenti = db.get_collegamenti(indagine_id)
+    cronologia_attiva = db.get_cronologia_attiva(indagine_id)
+    stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"]) if cronologia_attiva else {}
+    scena_corrente_val = cronologia_attiva.get("scena_corrente", 0) if cronologia_attiva else 0
+    stati = _calcola_stati_nodi(nodi, collegamenti, stati_sblocco, scena_corrente=scena_corrente_val)
+    return jsonify({
+        "cronologia_id": cronologia_attiva["id"] if cronologia_attiva else None,
+        "scena_corrente": scena_corrente_val,
+        "sipario_aperto": cronologia_attiva.get("sipario_aperto", False) if cronologia_attiva else False,
+        "stati": stati,
+    })
 
 
 @bp.route("/<int:indagine_id>/reset", methods=["POST"])
@@ -409,9 +432,11 @@ def indagini_avanza_scena(indagine_id):
         cronologia_nuova = db.crea_cronologia(indagine_id, nome)
         cronologia_attiva = cronologia_nuova
 
+    sipario_aperto = cronologia_attiva.get("sipario_aperto", False)
     db.avanza_scena_cronologia(cronologia_attiva["id"], nuova_scena)
     if nuova_scena == 0:
         db.set_sipario_aperto(cronologia_attiva["id"], True)
+        sipario_aperto = True
 
     nodi = db.get_nodi_indagine(indagine_id)
     collegamenti = db.get_collegamenti(indagine_id)
@@ -421,6 +446,7 @@ def indagini_avanza_scena(indagine_id):
 
     return jsonify({
         "scena_corrente": nuova_scena,
+        "sipario_aperto": sipario_aperto,
         "stati": stati,
         "cronologia_nuova": {
             "id": cronologia_nuova["id"],
@@ -471,9 +497,11 @@ def indagini_stato_player(indagine_id):
         return jsonify({"error": "non trovata"}), 404
     cronologia_attiva = db.get_cronologia_attiva(indagine_id)
     if not cronologia_attiva:
-        return jsonify({"scoperti_ids": [], "scena_corrente": 0})
+        return jsonify({"scoperti_ids": [], "scena_corrente": 0, "sipario_aperto": False, "nodi": []})
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"])
     scoperti_ids = [nodo_id for nodo_id, stato in stati_sblocco.items() if stato.get("scoperto")]
+    scene_gifs = _scene_gifs_display(indagine_id)
+    scene_gifs_str = {str(k): v for k, v in scene_gifs.items()}
     # La pagina player riceve al primo caricamento solo stub dei nodi non
     # scoperti: qui alleghiamo i dati completi dei nodi ormai scoperti, così
     # il frontend può renderizzare quelli rivelati durante la sessione.
@@ -484,6 +512,7 @@ def indagini_stato_player(indagine_id):
         "scena_corrente": cronologia_attiva.get("scena_corrente", 0),
         "sipario_aperto": cronologia_attiva.get("sipario_aperto", False),
         "nodi": nodi_scoperti,
+        "scene_gifs": scene_gifs_str,
     })
 
 
@@ -492,6 +521,7 @@ def indagini_stato_player(indagine_id):
 def indagini_sipario(indagine_id):
     cronologia = db.get_cronologia_attiva(indagine_id)
     if not cronologia:
-        return jsonify({"error": "Nessuna cronologia attiva"}), 400
+        nome = f"Cronologia del {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        cronologia = db.crea_cronologia(indagine_id, nome)
     nuovo_stato = db.toggle_sipario(indagine_id)
     return jsonify({"success": True, "sipario_aperto": nuovo_stato})

@@ -2,12 +2,17 @@
 {% block title %}Fazioni — Il Registro{% endblock %}
 {% block content %}
 
-<div class="page-header">
+<div class="page-header registry-header">
     <p class="page-eyebrow">Poteri in campo</p>
     <h1 class="page-title">Fazioni</h1>
+    <p class="registry-header__summary">Alleanze, ostilità e presidi narrativi.</p>
+    <div aria-label="Stato archivio fazioni" class="registry-header__meta">
+        <span>{{ fazioni_list|length }} fazioni</span>
+        <span>relazioni operative</span>
+    </div>
 </div>
 
-<div class="actions-row" style="margin-bottom: 28px;">
+<div class="actions-row actions-row--spaced">
     <a class="btn" href="{{ url_for('nuova_fazione') }}">+ Nuova fazione</a>
 </div>
 
@@ -25,10 +30,12 @@
         <button class="list-filter" data-list-filter="relation:ostile" type="button">Ostili</button>
     </div>
 </div>
-<div class="entry-grid" data-list>
+<div class="entry-grid dossier-grid" data-list>
     {% for f in fazioni_list %}
-    <div class="card" data-active="{{ 'true' if f.attiva else 'false' }}" data-list-item
+    <div class="card dossier-card dossier-card--fazione" data-active="{{ 'true' if f.attiva else 'false' }}"
+         data-list-item
          data-relation="{{ f.relazione_pg }}">
+        <p class="dossier-card__kicker">Fazione {{ 'attiva' if f.attiva else 'archiviata' }}</p>
         <h3 class="card__title"><a href="{{ url_for('dettaglio_fazione', fazione_id=f.id) }}">{{ f.nome }}</a></h3>
         <p class="card__subtitle">{{ f.nome_popolare or '' }} {% if f.territorio %}· {{ f.territorio }}{% endif %}</p>
         {% if f.ideologia %}<p class="card__desc">{{ f.ideologia }}</p>{% endif %}

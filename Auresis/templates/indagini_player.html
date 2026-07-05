@@ -10,6 +10,20 @@
     max-width: none !important;
     padding: 0 !important;
 }
+body.stage-shell {
+    background: var(--ink) !important;
+}
+body.stage-shell::before,
+body.stage-shell::after,
+.stage-main::after,
+#react-motion-root {
+    display: none !important;
+}
+.has-react-motion .main > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+}
 
 .player-wrapper {
     display: flex;
@@ -17,6 +31,8 @@
     height: 100vh;
     overflow: hidden;
     background: var(--ink);
+    position: relative;
+    z-index: 1;
 }
 
 /* --- Header minimale --- */
@@ -82,12 +98,16 @@
     transition: opacity 0.6s ease;
     pointer-events: none;
     z-index: 0;
+    filter: brightness(0.25);
 }
 .graph-scene-bg.attivo { opacity: 1; }
 .graph-scene-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.58);
+    background:
+        radial-gradient(ellipse at 50% 42%, rgba(0, 0, 0, 0.06), transparent 34rem),
+        linear-gradient(90deg, rgba(0, 0, 0, 0.26), transparent 20%, transparent 80%, rgba(0, 0, 0, 0.26)),
+        linear-gradient(180deg, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0.20) 54%, rgba(0, 0, 0, 0.30));
     opacity: 0;
     transition: opacity 0.6s ease;
     pointer-events: none;
@@ -249,15 +269,93 @@
 .sipario-black-overlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: #000;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background:
+        radial-gradient(ellipse at 50% 42%, rgba(201, 163, 92, 0.18), transparent 22rem),
+        linear-gradient(90deg, rgba(0, 0, 0, 0.56), transparent 18%, transparent 82%, rgba(0, 0, 0, 0.56)),
+        #070505;
     opacity: 0;
+    visibility: hidden;
     pointer-events: none;
     z-index: 9999;
-    transition: opacity 1.5s ease-in-out;
+    transition: opacity 1.5s ease-in-out, visibility 0s linear 1.5s;
+}
+.sipario-black-overlay::before,
+.sipario-black-overlay::after {
+    content: '';
+    position: absolute;
+    top: -6%;
+    bottom: -6%;
+    width: 55%;
+    background:
+        linear-gradient(90deg, rgba(0, 0, 0, 0.42), transparent 18%, rgba(232, 226, 213, 0.035) 50%, transparent 82%, rgba(0, 0, 0, 0.48)),
+        repeating-linear-gradient(90deg, rgba(232, 226, 213, 0.045) 0 1px, transparent 1px 34px),
+        linear-gradient(180deg, #160807, #2b0d0b 42%, #0d0706);
+    box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.72), 0 0 60px rgba(0, 0, 0, 0.52);
+    transition: transform 1.45s cubic-bezier(0.77, 0, 0.18, 1);
+}
+.sipario-black-overlay::before {
+    left: 0;
+    border-right: 1px solid rgba(201, 163, 92, 0.24);
+    transform: translateX(-102%);
+}
+.sipario-black-overlay::after {
+    right: 0;
+    border-left: 1px solid rgba(201, 163, 92, 0.24);
+    transform: translateX(102%);
+}
+.sipario-black-overlay__mark {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 12px;
+    justify-items: center;
+    max-width: min(560px, calc(100vw - 48px));
+    padding: 26px 30px;
+    border: 1px solid rgba(201, 163, 92, 0.30);
+    background:
+        linear-gradient(180deg, rgba(232, 226, 213, 0.045), transparent),
+        rgba(10, 8, 7, 0.64);
+    color: var(--bone);
+    font-family: var(--font-mono);
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.55s ease 0.35s, transform 0.55s ease 0.35s;
+}
+.sipario-black-overlay__mark strong {
+    color: var(--gold-bright);
+    font-family: var(--font-display);
+    font-size: clamp(1.7rem, 5vw, 3.4rem);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-transform: none;
+}
+.sipario-black-overlay__mark span {
+    color: var(--bone-dim);
+    font-size: 0.72rem;
 }
 .sipario-black-overlay.attivo {
     opacity: 1;
+    visibility: visible;
     pointer-events: all;
+    transition-delay: 0s;
+}
+.sipario-black-overlay:not(.attivo) {
+    opacity: 0 !important;
+    visibility: hidden;
+}
+.sipario-black-overlay.attivo::before,
+.sipario-black-overlay.attivo::after {
+    transform: translateX(0);
+}
+.sipario-black-overlay.attivo .sipario-black-overlay__mark {
+    opacity: 1;
+    transform: translateY(0);
 }
 </style>
 
@@ -293,7 +391,13 @@
     </div>
 </div>
 
-<div class="sipario-black-overlay" id="siparioOverlay"></div>
+<div class="sipario-black-overlay" id="siparioOverlay">
+    <div class="sipario-black-overlay__mark">
+        <span>Interludio</span>
+        <strong>Sipario chiuso</strong>
+        <span>La scena deve iniziare</span>
+    </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
 <script>
@@ -302,7 +406,7 @@
     const RAW = {{ graph_data | safe }};
     const INDAGINE_ID = {{ indagine.id }};
     const POLL_MS = 2000;
-    const SCENE_GIFS = RAW.scene_gifs || {};
+    let SCENE_GIFS = RAW.scene_gifs || {};
 
     const siparioOverlay = document.getElementById("siparioOverlay");
     if (RAW.sipario_aperto) {
@@ -320,8 +424,7 @@
 
     function aggiornaSfondoScena(nuovaScena) {
         const img = SCENE_GIFS[String(nuovaScena)];
-        const isDefault = !img;
-        const targetUrl = img ? `url(${JSON.stringify(img)})` : "url('/impostazioni/sfondo_default')";
+        const targetUrl = img ? `url(${JSON.stringify(img)})` : `url('{{ url_for("sfondo_default") }}')`;
         
         if (targetUrl === currentBgImg) return;
         currentBgImg = targetUrl;
@@ -335,15 +438,13 @@
                 if (currentBgImg === targetUrl) {
                     graphSceneBg.style.backgroundImage = targetUrl;
                     graphSceneBg.classList.add("attivo");
-                    if (isDefault) graphSceneOverlay.classList.remove("attivo");
-                    else graphSceneOverlay.classList.add("attivo");
+                    graphSceneOverlay.classList.add("attivo");
                 }
             }, 600);
         } else {
             graphSceneBg.style.backgroundImage = targetUrl;
             graphSceneBg.classList.add("attivo");
-            if (isDefault) graphSceneOverlay.classList.remove("attivo");
-            else graphSceneOverlay.classList.add("attivo");
+            graphSceneOverlay.classList.add("attivo");
         }
     }
     const NODE_W = 170;
@@ -357,7 +458,7 @@
 
     // --- Stato corrente (ricostruito dal server) ---
     let scopertiIds = new Set(RAW.scoperti_ids.map(Number));
-    let scenaCorrente = RAW.scena_corrente || 1;
+    let scenaCorrente = RAW.scena_corrente ?? 1;
 
     // Costruisci statiCorrente dai dati iniziali
     let statiCorrente = {};
@@ -1041,6 +1142,9 @@
                     if (idx >= 0) NODI[idx] = n; else NODI.push(n);
                     nodoById[n.id] = n;
                 });
+            }
+            if (data.scene_gifs) {
+                SCENE_GIFS = data.scene_gifs;
             }
 
             const nuoviScopertiIds = new Set(data.scoperti_ids.map(Number));

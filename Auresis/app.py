@@ -744,7 +744,7 @@ def sfondo_default():
         # GET return the image
         img = db.get_impostazione("sfondo_default")
         if img and img.get("valore_bytea"):
-            response = make_response(img["valore_bytea"])
+            response = make_response(bytes(img["valore_bytea"]))
             # Non fidarsi del mime salvato (righe legacy potrebbero contenere un
             # tipo arbitrario): si serve solo se è un tipo immagine noto.
             mime = img.get("valore_mime")

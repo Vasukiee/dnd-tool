@@ -273,7 +273,7 @@ def toggle_sipario_globale():
     """Inverte lo stato del sipario per tutte le cronologie attive (solitamente 1)."""
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT id, sipario_aperto FROM cronologie_indagine WHERE attiva = 1")
+    cur.execute("SELECT id, sipario_aperto FROM cronologie_indagine WHERE attiva = TRUE")
     rows = cur.fetchall()
     
     # Se ce ne sono di miste, li portiamo tutti a False o True, per semplicità invertiamo il primo trovato e applichiamo a tutti
@@ -1816,7 +1816,7 @@ def get_cronologia_attiva(indagine_id):
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
-        "SELECT * FROM cronologie_indagine WHERE indagine_id = %s AND attiva = 1 LIMIT 1",
+        "SELECT * FROM cronologie_indagine WHERE indagine_id = %s AND attiva = TRUE LIMIT 1",
         (indagine_id,),
     )
     row = cur.fetchone()
@@ -1844,7 +1844,7 @@ def crea_cronologia(indagine_id, nome):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        "UPDATE cronologie_indagine SET attiva = FALSE WHERE indagine_id = %s AND attiva = 1",
+        "UPDATE cronologie_indagine SET attiva = FALSE WHERE indagine_id = %s AND attiva = TRUE",
         (indagine_id,),
     )
     cur.execute(
@@ -1863,7 +1863,7 @@ def disattiva_cronologia_attiva(indagine_id):
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        "UPDATE cronologie_indagine SET attiva = FALSE WHERE indagine_id = %s AND attiva = 1",
+        "UPDATE cronologie_indagine SET attiva = FALSE WHERE indagine_id = %s AND attiva = TRUE",
         (indagine_id,),
     )
     conn.commit()
@@ -1880,7 +1880,7 @@ def attiva_cronologia(cronologia_id, indagine_id):
         (indagine_id,),
     )
     cur.execute(
-        "UPDATE cronologie_indagine SET attiva = 1 WHERE id = %s",
+        "UPDATE cronologie_indagine SET attiva = TRUE WHERE id = %s",
         (cronologia_id,),
     )
     conn.commit()

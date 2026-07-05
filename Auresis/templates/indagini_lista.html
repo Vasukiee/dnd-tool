@@ -2,52 +2,57 @@
 {% block title %}Indagini — Il Registro{% endblock %}
 {% block content %}
 
-<div class="page-header">
-    {% if not modalita_giocatrice %}
-    <p class="page-eyebrow">Strumento da master</p>
-    {% endif %}
+<div class="page-header stage-header registry-header">
+    <p class="page-eyebrow">Bacheca investigativa</p>
     <h1 class="page-title">Indagini</h1>
+    <p class="registry-header__summary">Casi attivi, visibilità e vista live.</p>
+    <div aria-label="Stato archivio indagini" class="registry-header__meta">
+        <span>{{ indagini|length }} casi</span>
+        <span>{{ 'vista giocatrice' if modalita_giocatrice else 'strumento master' }}</span>
+    </div>
 </div>
 
-<div class="actions-row" style="margin-bottom: 28px; justify-content: space-between;">
+<div class="actions-row actions-row--between">
     {% if not modalita_giocatrice %}
     <a class="btn" href="{{ url_for('indagini.nuova_indagine') }}">+ Nuova indagine</a>
-    
-    <form method="POST" action="{{ url_for('sfondo_default') }}" enctype="multipart/form-data" style="display: flex; gap: 8px; align-items: center;">
-        <label style="font-size: 0.85rem; color: var(--bone-dim);">Sfondo di default globale:</label>
-        <input type="file" name="file" accept="image/*" required style="font-size: 0.85rem; color: var(--bone);">
-        <button type="submit" class="btn" style="padding: 4px 12px; font-size: 0.8rem;">Carica</button>
+
+    <form action="{{ url_for('sfondo_default') }}" class="stage-upload" enctype="multipart/form-data" method="POST">
+        <label>Sfondo di default globale:</label>
+        <input accept="image/*" name="file" required type="file">
+        <button class="btn btn--compact" type="submit">Carica</button>
     </form>
     {% endif %}
 </div>
 
 {% if indagini %}
-<div class="related-list">
+<div class="related-list stage-list dossier-list">
     {% for ind in indagini %}
-    <div class="related-item" style="align-items: flex-start; flex-wrap: wrap; gap: 12px;">
-        <div style="flex: 1; min-width: 0;">
-            <p style="margin: 0 0 4px 0; font-family: var(--font-display); font-size: 1.05rem;">{{ ind.titolo }}</p>
+    <div class="related-item stage-list__item indagine-row dossier-card dossier-card--indagine">
+        <div class="indagine-row__body">
+            <p class="dossier-card__kicker">Caso investigativo</p>
+            <p class="indagine-row__title">{{ ind.titolo }}</p>
             {% if ind.descrizione %}
-            <p style="margin: 0 0 6px 0; color: var(--bone-dim); font-size: 0.85rem;">{{ ind.descrizione }}</p>
+            <p class="indagine-row__desc">{{ ind.descrizione }}</p>
             {% endif %}
-            <span class="tag" style="{% if ind.attiva %}color: var(--verdigris-bright); border-color: var(--verdigris);{% else %}color: var(--bone-dim); border-color: var(--ink-line);{% endif %}">
+            <span class="tag theatre-badge {{ 'theatre-badge--active' if ind.attiva else 'theatre-badge--quiet' }}">
                 {{ 'attiva' if ind.attiva else 'archiviata' }}
             </span>
             {% if not modalita_giocatrice %}
-            <span class="tag" style="{% if ind.visibile_giocatrice %}color: var(--gold-bright); border-color: var(--gold);{% else %}color: var(--bone-dim); border-color: var(--ink-line);{% endif %}">
+            <span class="tag theatre-badge {{ 'visibility-chip' if ind.visibile_giocatrice else 'secret-chip' }}">
                 {{ 'visibile' if ind.visibile_giocatrice else 'nascosta' }}
             </span>
             {% endif %}
         </div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <div class="indagine-row__actions">
             {% if modalita_giocatrice %}
-            <a class="btn" href="{{ url_for('indagini.indagini_player', indagine_id=ind.id) }}" style="border-color: var(--gold); color: var(--gold-bright);">Bacheca Indizi</a>
+            <a class="btn btn--signal" href="{{ url_for('indagini.indagini_player', indagine_id=ind.id) }}">Bacheca
+                Indizi</a>
             {% else %}
             <a class="btn" href="{{ url_for('indagini.indagini_editor', indagine_id=ind.id) }}">Editor</a>
-            <a class="btn" href="{{ url_for('indagini.indagini_live', indagine_id=ind.id) }}" style="border-color: var(--gold); color: var(--gold-bright);">Vista live</a>
-            <a class="btn" href="{{ url_for('indagini.edita_indagine', indagine_id=ind.id) }}" style="font-size: 0.75rem; padding: 5px 10px;">Modifica</a>
+            <a class="btn btn--signal" href="{{ url_for('indagini.indagini_live', indagine_id=ind.id) }}">Vista live</a>
+            <a class="btn btn--compact" href="{{ url_for('indagini.edita_indagine', indagine_id=ind.id) }}">Modifica</a>
             <form method="POST" action="{{ url_for('indagini.elimina_indagine', indagine_id=ind.id) }}" onsubmit="return confirm('Eliminare l\'indagine e tutti i suoi nodi?');">
-                <button type="submit" class="btn btn--danger" style="font-size: 0.75rem; padding: 5px 10px;">Elimina</button>
+                <button class="btn btn--danger btn--compact" type="submit">Elimina</button>
             </form>
             {% endif %}
         </div>
@@ -57,7 +62,7 @@
 {% else %}
 <div class="empty-state">
     <p class="empty-state__title">Nessuna indagine ancora.</p>
-    <p style="color: var(--bone-dim); font-size: 0.85rem;">Crea la prima per iniziare a costruire la mappa degli indizi.</p>
+    <p>Crea la prima per iniziare a costruire la mappa degli indizi.</p>
 </div>
 {% endif %}
 

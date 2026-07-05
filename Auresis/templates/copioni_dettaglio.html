@@ -1252,10 +1252,11 @@
                 });
 
                 if (resp.ok) {
+                    const data = await resp.json();
                     btn.style.backgroundColor = 'rgba(201, 163, 92, 0.2)';
                     btn.style.borderColor = 'var(--gold)';
                     btn.style.color = 'var(--gold-bright)';
-                    btn.innerHTML = btn.innerHTML + ' ✓';
+                    btn.innerHTML = btn.innerHTML + (data.sipario_aperto ? ' ✓ Sipario aperto' : ' ✓');
                     btn.disabled = true;
                     btn.style.cursor = 'default';
                 } else {
@@ -1277,17 +1278,21 @@
             {% endif %}
 
             try {
-                const resp = await fetch(`/impostazioni/sipario_globale_toggle`, {
+                const indagineEl = document.querySelector('[data-indagine-id]');
+                const indagineId = indagineEl ? indagineEl.dataset.indagineId : null;
+                const endpoint = indagineId ? `/indagini/${indagineId}/sipario` : `/impostazioni/sipario_globale_toggle`;
+                const resp = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({})
                 });
 
                 if (resp.ok) {
+                    const data = await resp.json();
                     btn.style.backgroundColor = 'rgba(201, 163, 92, 0.2)';
                     btn.style.borderColor = 'var(--gold)';
                     btn.style.color = 'var(--gold-bright)';
-                    btn.innerHTML = btn.innerHTML + ' ✓';
+                    btn.innerHTML = btn.innerHTML + (data.sipario_aperto ? ' ✓ Sipario aperto' : ' ✓ Sipario chiuso');
                     btn.disabled = true;
                     btn.style.cursor = 'default';
                 } else {
