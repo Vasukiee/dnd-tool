@@ -59,6 +59,48 @@
 </head>
 <body class="stage-shell">
 <div class="shell stage-shell__frame">
+    <!-- Intestazione Mobile -->
+    <header class="mobile-header">
+        <button aria-label="Apri menu" class="mobile-header__menu-btn" id="mobileMenuBtn">
+            <svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                 viewBox="0 0 24 24" width="24">
+                <line x1="3" x2="21" y1="12" y2="12"></line>
+                <line x1="3" x2="21" y1="6" y2="6"></line>
+                <line x1="3" x2="21" y1="18" y2="18"></line>
+            </svg>
+        </button>
+        <span class="mobile-header__title">Il Registro</span>
+        <div class="mobile-header__actions">
+            <button aria-label="Ricerca rapida" class="mobile-header__action-btn" id="mobileSearchBtn">
+                <svg fill="none" height="20" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                     viewBox="0 0 24 24" width="20">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" x2="16.65" y1="21" y2="16.65"/>
+                </svg>
+            </button>
+            <form action="{{ url_for('toggle_modalita_giocatrice') }}" class="modalita-toggle" data-attiva="{{ 'true' if modalita_giocatrice else 'false' }}"
+                  method="post">
+                <button class="mobile-header__action-btn" title="{{ 'Mostra sezioni da master' if modalita_giocatrice else 'Nascondi sezioni da master' }}"
+                        type="submit">
+                    {% if modalita_giocatrice %}
+                    <!-- icona: occhio chiuso/barrato -->
+                    <svg fill="none" height="20" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="20">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                        <line x1="1" x2="23" y1="1" y2="23"/>
+                    </svg>
+                    {% else %}
+                    <!-- icona: occhio aperto -->
+                    <svg fill="none" height="20" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" width="20">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                    {% endif %}
+                </button>
+            </form>
+        </div>
+    </header>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
     <nav class="sidebar theatre-sidebar" id="sidebar">
     <script>
         /* Sincronizza lo stato della sidebar prima del paint, evitando chiudi-riapri tra pagine. */
@@ -505,20 +547,21 @@
     }
 
     /* Modalità giocatrice toggle */
-    var form = document.querySelector(".modalita-toggle");
-    if (!form) return;
-    form.addEventListener("submit", function (e) {
-        if (form.dataset.attiva !== "true") return;
-        if (sessionStorage.getItem("sbloccato") === "1") {
-            var inp = document.createElement("input");
-            inp.type = "hidden";
-            inp.name = "sbloccato_tab";
-            inp.value = "1";
-            form.appendChild(inp);
-        } else {
-            e.preventDefault();
-            window.location.href = "{{ url_for('sblocca_modalita') }}?next=" + encodeURIComponent(window.location.pathname);
-        }
+    var forms = document.querySelectorAll(".modalita-toggle");
+    forms.forEach(function(form) {
+        form.addEventListener("submit", function (e) {
+            if (form.dataset.attiva !== "true") return;
+            if (sessionStorage.getItem("sbloccato") === "1") {
+                var inp = document.createElement("input");
+                inp.type = "hidden";
+                inp.name = "sbloccato_tab";
+                inp.value = "1";
+                form.appendChild(inp);
+            } else {
+                e.preventDefault();
+                window.location.href = "{{ url_for('sblocca_modalita') }}?next=" + encodeURIComponent(window.location.pathname);
+            }
+        });
     });
     /* ---- pannello palette ---- */
     var VARIABILI = [
@@ -597,6 +640,32 @@
                 localStorage.removeItem("dnd_palette");
                 window.location.reload();
             }
+        });
+    }
+
+    /* ---- Gestione Menu Mobile ---- */
+    var mobileMenuBtn = document.getElementById("mobileMenuBtn");
+    var sidebarBackdrop = document.getElementById("sidebarBackdrop");
+    
+    if (mobileMenuBtn && sidebarBackdrop) {
+        mobileMenuBtn.addEventListener("click", function() {
+            sidebar.classList.add("mobile-open");
+            sidebarBackdrop.classList.add("is-visible");
+            document.body.style.overflow = "hidden"; /* Prevent scrolling behind */
+        });
+
+        sidebarBackdrop.addEventListener("click", function() {
+            sidebar.classList.remove("mobile-open");
+            sidebarBackdrop.classList.remove("is-visible");
+            document.body.style.overflow = "";
+        });
+    }
+
+    var mobileSearchBtn = document.getElementById("mobileSearchBtn");
+    if (mobileSearchBtn) {
+        mobileSearchBtn.addEventListener("click", function() {
+            var trigger = document.getElementById('commandTrigger');
+            if (trigger) trigger.click();
         });
     }
 })();
