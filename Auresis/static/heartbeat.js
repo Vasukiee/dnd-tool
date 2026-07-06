@@ -21,10 +21,18 @@
 
     // --- Interval management ---
     var timer = null;
+    var firstPingTimer = null;
 
     function start() {
         if (timer !== null) return;
-        ping(); // immediate ping when becoming active
+        if (firstPingTimer === null) {
+            firstPingTimer = setTimeout(function () {
+                firstPingTimer = null;
+                if (timer !== null && document.visibilityState === 'visible') {
+                    ping();
+                }
+            }, 10000);
+        }
         timer = setInterval(ping, INTERVAL_MS);
         showDot();
     }
@@ -33,6 +41,10 @@
         if (timer === null) return;
         clearInterval(timer);
         timer = null;
+        if (firstPingTimer !== null) {
+            clearTimeout(firstPingTimer);
+            firstPingTimer = null;
+        }
         hideDot();
     }
 

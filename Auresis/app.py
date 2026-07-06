@@ -17,6 +17,7 @@ from utils_assets import ottimizza_e_minimizza_assets
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 31536000
 
 # Ottimizza e minimizza automaticamente i file statici all'avvio
 ottimizza_e_minimizza_assets(app)
@@ -80,6 +81,8 @@ def _csrf_protezione():
     """CSRF minimale: genera un token per-sessione e lo pretende su ogni
     richiesta mutante (POST/PUT/PATCH/DELETE), da campo form `csrf_token` o
     header `X-CSRFToken`. L'iniezione lato client è centralizzata in base.html."""
+    if request.endpoint == "static":
+        return
     if "_csrf_token" not in session:
         session["_csrf_token"] = secrets.token_hex(32)
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
@@ -92,6 +95,15 @@ def _csrf_protezione():
 @app.context_processor
 def _inietta_csrf_token():
     return {"csrf_token": session.get("_csrf_token", "")}
+
+
+@app.after_request
+def _cache_statici(response):
+    if request.endpoint == "static":
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        response.headers.pop("Set-Cookie", None)
+        response.headers.pop("Vary", None)
+    return response
 
 
 app.register_blueprint(indagini_bp)
