@@ -8,12 +8,25 @@
           name="description">
     <title>{% block title %}Il Registro{% endblock %}</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
-    <link href="https://fonts.googleapis.com" rel="preconnect">
-    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
-          media="print"
-          onload="this.media='all'"
-          rel="stylesheet">
+    <script>
+        if (window.matchMedia && window.matchMedia('(min-width: 801px)').matches) {
+            var fontPreconnect = document.createElement('link');
+            fontPreconnect.href = 'https://fonts.googleapis.com';
+            fontPreconnect.rel = 'preconnect';
+            document.head.appendChild(fontPreconnect);
+
+            var fontCrossPreconnect = document.createElement('link');
+            fontCrossPreconnect.href = 'https://fonts.gstatic.com';
+            fontCrossPreconnect.rel = 'preconnect';
+            fontCrossPreconnect.crossOrigin = '';
+            document.head.appendChild(fontCrossPreconnect);
+
+            var fontSheet = document.createElement('link');
+            fontSheet.href = 'https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap';
+            fontSheet.rel = 'stylesheet';
+            document.head.appendChild(fontSheet);
+        }
+    </script>
     <noscript>
         <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
               rel="stylesheet">
@@ -32,6 +45,13 @@
             --font-display: Fraunces, Georgia, serif;
             --font-body: "IBM Plex Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+        @media (max-width: 800px) {
+            :root {
+                --font-display: Georgia, "Times New Roman", serif;
+                --font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            }
         }
         * { box-sizing: border-box; }
         html { background: var(--ink); -webkit-font-smoothing: antialiased; }
@@ -923,8 +943,9 @@
     var mobileSearchBtn = document.getElementById("mobileSearchBtn");
     if (mobileSearchBtn) {
         mobileSearchBtn.addEventListener("click", function() {
-            var trigger = document.getElementById('commandTrigger');
-            if (trigger) trigger.click();
+            if (typeof window.openCommandPalette === 'function') {
+                window.openCommandPalette();
+            }
         });
     }
 })();
@@ -941,16 +962,16 @@
         var activeIndex = 0;
 
         function visibleItems() {
-            return items.filter(function (item) { return item.offsetParent !== null; });
+            return items.filter(function (item) { return !item.hidden; });
         }
 
-        function setActive(index) {
+        function setActive(index, shouldScroll) {
             var visible = visibleItems();
             if (!visible.length) return;
             activeIndex = (index + visible.length) % visible.length;
             items.forEach(function (item) { item.classList.remove('is-active'); });
             visible[activeIndex].classList.add('is-active');
-            visible[activeIndex].scrollIntoView({ block: 'nearest' });
+            if (shouldScroll) visible[activeIndex].scrollIntoView({ block: 'nearest' });
         }
 
         function filterItems() {
@@ -964,7 +985,7 @@
             });
             empty.hidden = found !== 0;
             activeIndex = 0;
-            setActive(0);
+            setActive(0, false);
         }
 
         function openPalette() {
@@ -982,6 +1003,7 @@
 
         var trigger = document.getElementById('commandTrigger');
         if (trigger) trigger.addEventListener('click', openPalette);
+        window.openCommandPalette = openPalette;
 
         document.addEventListener('keydown', function (event) {
             if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
@@ -995,10 +1017,10 @@
                 closePalette();
             } else if (event.key === 'ArrowDown') {
                 event.preventDefault();
-                setActive(activeIndex + 1);
+                setActive(activeIndex + 1, true);
             } else if (event.key === 'ArrowUp') {
                 event.preventDefault();
-                setActive(activeIndex - 1);
+                setActive(activeIndex - 1, true);
             } else if (event.key === 'Enter') {
                 var visible = visibleItems();
                 if (visible[activeIndex]) {
