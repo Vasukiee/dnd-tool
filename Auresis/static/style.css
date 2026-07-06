@@ -21,6 +21,14 @@
     --font-mono: 'JetBrains Mono', monospace;
 }
 
+@media (max-width: 800px) {
+    :root {
+        --font-display: Georgia, 'Times New Roman', serif;
+        --font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+}
+
 * {
     box-sizing: border-box;
 }
@@ -5688,6 +5696,14 @@ html.motion-disabled .stage-main::after {
 
     .dossier-list .dossier-card {
         align-items: stretch;
+    }
+}
+
+@media (max-width: 800px) {
+    .nav__item,
+    .briefing-row,
+    .command-trigger {
+        transition: none;
     }
 }
 
