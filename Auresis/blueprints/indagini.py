@@ -46,6 +46,16 @@ def _calcola_stati_nodi(nodi, collegamenti, stati_sblocco, scena_corrente=None):
     return stati
 
 
+def _prima_scena_nodi(nodi):
+    scene = [n["numero_nodo"] // 10 for n in nodi]
+    return min(scene) if scene else 0
+
+
+def _scena_corrente_effettiva(nodi, cronologia_attiva):
+    scena = cronologia_attiva.get("scena_corrente", 0) if cronologia_attiva else 0
+    return scena if scena > 0 else _prima_scena_nodi(nodi)
+
+
 def _redigi_nodi_non_scoperti(nodi):
     """Versione player-safe della lista nodi: i non scoperti diventano stub
     con i soli campi necessari al layout (id, numero_nodo). Titoli, descrizioni
@@ -309,7 +319,7 @@ def indagini_live(indagine_id):
     collegamenti = db.get_collegamenti(indagine_id)
     cronologia_attiva = db.get_cronologia_attiva(indagine_id)
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"]) if cronologia_attiva else {}
-    scena_corrente_val = cronologia_attiva.get("scena_corrente", 0) if cronologia_attiva else 0
+    scena_corrente_val = _scena_corrente_effettiva(nodi, cronologia_attiva)
     nodi = _merge_sblocco_in_nodi(nodi, stati_sblocco)
     stati = _calcola_stati_nodi(nodi, collegamenti, stati_sblocco, scena_corrente=scena_corrente_val)
     cronologie = db.get_cronologie_indagine(indagine_id)
@@ -343,7 +353,7 @@ def indagini_stato_live(indagine_id):
     collegamenti = db.get_collegamenti(indagine_id)
     cronologia_attiva = db.get_cronologia_attiva(indagine_id)
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"]) if cronologia_attiva else {}
-    scena_corrente_val = cronologia_attiva.get("scena_corrente", 0) if cronologia_attiva else 0
+    scena_corrente_val = _scena_corrente_effettiva(nodi, cronologia_attiva)
     stati = _calcola_stati_nodi(nodi, collegamenti, stati_sblocco, scena_corrente=scena_corrente_val)
     return jsonify({
         "cronologia_id": cronologia_attiva["id"] if cronologia_attiva else None,
@@ -381,7 +391,7 @@ def indagini_sblocca_nodo(indagine_id, nodo_id):
     nodi = db.get_nodi_indagine(indagine_id)
     collegamenti = db.get_collegamenti(indagine_id)
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"])
-    scena_corrente_val = cronologia_attiva.get("scena_corrente", 0)
+    scena_corrente_val = _scena_corrente_effettiva(nodi, cronologia_attiva)
     nodi = _merge_sblocco_in_nodi(nodi, stati_sblocco)
     stati = _calcola_stati_nodi(nodi, collegamenti, stati_sblocco, scena_corrente=scena_corrente_val)
     return jsonify({
@@ -468,7 +478,7 @@ def indagini_player(indagine_id):
     collegamenti = db.get_collegamenti(indagine_id)
     cronologia_attiva = db.get_cronologia_attiva(indagine_id)
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"]) if cronologia_attiva else {}
-    scena_corrente_val = cronologia_attiva.get("scena_corrente", 0) if cronologia_attiva else 0
+    scena_corrente_val = _scena_corrente_effettiva(nodi, cronologia_attiva)
     nodi = _redigi_nodi_non_scoperti(_merge_sblocco_in_nodi(nodi, stati_sblocco))
     scoperti_ids = [nid for nid, stato in stati_sblocco.items() if stato.get("scoperto")]
     scene_gifs = _scene_gifs_display(indagine_id)
@@ -497,7 +507,9 @@ def indagini_stato_player(indagine_id):
         return jsonify({"error": "non trovata"}), 404
     cronologia_attiva = db.get_cronologia_attiva(indagine_id)
     if not cronologia_attiva:
-        return jsonify({"scoperti_ids": [], "scena_corrente": 0, "sipario_aperto": False, "nodi": []})
+        nodi = db.get_nodi_indagine(indagine_id)
+        return jsonify(
+            {"scoperti_ids": [], "scena_corrente": _prima_scena_nodi(nodi), "sipario_aperto": False, "nodi": []})
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"])
     scoperti_ids = [nodo_id for nodo_id, stato in stati_sblocco.items() if stato.get("scoperto")]
     scene_gifs = _scene_gifs_display(indagine_id)
@@ -509,7 +521,7 @@ def indagini_stato_player(indagine_id):
     nodi_scoperti = [n for n in nodi if n.get("scoperto")]
     return jsonify({
         "scoperti_ids": scoperti_ids,
-        "scena_corrente": cronologia_attiva.get("scena_corrente", 0),
+        "scena_corrente": _scena_corrente_effettiva(nodi, cronologia_attiva),
         "sipario_aperto": cronologia_attiva.get("sipario_aperto", False),
         "nodi": nodi_scoperti,
         "scene_gifs": scene_gifs_str,
