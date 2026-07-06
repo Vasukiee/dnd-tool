@@ -9,16 +9,19 @@
     <link as="style" href="{{ url_for('static', filename='style.min.css') }}" rel="preload">
     <link href="{{ url_for('static', filename='style.min.css') }}" rel="stylesheet">
     <script>
-    /* Applica la palette personalizzata salvata in locale, prima del paint, per evitare flash. */
-    (function () {
-        try {
-            var salvata = JSON.parse(localStorage.getItem("dnd_palette") || "{}");
-            var root = document.documentElement.style;
-            for (var v in salvata) {
-                root.setProperty(v, salvata[v]);
-            }
-        } catch (e) {}
-    })();
+        /* Applica preferenze locali prima del paint, per evitare flash. */
+        (function () {
+            try {
+                if (localStorage.getItem("dnd_motion_disabled") === "1") {
+                    document.documentElement.classList.add("motion-disabled");
+                }
+                var salvata = JSON.parse(localStorage.getItem("dnd_palette") || "{}");
+                var root = document.documentElement.style;
+                for (var v in salvata) {
+                    root.setProperty(v, salvata[v]);
+                }
+            } catch (e) {}
+        })();
     </script>
     <script>
     /* CSRF: inietta automaticamente il token in ogni form POST (anche creati
@@ -233,6 +236,13 @@
         <!-- Pannello personalizzazione colori -->
         <div id="palette-panel" class="palette-panel" hidden>
             <p class="palette-panel__title">Colori</p>
+            <div class="palette-motion">
+                <span class="palette-motion__label">Animazioni</span>
+                <button aria-pressed="false" class="palette-motion__toggle" id="motionToggleBtn" type="button">
+                    <span aria-hidden="true"></span>
+                    <strong>Attive</strong>
+                </button>
+            </div>
             <div id="palette-list"></div>
             <div class="palette-reset">
                 <button type="button" id="palette-reset-btn" class="palette-reset-btn">Reset Predefiniti</button>
@@ -621,6 +631,31 @@
     var paletteBtn = document.getElementById("palette-btn");
     var palettePanel = document.getElementById("palette-panel");
     var paletteResetBtn = document.getElementById("palette-reset-btn");
+    var motionToggleBtn = document.getElementById("motionToggleBtn");
+
+    function updateMotionToggle() {
+        if (!motionToggleBtn) return;
+        var disabled = localStorage.getItem("dnd_motion_disabled") === "1";
+        document.documentElement.classList.toggle("motion-disabled", disabled);
+        motionToggleBtn.setAttribute("aria-pressed", disabled ? "true" : "false");
+        motionToggleBtn.title = disabled ? "Riattiva animazioni" : "Disattiva animazioni";
+        var label = motionToggleBtn.querySelector("strong");
+        if (label) label.textContent = disabled ? "Spente" : "Attive";
+    }
+
+    if (motionToggleBtn) {
+        updateMotionToggle();
+        motionToggleBtn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            var disabled = localStorage.getItem("dnd_motion_disabled") === "1";
+            if (disabled) {
+                localStorage.removeItem("dnd_motion_disabled");
+            } else {
+                localStorage.setItem("dnd_motion_disabled", "1");
+            }
+            updateMotionToggle();
+        });
+    }
 
     if (paletteBtn && palettePanel) {
         paletteBtn.addEventListener("click", function (e) {
