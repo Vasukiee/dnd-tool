@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, make_response, abort
 from werkzeug.security import check_password_hash
+from werkzeug.utils import secure_filename
 
 import copioni
 import db
@@ -567,9 +568,10 @@ def _salva_sfondo_location_da_form(location_id):
         if db.get_storage_mode() == "disk":
             cartella = os.path.join(app.root_path, "static", "sfondi_luoghi")
             os.makedirs(cartella, exist_ok=True)
-            with open(os.path.join(cartella, f"luogo_{location_id}{ext}"), "wb") as f:
+            nome_file = secure_filename(f"luogo_{location_id}{ext}")
+            with open(os.path.join(cartella, nome_file), "wb") as f:
                 f.write(data)
-            db.save_sfondo_location(location_id, url=f"/static/sfondi_luoghi/luogo_{location_id}{ext}")
+            db.save_sfondo_location(location_id, url=f"/static/sfondi_luoghi/{nome_file}")
         else:
             db.save_sfondo_location(location_id, data=data, mime=mime)
         return None
