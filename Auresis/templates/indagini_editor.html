@@ -237,6 +237,10 @@
                          style="margin-top: 6px; width: 100%; border-radius: 3px; border: 1px dashed var(--ink-line); max-height: 80px; object-fit: cover; opacity: 0.6;">
                     <span style="font-family: var(--font-mono); font-size: 0.62rem; color: var(--bone-dim);">da: {{ scene_ereditate[s][1] }}</span>
                     {% endif %}
+                    {% set nome_luogo = locations | selectattr('id', 'equalto', scene_location.get(s)) | map(attribute='nome') | first %}
+                    {% if nome_luogo and not scene_gifs.get(s) and (not scene_ereditate.get(s) or scene_ereditate[s][1] != nome_luogo) %}
+                    <span style="display: block; font-family: var(--font-mono); font-size: 0.62rem; color: var(--bone-dim);">sfondo di {{ nome_luogo }} da aggiungere</span>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
