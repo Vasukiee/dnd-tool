@@ -530,11 +530,54 @@ def edita_location(location_id):
         kwargs = _kwargs_da_form(request.form, ["tipo", "descrizione_breve", "stato_attuale", "note"])
         kwargs["fazione_controllante_id"] = _int_or_none(request.form.get("fazione_controllante_id"))
         db.upsert_location(request.form["nome"], **kwargs)
+        errore_sfondo = _salva_sfondo_location_da_form(location_id)
+        if errore_sfondo:
+            flash(f"Luogo '{request.form['nome']}' aggiornato, ma lo sfondo non è stato salvato: {errore_sfondo}")
+            return redirect(url_for("edita_location", location_id=location_id))
         flash(f"Luogo '{request.form['nome']}' aggiornato.")
         return redirect(url_for("dettaglio_location", location_id=location_id))
 
     fazioni = db.get_all_fazioni_full()
-    return render_template("locations_form.html", active="locations", location=location, fazioni=fazioni)
+    sfondo = db.get_sfondo_location_info(location_id)
+    sfondo_anteprima = None
+    if sfondo and sfondo["has_file"]:
+        versione = int(sfondo["aggiornato"].timestamp()) if hasattr(sfondo["aggiornato"], "timestamp") else sfondo["aggiornato"]
+        sfondo_anteprima = url_for("indagini.sfondo_location", location_id=location_id, v=versione)
+    elif sfondo:
+        sfondo_anteprima = sfondo["url"]
+    return render_template("locations_form.html", active="locations", location=location, fazioni=fazioni,
+                           sfondo=sfondo, sfondo_anteprima=sfondo_anteprima)
+
+
+def _salva_sfondo_location_da_form(location_id):
+    """Sfondo usato dalle scene d'indagine ambientate nel luogo. Ritorna un
+    messaggio d'errore, o None se è andato tutto bene (o non c'era nulla da fare)."""
+    if request.form.get("rimuovi_sfondo") == "1":
+        db.delete_sfondo_location(location_id)
+        return None
+    file = request.files.get("sfondo_file")
+    if file and file.filename:
+        ext = os.path.splitext(file.filename)[1].lower()
+        mime = _MIME_PER_EXT_IMMAGINE.get(ext)
+        if not mime:
+            return "formato non supportato (usa JPG, PNG, GIF o WEBP)."
+        data = file.read()
+        if len(data) > _MAX_SFONDO_BYTES:
+            return "immagine troppo grande (max 8 MB)."
+        if db.get_storage_mode() == "disk":
+            cartella = os.path.join(app.root_path, "static", "sfondi_luoghi")
+            os.makedirs(cartella, exist_ok=True)
+            with open(os.path.join(cartella, f"luogo_{location_id}{ext}"), "wb") as f:
+                f.write(data)
+            db.save_sfondo_location(location_id, url=f"/static/sfondi_luoghi/luogo_{location_id}{ext}")
+        else:
+            db.save_sfondo_location(location_id, data=data, mime=mime)
+        return None
+    url = request.form.get("sfondo_url", "").strip()
+    attuale = db.get_sfondo_location_info(location_id)
+    if url and url != (attuale or {}).get("url"):
+        db.save_sfondo_location(location_id, url=url)
+    return None
 
 
 @app.route("/locations/<int:location_id>/elimina", methods=["POST"])
