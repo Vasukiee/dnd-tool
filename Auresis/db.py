@@ -1987,26 +1987,6 @@ def upsert_scena_gif(indagine_id, numero_scena, gif_url):
     conn.close()
 
 
-def save_scena_gif_file(indagine_id, numero_scena, data, mime):
-    """Salva i byte dell'immagine di sfondo nel DB (persistente tra i deploy,
-    a differenza del filesystem di Render). Azzera l'eventuale gif_url."""
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        """INSERT INTO scene_indagine (indagine_id, numero_scena, gif_url, gif_data, gif_mime, gif_data_aggiornata)
-           VALUES (%s, %s, NULL, %s, %s, NOW())
-           ON CONFLICT (indagine_id, numero_scena)
-           DO UPDATE SET gif_url = NULL,
-                         gif_data = EXCLUDED.gif_data,
-                         gif_mime = EXCLUDED.gif_mime,
-                         gif_data_aggiornata = NOW()""",
-        (indagine_id, numero_scena, psycopg2.Binary(data), mime),
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
-
-
 def get_scena_gif_file(indagine_id, numero_scena):
     """Restituisce (data, mime) dell'immagine salvata nel DB, o None."""
     conn = get_connection()
@@ -2105,6 +2085,30 @@ def get_sfondo_location_file(location_id):
     if not row:
         return None
     return bytes(row["data"]), row["mime"]
+
+
+def get_sfondo_location_info(location_id):
+    """{url, has_file, aggiornato} dello sfondo del luogo, senza i byte; None se assente."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        """SELECT url, (data IS NOT NULL) AS has_file, aggiornato
+           FROM sfondi_location WHERE location_id = %s""",
+        (location_id,),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return dict(row) if row else None
+
+
+def delete_sfondo_location(location_id):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM sfondi_location WHERE location_id = %s", (location_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
 
 
 if __name__ == "__main__":

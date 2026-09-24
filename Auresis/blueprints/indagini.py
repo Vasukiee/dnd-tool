@@ -1,10 +1,9 @@
 import json
-import os
 from datetime import datetime
 
 import db
 from auth import richiedi_master, vista_ristretta
-from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, url_for, \
+from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for, \
     Response
 
 bp = Blueprint("indagini", __name__, url_prefix="/indagini")
@@ -89,15 +88,6 @@ def _merge_sblocco_in_nodi(nodi, stati_sblocco):
     return nodi
 
 
-_IMAGE_MIME_PER_EXT = {
-    ".gif": "image/gif",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".png": "image/png",
-}
-_MAX_SCENA_GIF_BYTES = 10 * 1024 * 1024
-
-
 def _scene_gifs_dirette(indagine_id):
     """Solo le immagini impostate sulla scena stessa (per i campi dell'editor)."""
     out = {}
@@ -133,10 +123,6 @@ def _scene_gifs_display(indagine_id):
     out = {n: url for n, (url, _) in _scene_gifs_ereditate(indagine_id).items()}
     out.update(_scene_gifs_dirette(indagine_id))
     return out
-
-
-def _url_sfondo_interno(gif_url, indagine_id, numero_scena):
-    return gif_url.startswith(f"/indagini/{indagine_id}/scene/{numero_scena}/sfondo")
 
 
 @bp.route("/")
@@ -220,62 +206,13 @@ def indagini_editor(indagine_id):
 @bp.route("/<int:indagine_id>/scene/<int:numero_scena>/gif", methods=["POST"])
 @richiedi_master
 def indagini_salva_scena_gif(indagine_id, numero_scena):
-    uploaded = request.files.get("gif_file")
-    gif_url = request.form.get("gif_url", "").strip()
-    location_id = request.form.get("location_id", type=int)
-    sul_luogo = request.form.get("sul_luogo") == "1" and location_id is not None
-
-    db.set_scena_location(indagine_id, numero_scena, location_id)
-
-    data = mime = ext = None
-    if uploaded and uploaded.filename:
-        ext = os.path.splitext(uploaded.filename)[1].lower()
-        mime = _IMAGE_MIME_PER_EXT.get(ext)
-        if not mime:
-            flash("Formato non supportato. Usa GIF, JPG o PNG.")
-            return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
-        data = uploaded.read()
-        if len(data) > _MAX_SCENA_GIF_BYTES:
-            flash("Immagine troppo grande (max 10 MB).")
-            return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
-
-    if sul_luogo:
-        # L'immagine va sul luogo; la scena perde quella propria, altrimenti
-        # continuerebbe a coprire quella appena caricata.
-        if data is not None:
-            if db.get_storage_mode() == "disk":
-                path = _salva_su_disco("sfondi_luoghi", f"luogo_{location_id}{ext}", data)
-                db.save_sfondo_location(location_id, url=path)
-            else:
-                db.save_sfondo_location(location_id, data=data, mime=mime)
-        elif _url_sfondo_interno(gif_url, indagine_id, numero_scena):
-            # Promuove al luogo l'immagine già caricata sulla scena.
-            esistente = db.get_scena_gif_file(indagine_id, numero_scena)
-            if esistente:
-                db.save_sfondo_location(location_id, data=esistente[0], mime=esistente[1])
-        elif gif_url:
-            db.save_sfondo_location(location_id, url=gif_url)
+    """Collega la scena a un luogo: lo sfondo si sceglie nella pagina del luogo.
+    Le immagini salvate in passato sulla scena restano (e hanno la precedenza)
+    finché non vengono rimosse da qui."""
+    db.set_scena_location(indagine_id, numero_scena, request.form.get("location_id", type=int))
+    if request.form.get("rimuovi_immagine") == "1":
         db.upsert_scena_gif(indagine_id, numero_scena, None)
-    elif data is not None:
-        if db.get_storage_mode() == "disk":
-            path = _salva_su_disco("scene_gifs", f"indagine_{indagine_id}_scena_{numero_scena}{ext}", data)
-            db.upsert_scena_gif(indagine_id, numero_scena, path)
-        else:
-            db.save_scena_gif_file(indagine_id, numero_scena, data, mime)
-    elif _url_sfondo_interno(gif_url, indagine_id, numero_scena):
-        pass
-    else:
-        db.upsert_scena_gif(indagine_id, numero_scena, gif_url)
-
     return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
-
-
-def _salva_su_disco(cartella, filename, data):
-    gif_dir = os.path.join(current_app.root_path, "static", cartella)
-    os.makedirs(gif_dir, exist_ok=True)
-    with open(os.path.join(gif_dir, filename), "wb") as f:
-        f.write(data)
-    return f"/static/{cartella}/{filename}"
 
 
 @bp.route("/sfondi-luogo/<int:location_id>")
