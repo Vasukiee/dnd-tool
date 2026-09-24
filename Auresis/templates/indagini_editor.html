@@ -195,34 +195,45 @@
         </div>
         {% endif %}
 
-        <!-- Sfondi scena (GIF) -->
+        <!-- Luogo di ogni scena: lo sfondo si sceglie nella pagina del luogo -->
         {% if scene_numeri %}
         <div class="panel-section">
-            <p class="panel-title">Sfondi scena</p>
+            <p class="panel-title">Luoghi delle scene</p>
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 {% for s in scene_numeri %}
                 <div>
                     <label style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--bone-dim); letter-spacing: 0.05em; display: block; margin-bottom: 4px;">Scena {{ s }}</label>
-                    <form method="POST" enctype="multipart/form-data"
+                    <form method="POST"
                           action="{{ url_for('indagini.indagini_salva_scena_gif', indagine_id=indagine.id, numero_scena=s) }}"
                           style="display: flex; flex-direction: column; gap: 5px;">
                         <div style="display: flex; gap: 6px; align-items: center;">
-                            <input type="url" name="gif_url"
-                                   value="{{ scene_gifs.get(s, '') }}"
-                                   placeholder="URL immagine…"
-                                   style="flex: 1; font-size: 0.78rem; padding: 4px 7px;">
+                            <select name="location_id" style="flex: 1; font-size: 0.78rem; padding: 4px 7px;">
+                                <option value="">— nessun luogo —</option>
+                                {% for l in locations %}
+                                <option value="{{ l.id }}" {% if scene_location.get(s) == l.id %}selected{% endif %}>{{ l.nome }}</option>
+                                {% endfor %}
+                            </select>
                             <button type="submit" class="btn btn--ghost" style="font-size: 0.72rem; padding: 4px 9px; white-space: nowrap;">Salva</button>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <input type="file" name="gif_file"
-                                   accept=".gif,.jpg,.jpeg,.png,image/gif,image/jpeg,image/png"
-                                   style="flex: 1; font-size: 0.75rem; color: var(--bone-dim);">
-                            <span style="font-family: var(--font-mono); font-size: 0.62rem; color: var(--bone-dim); white-space: nowrap;">GIF · JPG · PNG</span>
-                        </div>
+                        {% if scene_gifs.get(s) %}
+                        <label style="font-size: 0.72rem; color: var(--bone-dim); display: flex; gap: 5px; align-items: center;">
+                            <input type="checkbox" name="rimuovi_immagine" value="1"> Rimuovi l'immagine della scena (usa quella del luogo)
+                        </label>
+                        {% endif %}
                     </form>
                     {% if scene_gifs.get(s) %}
                     <img src="{{ scene_gifs[s] }}" alt="preview scena {{ s }}"
                          style="margin-top: 6px; width: 100%; border-radius: 3px; border: 1px solid var(--ink-line); max-height: 80px; object-fit: cover;">
+                    <span style="font-family: var(--font-mono); font-size: 0.62rem; color: var(--bone-dim);">immagine propria della scena</span>
+                    {% elif scene_ereditate.get(s) %}
+                    <img src="{{ scene_ereditate[s][0] }}" alt="preview scena {{ s }}"
+                         style="margin-top: 6px; width: 100%; border-radius: 3px; border: 1px dashed var(--ink-line); max-height: 80px; object-fit: cover; opacity: 0.6;">
+                    <span style="font-family: var(--font-mono); font-size: 0.62rem; color: var(--bone-dim);">da: {{ scene_ereditate[s][1] }}</span>
+                    {% endif %}
+                    {% set nome_luogo = locations | selectattr('id', 'equalto', scene_location.get(s)) | map(attribute='nome') | first %}
+                    {% if nome_luogo and not scene_gifs.get(s) and (not scene_ereditate.get(s) or scene_ereditate[s][1] != nome_luogo) %}
+                    <a href="{{ url_for('edita_location', location_id=scene_location[s]) }}"
+                       style="display: block; font-family: var(--font-mono); font-size: 0.62rem; color: var(--bone-dim);">sfondo di {{ nome_luogo }} da aggiungere →</a>
                     {% endif %}
                 </div>
                 {% endfor %}
