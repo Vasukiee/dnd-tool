@@ -1,10 +1,9 @@
 import json
-import os
 from datetime import datetime
 
 import db
 from auth import richiedi_master, vista_ristretta
-from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, url_for, \
+from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for, \
     Response
 
 bp = Blueprint("indagini", __name__, url_prefix="/indagini")
@@ -89,18 +88,8 @@ def _merge_sblocco_in_nodi(nodi, stati_sblocco):
     return nodi
 
 
-_IMAGE_MIME_PER_EXT = {
-    ".gif": "image/gif",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".png": "image/png",
-}
-_MAX_SCENA_GIF_BYTES = 10 * 1024 * 1024
-
-
-def _scene_gifs_display(indagine_id):
-    """URL di visualizzazione degli sfondi scena: la route interna se
-    l'immagine è nel DB, altrimenti l'eventuale URL esterno."""
+def _scene_gifs_dirette(indagine_id):
+    """Solo le immagini impostate sulla scena stessa (per i campi dell'editor)."""
     out = {}
     for numero, info in db.get_scene_gifs(indagine_id).items():
         if info["has_file"]:
@@ -115,8 +104,25 @@ def _scene_gifs_display(indagine_id):
     return out
 
 
-def _url_sfondo_interno(gif_url, indagine_id, numero_scena):
-    return gif_url.startswith(f"/indagini/{indagine_id}/scene/{numero_scena}/sfondo")
+def _scene_gifs_ereditate(indagine_id):
+    """Sfondi ereditati dal luogo della scena (o dal primo antenato che ne ha uno).
+    {numero_scena: (url, nome_luogo)}"""
+    out = {}
+    for numero, info in db.get_sfondi_ereditati(indagine_id).items():
+        if info["has_file"]:
+            url = url_for("indagini.sfondo_location", location_id=info["location_id"], v=info["versione"])
+        else:
+            url = info["url"]
+        out[numero] = (url, info["location_nome"])
+    return out
+
+
+def _scene_gifs_display(indagine_id):
+    """Sfondo effettivo per scena: immagine propria, altrimenti quella del luogo.
+    Le scene senza nessuno dei due cadono sullo sfondo di default lato client."""
+    out = {n: url for n, (url, _) in _scene_gifs_ereditate(indagine_id).items()}
+    out.update(_scene_gifs_dirette(indagine_id))
+    return out
 
 
 @bp.route("/")
@@ -174,7 +180,9 @@ def indagini_editor(indagine_id):
         return redirect(url_for(".lista_indagini"))
     nodi = db.get_nodi_indagine(indagine_id)
     collegamenti = db.get_collegamenti(indagine_id)
-    scene_gifs = _scene_gifs_display(indagine_id)
+    scene_gifs = _scene_gifs_dirette(indagine_id)
+    scene_ereditate = _scene_gifs_ereditate(indagine_id)
+    scene_location = {n: info["location_id"] for n, info in db.get_scene_gifs(indagine_id).items()}
     scene_numeri = sorted(set(n["numero_nodo"] // 10 for n in nodi)) if nodi else []
     graph_data = _json_per_script({
         "nodi": nodi,
@@ -189,41 +197,35 @@ def indagini_editor(indagine_id):
         graph_data=graph_data,
         scene_numeri=scene_numeri,
         scene_gifs=scene_gifs,
+        scene_ereditate=scene_ereditate,
+        scene_location=scene_location,
+        locations=db.get_all_locations(),
     )
 
 
 @bp.route("/<int:indagine_id>/scene/<int:numero_scena>/gif", methods=["POST"])
 @richiedi_master
 def indagini_salva_scena_gif(indagine_id, numero_scena):
-    uploaded = request.files.get("gif_file")
-    gif_url = request.form.get("gif_url", "").strip()
-
-    if uploaded and uploaded.filename:
-        ext = os.path.splitext(uploaded.filename)[1].lower()
-        mime = _IMAGE_MIME_PER_EXT.get(ext)
-        if not mime:
-            flash("Formato non supportato. Usa GIF, JPG o PNG.")
-            return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
-        data = uploaded.read()
-        if len(data) > _MAX_SCENA_GIF_BYTES:
-            flash("Immagine troppo grande (max 10 MB).")
-            return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
-        if db.get_storage_mode() == "disk":
-            gif_dir = os.path.join(current_app.root_path, "static", "scene_gifs")
-            os.makedirs(gif_dir, exist_ok=True)
-            filename = f"indagine_{indagine_id}_scena_{numero_scena}{ext}"
-            file_path = os.path.join(gif_dir, filename)
-            with open(file_path, "wb") as f:
-                f.write(data)
-            db.upsert_scena_gif(indagine_id, numero_scena, f"/static/scene_gifs/{filename}")
-        else:
-            db.save_scena_gif_file(indagine_id, numero_scena, data, mime)
-    elif _url_sfondo_interno(gif_url, indagine_id, numero_scena):
-        pass
-    else:
-        db.upsert_scena_gif(indagine_id, numero_scena, gif_url)
-
+    """Collega la scena a un luogo: lo sfondo si sceglie nella pagina del luogo.
+    Le immagini salvate in passato sulla scena restano (e hanno la precedenza)
+    finché non vengono rimosse da qui."""
+    db.set_scena_location(indagine_id, numero_scena, request.form.get("location_id", type=int))
+    if request.form.get("rimuovi_immagine") == "1":
+        db.upsert_scena_gif(indagine_id, numero_scena, None)
     return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
+
+
+@bp.route("/sfondi-luogo/<int:location_id>")
+def sfondo_location(location_id):
+    """Serve lo sfondo di un luogo salvato nel DB. Pubblico come quello di scena:
+    la player view ne ha bisogno."""
+    risultato = db.get_sfondo_location_file(location_id)
+    if not risultato:
+        abort(404)
+    data, mime = risultato
+    resp = Response(data, mimetype=mime or "application/octet-stream")
+    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return resp
 
 
 @bp.route("/<int:indagine_id>/scene/<int:numero_scena>/sfondo")

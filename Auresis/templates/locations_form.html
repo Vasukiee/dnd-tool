@@ -7,7 +7,7 @@
     <h1 class="page-title">{% if location %}{{ location.nome }}{% else %}Nuovo luogo{% endif %}</h1>
 </div>
 
-<form method="POST" class="form-grid">
+<form method="POST" class="form-grid" enctype="multipart/form-data">
     <div class="form-field">
         <label for="nome">Nome</label>
         <input type="text" id="nome" name="nome" value="{{ location.nome if location else '' }}" required>
@@ -42,6 +42,26 @@
         <label for="note">Note libere</label>
         <textarea id="note" name="note">{{ location.note if location else '' }}</textarea>
     </div>
+
+    {% if location %}
+    <div class="form-field">
+        <label for="sfondo_url">Sfondo nelle indagini</label>
+        {% if sfondo_anteprima %}
+        <img src="{{ sfondo_anteprima }}" alt="sfondo di {{ location.nome }}"
+             style="display: block; width: 100%; max-width: 420px; max-height: 160px; object-fit: cover; border-radius: 3px; border: 1px solid var(--ink-line); margin-bottom: 6px;">
+        {% endif %}
+        <input type="text" id="sfondo_url" name="sfondo_url"
+               value="{{ sfondo.url if sfondo and sfondo.url else '' }}"
+               placeholder="{{ 'Immagine caricata — incolla un URL per sostituirla' if sfondo and sfondo.has_file else 'URL immagine…' }}">
+        <input type="file" name="sfondo_file" accept=".gif,.jpg,.jpeg,.png,.webp,image/gif,image/jpeg,image/png,image/webp" style="margin-top: 6px;">
+        {% if sfondo %}
+        <label style="display: flex; gap: 6px; align-items: center; margin: 8px 0 0; text-transform: none; letter-spacing: 0;">
+            <input type="checkbox" name="rimuovi_sfondo" value="1" style="width: auto;"> Rimuovi sfondo
+        </label>
+        {% endif %}
+        <small style="display: block; margin-top: 6px; color: var(--bone-dim);">Lo usano le scene ambientate qui e nei luoghi interni che non ne hanno uno proprio.</small>
+    </div>
+    {% endif %}
 
     <div class="actions-row">
         <button type="submit" class="btn">Salva</button>
