@@ -1946,7 +1946,7 @@ def get_scene_gifs(indagine_id):
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
-        """SELECT numero_scena, gif_url,
+        """SELECT numero_scena, gif_url, location_id,
                   (gif_data IS NOT NULL) AS has_file,
                   COALESCE(EXTRACT(EPOCH FROM gif_data_aggiornata)::bigint, 0) AS versione
            FROM scene_indagine WHERE indagine_id = %s""",
@@ -1958,6 +1958,7 @@ def get_scene_gifs(indagine_id):
     return {
         row["numero_scena"]: {
             "gif_url": row["gif_url"],
+            "location_id": row["location_id"],
             "has_file": row["has_file"],
             "versione": row["versione"],
         }
@@ -2021,6 +2022,89 @@ def get_scena_gif_file(indagine_id, numero_scena):
     if not row:
         return None
     return bytes(row["gif_data"]), row["gif_mime"]
+
+
+def set_scena_location(indagine_id, numero_scena, location_id):
+    """Collega una scena a un luogo (None per scollegarla)."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO scene_indagine (indagine_id, numero_scena, location_id)
+           VALUES (%s, %s, %s)
+           ON CONFLICT (indagine_id, numero_scena)
+           DO UPDATE SET location_id = EXCLUDED.location_id""",
+        (indagine_id, numero_scena, location_id),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_sfondi_ereditati(indagine_id):
+    """Per ogni scena collegata a un luogo, lo sfondo del luogo più vicino
+    risalendo location_padre_id. {numero_scena: {location_id, location_nome,
+    url, has_file, versione}}. Non considera l'immagine propria della scena:
+    la precedenza la decide il chiamante."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        """WITH RECURSIVE catena AS (
+               SELECT s.numero_scena, l.id AS loc_id, l.location_padre_id, 0 AS prof
+               FROM scene_indagine s JOIN locations l ON l.id = s.location_id
+               WHERE s.indagine_id = %s
+               UNION ALL
+               SELECT c.numero_scena, p.id, p.location_padre_id, c.prof + 1
+               FROM catena c JOIN locations p ON p.id = c.location_padre_id
+               WHERE c.prof < 10
+           )
+           SELECT DISTINCT ON (c.numero_scena)
+                  c.numero_scena, c.loc_id AS location_id, l.nome AS location_nome,
+                  sl.url, (sl.data IS NOT NULL) AS has_file,
+                  COALESCE(EXTRACT(EPOCH FROM sl.aggiornato)::bigint, 0) AS versione
+           FROM catena c
+           JOIN sfondi_location sl ON sl.location_id = c.loc_id
+           JOIN locations l ON l.id = c.loc_id
+           WHERE sl.data IS NOT NULL OR sl.url IS NOT NULL
+           ORDER BY c.numero_scena, c.prof""",
+        (indagine_id,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {row["numero_scena"]: dict(row) for row in rows}
+
+
+def save_sfondo_location(location_id, url=None, data=None, mime=None):
+    """Salva lo sfondo di un luogo: URL esterno oppure byte nel DB, alternativi."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO sfondi_location (location_id, url, data, mime, aggiornato)
+           VALUES (%s, %s, %s, %s, NOW())
+           ON CONFLICT (location_id)
+           DO UPDATE SET url = EXCLUDED.url, data = EXCLUDED.data,
+                         mime = EXCLUDED.mime, aggiornato = NOW()""",
+        (location_id, url, psycopg2.Binary(data) if data is not None else None, mime),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_sfondo_location_file(location_id):
+    """Restituisce (data, mime) dello sfondo del luogo salvato nel DB, o None."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        "SELECT data, mime FROM sfondi_location WHERE location_id = %s AND data IS NOT NULL",
+        (location_id,),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not row:
+        return None
+    return bytes(row["data"]), row["mime"]
 
 
 if __name__ == "__main__":

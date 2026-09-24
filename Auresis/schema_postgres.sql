@@ -287,6 +287,20 @@ ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS gif_data BYTEA;
 ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS gif_mime TEXT;
 ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS gif_data_aggiornata TIMESTAMPTZ;
 
+-- Sfondo per luogo: una scena senza immagine propria eredita quella del suo
+-- luogo, risalendo la catena location_padre_id. Tabella separata perché
+-- get_all_locations_full fa SELECT locations.* e si porterebbe dietro i BYTEA.
+ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS location_id INTEGER REFERENCES locations(id) ON DELETE SET NULL;
+CREATE TABLE IF NOT EXISTS sfondi_location (
+    location_id INTEGER PRIMARY KEY REFERENCES locations(id) ON DELETE CASCADE,
+    url TEXT,
+    data BYTEA,
+    mime TEXT,
+    aggiornato TIMESTAMPTZ
+);
+-- Come le altre tabelle di public: l'app si connette come owner e non ne risente.
+ALTER TABLE sfondi_location ENABLE ROW LEVEL SECURITY;
+
 -- Migrazione per testo dei copioni salvato nel database
 ALTER TABLE sessioni_copioni ADD COLUMN IF NOT EXISTS testo_md TEXT;
 

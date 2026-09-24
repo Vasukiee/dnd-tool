@@ -206,6 +206,12 @@
                     <form method="POST" enctype="multipart/form-data"
                           action="{{ url_for('indagini.indagini_salva_scena_gif', indagine_id=indagine.id, numero_scena=s) }}"
                           style="display: flex; flex-direction: column; gap: 5px;">
+                        <select name="location_id" style="font-size: 0.78rem; padding: 4px 7px;">
+                            <option value="">— nessun luogo —</option>
+                            {% for l in locations %}
+                            <option value="{{ l.id }}" {% if scene_location.get(s) == l.id %}selected{% endif %}>{{ l.nome }}</option>
+                            {% endfor %}
+                        </select>
                         <div style="display: flex; gap: 6px; align-items: center;">
                             <input type="url" name="gif_url"
                                    value="{{ scene_gifs.get(s, '') }}"
@@ -219,10 +225,17 @@
                                    style="flex: 1; font-size: 0.75rem; color: var(--bone-dim);">
                             <span style="font-family: var(--font-mono); font-size: 0.62rem; color: var(--bone-dim); white-space: nowrap;">GIF · JPG · PNG</span>
                         </div>
+                        <label style="font-size: 0.72rem; color: var(--bone-dim); display: flex; gap: 5px; align-items: center;">
+                            <input type="checkbox" name="sul_luogo" value="1"> Salva come sfondo del luogo
+                        </label>
                     </form>
                     {% if scene_gifs.get(s) %}
                     <img src="{{ scene_gifs[s] }}" alt="preview scena {{ s }}"
                          style="margin-top: 6px; width: 100%; border-radius: 3px; border: 1px solid var(--ink-line); max-height: 80px; object-fit: cover;">
+                    {% elif scene_ereditate.get(s) %}
+                    <img src="{{ scene_ereditate[s][0] }}" alt="preview scena {{ s }}"
+                         style="margin-top: 6px; width: 100%; border-radius: 3px; border: 1px dashed var(--ink-line); max-height: 80px; object-fit: cover; opacity: 0.6;">
+                    <span style="font-family: var(--font-mono); font-size: 0.62rem; color: var(--bone-dim);">da: {{ scene_ereditate[s][1] }}</span>
                     {% endif %}
                 </div>
                 {% endfor %}

@@ -98,9 +98,8 @@ _IMAGE_MIME_PER_EXT = {
 _MAX_SCENA_GIF_BYTES = 10 * 1024 * 1024
 
 
-def _scene_gifs_display(indagine_id):
-    """URL di visualizzazione degli sfondi scena: la route interna se
-    l'immagine è nel DB, altrimenti l'eventuale URL esterno."""
+def _scene_gifs_dirette(indagine_id):
+    """Solo le immagini impostate sulla scena stessa (per i campi dell'editor)."""
     out = {}
     for numero, info in db.get_scene_gifs(indagine_id).items():
         if info["has_file"]:
@@ -112,6 +111,27 @@ def _scene_gifs_display(indagine_id):
             )
         elif info["gif_url"]:
             out[numero] = info["gif_url"]
+    return out
+
+
+def _scene_gifs_ereditate(indagine_id):
+    """Sfondi ereditati dal luogo della scena (o dal primo antenato che ne ha uno).
+    {numero_scena: (url, nome_luogo)}"""
+    out = {}
+    for numero, info in db.get_sfondi_ereditati(indagine_id).items():
+        if info["has_file"]:
+            url = url_for("indagini.sfondo_location", location_id=info["location_id"], v=info["versione"])
+        else:
+            url = info["url"]
+        out[numero] = (url, info["location_nome"])
+    return out
+
+
+def _scene_gifs_display(indagine_id):
+    """Sfondo effettivo per scena: immagine propria, altrimenti quella del luogo.
+    Le scene senza nessuno dei due cadono sullo sfondo di default lato client."""
+    out = {n: url for n, (url, _) in _scene_gifs_ereditate(indagine_id).items()}
+    out.update(_scene_gifs_dirette(indagine_id))
     return out
 
 
@@ -174,7 +194,9 @@ def indagini_editor(indagine_id):
         return redirect(url_for(".lista_indagini"))
     nodi = db.get_nodi_indagine(indagine_id)
     collegamenti = db.get_collegamenti(indagine_id)
-    scene_gifs = _scene_gifs_display(indagine_id)
+    scene_gifs = _scene_gifs_dirette(indagine_id)
+    scene_ereditate = _scene_gifs_ereditate(indagine_id)
+    scene_location = {n: info["location_id"] for n, info in db.get_scene_gifs(indagine_id).items()}
     scene_numeri = sorted(set(n["numero_nodo"] // 10 for n in nodi)) if nodi else []
     graph_data = _json_per_script({
         "nodi": nodi,
@@ -189,6 +211,9 @@ def indagini_editor(indagine_id):
         graph_data=graph_data,
         scene_numeri=scene_numeri,
         scene_gifs=scene_gifs,
+        scene_ereditate=scene_ereditate,
+        scene_location=scene_location,
+        locations=db.get_all_locations(),
     )
 
 
@@ -197,7 +222,12 @@ def indagini_editor(indagine_id):
 def indagini_salva_scena_gif(indagine_id, numero_scena):
     uploaded = request.files.get("gif_file")
     gif_url = request.form.get("gif_url", "").strip()
+    location_id = request.form.get("location_id", type=int)
+    sul_luogo = request.form.get("sul_luogo") == "1" and location_id is not None
 
+    db.set_scena_location(indagine_id, numero_scena, location_id)
+
+    data = mime = ext = None
     if uploaded and uploaded.filename:
         ext = os.path.splitext(uploaded.filename)[1].lower()
         mime = _IMAGE_MIME_PER_EXT.get(ext)
@@ -208,14 +238,28 @@ def indagini_salva_scena_gif(indagine_id, numero_scena):
         if len(data) > _MAX_SCENA_GIF_BYTES:
             flash("Immagine troppo grande (max 10 MB).")
             return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
+
+    if sul_luogo:
+        # L'immagine va sul luogo; la scena perde quella propria, altrimenti
+        # continuerebbe a coprire quella appena caricata.
+        if data is not None:
+            if db.get_storage_mode() == "disk":
+                path = _salva_su_disco("sfondi_luoghi", f"luogo_{location_id}{ext}", data)
+                db.save_sfondo_location(location_id, url=path)
+            else:
+                db.save_sfondo_location(location_id, data=data, mime=mime)
+        elif _url_sfondo_interno(gif_url, indagine_id, numero_scena):
+            # Promuove al luogo l'immagine già caricata sulla scena.
+            esistente = db.get_scena_gif_file(indagine_id, numero_scena)
+            if esistente:
+                db.save_sfondo_location(location_id, data=esistente[0], mime=esistente[1])
+        elif gif_url:
+            db.save_sfondo_location(location_id, url=gif_url)
+        db.upsert_scena_gif(indagine_id, numero_scena, None)
+    elif data is not None:
         if db.get_storage_mode() == "disk":
-            gif_dir = os.path.join(current_app.root_path, "static", "scene_gifs")
-            os.makedirs(gif_dir, exist_ok=True)
-            filename = f"indagine_{indagine_id}_scena_{numero_scena}{ext}"
-            file_path = os.path.join(gif_dir, filename)
-            with open(file_path, "wb") as f:
-                f.write(data)
-            db.upsert_scena_gif(indagine_id, numero_scena, f"/static/scene_gifs/{filename}")
+            path = _salva_su_disco("scene_gifs", f"indagine_{indagine_id}_scena_{numero_scena}{ext}", data)
+            db.upsert_scena_gif(indagine_id, numero_scena, path)
         else:
             db.save_scena_gif_file(indagine_id, numero_scena, data, mime)
     elif _url_sfondo_interno(gif_url, indagine_id, numero_scena):
@@ -224,6 +268,27 @@ def indagini_salva_scena_gif(indagine_id, numero_scena):
         db.upsert_scena_gif(indagine_id, numero_scena, gif_url)
 
     return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
+
+
+def _salva_su_disco(cartella, filename, data):
+    gif_dir = os.path.join(current_app.root_path, "static", cartella)
+    os.makedirs(gif_dir, exist_ok=True)
+    with open(os.path.join(gif_dir, filename), "wb") as f:
+        f.write(data)
+    return f"/static/{cartella}/{filename}"
+
+
+@bp.route("/sfondi-luogo/<int:location_id>")
+def sfondo_location(location_id):
+    """Serve lo sfondo di un luogo salvato nel DB. Pubblico come quello di scena:
+    la player view ne ha bisogno."""
+    risultato = db.get_sfondo_location_file(location_id)
+    if not risultato:
+        abort(404)
+    data, mime = risultato
+    resp = Response(data, mimetype=mime or "application/octet-stream")
+    resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return resp
 
 
 @bp.route("/<int:indagine_id>/scene/<int:numero_scena>/sfondo")
