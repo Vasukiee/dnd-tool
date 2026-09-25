@@ -1151,6 +1151,25 @@
             });
         }
 
+        const VOLUME_MUSICA = 0.3; // Volume iniziale delle musiche consigliate (30%)
+
+        // Carica una sola volta la IFrame API di YouTube ed esegue cb quando è pronta
+        let ytApiCallbacks = null;
+        function caricaYouTubeApi(cb) {
+            if (window.YT && window.YT.Player) { cb(); return; }
+            if (ytApiCallbacks) { ytApiCallbacks.push(cb); return; }
+            ytApiCallbacks = [cb];
+            const precedente = window.onYouTubeIframeAPIReady;
+            window.onYouTubeIframeAPIReady = () => {
+                if (typeof precedente === 'function') precedente();
+                ytApiCallbacks.forEach(fn => fn());
+                ytApiCallbacks = [];
+            };
+            const script = document.createElement('script');
+            script.src = 'https://www.youtube.com/iframe_api';
+            document.head.appendChild(script);
+        }
+
         // Usiamo l'event delegation globale così il click funziona anche sui cloni generati in Modalità Scene
         document.body.addEventListener('click', function(e) {
             const btn = e.target.closest('.btn-inline-audio:not(.btn-audio-not-found)');
@@ -1167,28 +1186,47 @@
             audioWidgetContent.innerHTML = '';
 
             if (tipo === 'youtube' && ytId) {
-                const iframe = document.createElement('iframe');
-                iframe.width = '100%';
-                iframe.height = '240'; // Player abbastanza alto da mostrare tutti i controlli YT, incluso il volume
-                let src = `https://www.youtube.com/embed/${ytId}?autoplay=1`;
-                if (startTime > 0) {
-                    src += `&start=${startTime}`;
-                }
-                iframe.src = src;
-                iframe.title = "YouTube player";
-                iframe.frameBorder = "0";
-                iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
-                audioWidgetContent.appendChild(iframe);
+                // Il player viene creato tramite la IFrame API di YouTube per poter
+                // impostare il volume iniziale e far ripartire il brano quando finisce
+                const segnaposto = document.createElement('div');
+                audioWidgetContent.appendChild(segnaposto);
+                caricaYouTubeApi(() => {
+                    if (!segnaposto.isConnected) return; // Nel frattempo è partita un'altra traccia
+                    new YT.Player(segnaposto, {
+                        width: '100%',
+                        height: '240', // Player abbastanza alto da mostrare tutti i controlli YT, incluso il volume
+                        videoId: ytId,
+                        playerVars: { start: Number(startTime) || 0 },
+                        events: {
+                            onReady: (ev) => {
+                                ev.target.setVolume(VOLUME_MUSICA * 100);
+                                ev.target.playVideo();
+                            },
+                            onStateChange: (ev) => {
+                                // Loop: riparte finché non viene messa in pausa o sostituita
+                                if (ev.data === YT.PlayerState.ENDED) {
+                                    ev.target.seekTo(Number(startTime) || 0, true);
+                                    ev.target.playVideo();
+                                }
+                            },
+                        },
+                    });
+                });
             } else if (tipo === 'file' && path) {
                 const audio = document.createElement('audio');
                 audio.controls = true;
-                audio.volume = 0.15; // Imposta il volume iniziale al 15%
+                audio.volume = VOLUME_MUSICA;
                 audio.autoplay = true;
                 let src = `/static/audio/${path}`;
                 if (startTime > 0) {
                     src += `#t=${startTime}`;
                 }
                 audio.src = src;
+                // Loop: a fine brano riparte dal punto di inizio della traccia
+                audio.addEventListener('ended', () => {
+                    audio.currentTime = Number(startTime) || 0;
+                    audio.play();
+                });
                 audioWidgetContent.appendChild(audio);
             } else {
                 audioWidgetContent.innerHTML = '<span style="font-size: 0.8rem; color: var(--ink-light);">Sorgente audio non valida.</span>';
