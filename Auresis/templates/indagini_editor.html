@@ -209,7 +209,7 @@
         <!-- Luogo di ogni scena: lo sfondo si sceglie nella pagina del luogo -->
         {% if scene_numeri %}
         <div class="panel-section">
-            <p class="panel-title">Luoghi delle scene</p>
+            <p class="panel-title">Scene: luogo ed esche</p>
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 {% for s in scene_numeri %}
                 <div>
@@ -246,6 +246,15 @@
                     <a href="{{ url_for('edita_location', location_id=scene_location[s]) }}"
                        style="display: block; font-family: var(--font-mono); font-size: 0.62rem; color: var(--bone-dim);">sfondo di {{ nome_luogo }} da aggiungere →</a>
                     {% endif %}
+                    <form method="POST"
+                          action="{{ url_for('indagini.indagini_salva_punti_extra', indagine_id=indagine.id, numero_scena=s) }}"
+                          style="display: flex; flex-direction: column; gap: 5px; margin-top: 8px;">
+                        <label style="font-size: 0.72rem; color: var(--bone-dim);">Esche da esaminare (una per riga)</label>
+                        <textarea name="punti_extra" rows="2" style="font-size: 0.78rem; width: 100%; box-sizing: border-box;"
+                                  placeholder="es. Il mazzo di chiavi">{{ (punti_extra.get(s) or []) | join('\n') }}</textarea>
+                        <span style="font-size:0.68rem;color:var(--bone-dim);line-height:1.35;">Compaiono nella lista "Da esaminare" insieme agli indizi, ma non nascondono niente: le barri tu dalla vista live.</span>
+                        <button type="submit" class="btn btn--ghost" style="font-size: 0.72rem; padding: 4px 9px; align-self: flex-start;">Salva esche</button>
+                    </form>
                 </div>
                 {% endfor %}
             </div>

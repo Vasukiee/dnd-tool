@@ -6263,6 +6263,24 @@ html.indagini-player-page.has-react-motion .main > * {
 .graph-scene-overlay.attivo { opacity: 1; }
 .player-graph svg { display: block; width: 100%; height: 100%; position: relative; z-index: 2; }
 
+/* --- Layout dinamico della bacheca: i nodi scivolano quando ne arriva uno --- */
+.g-node-sposta { transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+.player-graph .scena-box {
+    transition: x 0.8s cubic-bezier(0.4, 0, 0.2, 1), y 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+                width 0.8s cubic-bezier(0.4, 0, 0.2, 1), height 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+                stroke 0.6s ease, fill 0.6s ease;
+}
+.player-graph .scena-box__label { transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+.g-node-arriva {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: nodeArriva 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes nodeArriva {
+    from { opacity: 0; transform: scale(0.92); }
+    to   { opacity: 1; transform: none; }
+}
+
 /* --- Lista "Da esaminare": cosa si può ancora ispezionare nella scena --- */
 .player-esplora {
     position: absolute;
@@ -6347,10 +6365,31 @@ html.indagini-player-page.has-react-motion .main > * {
 @keyframes esploraEntra {
     from { opacity: 0; transform: translateX(-6px); }
 }
+/* Versione master (vista live): stessa lista, con le esche cliccabili */
+.live-graph { position: relative; }
+.player-esplora--master { padding-bottom: 14px; }
+.player-esplora--master .player-esplora__voce--esca {
+    pointer-events: auto;
+    cursor: pointer;
+}
+.player-esplora--master .player-esplora__voce--esca:hover { color: var(--gold-bright); }
+.player-esplora__tag {
+    margin-left: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--rust-bright);
+    vertical-align: 1px;
+}
 @media (prefers-reduced-motion: reduce) {
     .player-esplora__voce--appena,
     .player-esplora__voce--appena::after,
-    .player-esplora__voce--entra { animation: none; }
+    .player-esplora__voce--entra,
+    .g-node-arriva { animation: none; }
+    .g-node-sposta,
+    .player-graph .scena-box,
+    .player-graph .scena-box__label { transition: none; }
 }
 
 /* --- Pannello dettaglio nodo (versione player) --- */
