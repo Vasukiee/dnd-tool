@@ -124,7 +124,16 @@ def _punti_interesse(nodi, stati_sblocco, scena_corrente, punti_extra, extra_esa
     return [{"etichetta": v["etichetta"], "esaminato": v["esaminato"]} for v in ordinate]
 
 
+def _lista_mostrata(cronologia, scena):
+    """La lista di una scena compare ai giocatori solo dopo che il master l'ha
+    mostrata (bottone @esamina del copione o interruttore della vista live)."""
+    mostrate = cronologia.get("liste_mostrate") if cronologia else None
+    return bool(mostrate) and scena in json.loads(mostrate)
+
+
 def _punti_interesse_indagine(indagine_id, nodi, stati_sblocco, cronologia, scena_corrente, per_master=False):
+    if not per_master and not _lista_mostrata(cronologia, scena_corrente):
+        return []
     esaminati = cronologia.get("punti_extra_esaminati") if cronologia else None
     return _punti_interesse(
         nodi, stati_sblocco, scena_corrente,
@@ -396,6 +405,7 @@ def indagini_live(indagine_id):
         "sipario_aperto": cronologia_attiva.get("sipario_aperto", False) if cronologia_attiva else False,
         "punti_interesse": _punti_interesse_indagine(
             indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val, per_master=True),
+        "lista_mostrata": _lista_mostrata(cronologia_attiva, scena_corrente_val),
     })
     return render_template(
         "indagini_live.html",
@@ -428,6 +438,7 @@ def indagini_stato_live(indagine_id):
         "stati": stati,
         "punti_interesse": _punti_interesse_indagine(
             indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val, per_master=True),
+        "lista_mostrata": _lista_mostrata(cronologia_attiva, scena_corrente_val),
     })
 
 
@@ -530,6 +541,7 @@ def indagini_avanza_scena(indagine_id):
         "stati": stati,
         "punti_interesse": _punti_interesse_indagine(
             indagine_id, nodi, stati_sblocco, cronologia_attiva, nuova_scena, per_master=True),
+        "lista_mostrata": _lista_mostrata(db.get_cronologia_attiva(indagine_id), nuova_scena),
         "cronologia_nuova": {
             "id": cronologia_nuova["id"],
             "nome": cronologia_nuova["nome"],
@@ -638,6 +650,31 @@ def indagini_toggle_punto_extra(indagine_id):
     return jsonify({
         "punti_interesse": _punti_interesse_indagine(
             indagine_id, nodi, stati_sblocco, cronologia, scena, per_master=True),
+    })
+
+
+@bp.route("/<int:indagine_id>/lista-esamina", methods=["POST"])
+@richiedi_master
+def indagini_lista_esamina(indagine_id):
+    """Mostra (o nasconde) ai giocatori la lista "Da esaminare" di una scena.
+    JSON: {"scena": n (default: scena corrente), "mostra": true/false (default true)}."""
+    dati = request.json if request.is_json else {}
+    cronologia = db.get_cronologia_attiva(indagine_id)
+    if not cronologia:
+        nome = f"Cronologia del {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        cronologia = db.crea_cronologia(indagine_id, nome)
+    nodi = db.get_nodi_indagine(indagine_id)
+    scena_corrente = _scena_corrente_effettiva(nodi, cronologia)
+    scena = int(dati["scena"]) if dati.get("scena") is not None else scena_corrente
+    db.set_lista_mostrata(cronologia["id"], scena, dati.get("mostra", True) is not False)
+    cronologia = db.get_cronologia_attiva(indagine_id)
+    stati_sblocco = db.get_stato_nodi_cronologia(cronologia["id"])
+    return jsonify({
+        "scena": scena,
+        "scena_corrente": scena_corrente,
+        "lista_mostrata": _lista_mostrata(cronologia, scena_corrente),
+        "punti_interesse": _punti_interesse_indagine(
+            indagine_id, nodi, stati_sblocco, cronologia, scena_corrente, per_master=True),
     })
 
 
