@@ -48,6 +48,10 @@
                 </defs>
                 <g id="liveG"></g>
             </svg>
+            <aside class="player-esplora player-esplora--master" id="liveEsplora" hidden>
+                <p class="player-esplora__titolo">Da esaminare · vista giocatori</p>
+                <ul class="player-esplora__lista" id="liveEsploraLista"></ul>
+            </aside>
         </div>
         <div class="live-detail" id="liveDetail">
             <button class="live-detail__close" id="liveDetailClose" title="Chiudi (×)">×</button>
@@ -103,6 +107,7 @@
             sipario: "{{ url_for('indagini.indagini_sipario', indagine_id=indagine.id) }}",
             statoLive: "{{ url_for('indagini.indagini_stato_live', indagine_id=indagine.id) }}",
             sbloccaNodo: "/indagini/{{ indagine.id }}/nodi/__NODO_ID__/sblocca",
+            puntoExtraEsaminato: "{{ url_for('indagini.indagini_toggle_punto_extra', indagine_id=indagine.id) }}",
             cronologiaElimina: "/indagini/{{ indagine.id }}/cronologie/__CRONOLOGIA_ID__/elimina",
             cronologiaRinomina: "/indagini/{{ indagine.id }}/cronologie/__CRONOLOGIA_ID__/rinomina"
         },

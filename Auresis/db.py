@@ -1,5 +1,6 @@
 import base64
 import datetime
+import json
 import os
 import re
 import secrets
@@ -1712,16 +1713,17 @@ def ricalcola_livello_sfx_singolo(nodo_id):
     conn.close()
 
 
-def assicura_colonna_punto_interesse(force=False):
-    """Aggiunge nodi_indagine.punto_interesse sui database creati prima della
-    colonna. Serve solo in scrittura: le letture usano SELECT * e il campo
-    assente vale semplicemente "nessuna etichetta". Cacheato per processo."""
+def assicura_colonne_punti_interesse(force=False):
+    """Aggiunge le colonne della lista "Da esaminare" sui database creati prima
+    della funzione (sono anche in schema_postgres.sql). Cacheato per processo."""
     global _punto_interesse_assicurato
     if (_punto_interesse_assicurato and not force) or is_sqlite():
         return
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("ALTER TABLE nodi_indagine ADD COLUMN IF NOT EXISTS punto_interesse TEXT")
+    cur.execute("ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS punti_extra TEXT")
+    cur.execute("ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS punti_extra_esaminati TEXT")
     conn.commit()
     cur.close()
     conn.close()
@@ -1731,7 +1733,7 @@ def assicura_colonna_punto_interesse(force=False):
 def add_nodo(indagine_id, numero_nodo, titolo, descrizione=None,
              immagine_url=None, regola_sblocco='TUTTI', tipo_speciale=None,
              punto_interesse=None):
-    assicura_colonna_punto_interesse()
+    assicura_colonne_punti_interesse()
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
@@ -1755,7 +1757,7 @@ def update_nodo(nodo_id, **kwargs):
         return
     _valida_nomi_colonna(kwargs)
     if "punto_interesse" in kwargs:
-        assicura_colonna_punto_interesse()
+        assicura_colonne_punti_interesse()
     cols = ", ".join(f"{k} = %s" for k in kwargs)
     vals = list(kwargs.values()) + [nodo_id]
     conn = get_connection()
@@ -2041,6 +2043,72 @@ def set_scena_location(indagine_id, numero_scena, location_id):
     conn.commit()
     cur.close()
     conn.close()
+
+
+def get_punti_extra(indagine_id):
+    """Voci "esca" della lista Da esaminare, per scena: cose che si possono
+    guardare ma non nascondono indizi. {numero_scena: [etichetta, ...]}"""
+    assicura_colonne_punti_interesse()
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        "SELECT numero_scena, punti_extra FROM scene_indagine WHERE indagine_id = %s AND punti_extra IS NOT NULL",
+        (indagine_id,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    out = {}
+    for row in rows:
+        voci = [r.strip() for r in row["punti_extra"].splitlines() if r.strip()]
+        if voci:
+            out[row["numero_scena"]] = voci
+    return out
+
+
+def set_punti_extra_scena(indagine_id, numero_scena, testo):
+    """Salva le voci esca di una scena (una per riga)."""
+    assicura_colonne_punti_interesse()
+    testo = (testo or "").strip() or None
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO scene_indagine (indagine_id, numero_scena, punti_extra)
+           VALUES (%s, %s, %s)
+           ON CONFLICT (indagine_id, numero_scena)
+           DO UPDATE SET punti_extra = EXCLUDED.punti_extra""",
+        (indagine_id, numero_scena, testo),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def toggle_punto_extra_esaminato(cronologia_id, chiave):
+    """Segna o toglie una voce esca come esaminata nella cronologia.
+    Le chiavi ("scena|etichetta") vivono in un array JSON. Ritorna il nuovo stato."""
+    assicura_colonne_punti_interesse()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT punti_extra_esaminati FROM cronologie_indagine WHERE id = %s FOR UPDATE",
+        (cronologia_id,),
+    )
+    row = cur.fetchone()
+    chiavi = json.loads(row[0]) if row and row[0] else []
+    esaminato = chiave not in chiavi
+    if esaminato:
+        chiavi.append(chiave)
+    else:
+        chiavi.remove(chiave)
+    cur.execute(
+        "UPDATE cronologie_indagine SET punti_extra_esaminati = %s WHERE id = %s",
+        (json.dumps(chiavi), cronologia_id),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return esaminato
 
 
 def get_sfondi_ereditati(indagine_id):

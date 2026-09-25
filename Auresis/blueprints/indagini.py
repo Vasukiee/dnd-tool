@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime
 
 import db
@@ -82,22 +83,55 @@ def _redigi_nodi_non_scoperti(nodi):
     return redatti
 
 
-def _punti_interesse(nodi, stati_sblocco, scena_corrente):
-    """Cosa si può esaminare nella scena corrente, per la lista della player view.
-    Espone solo l'etichetta scritta apposta per i giocatori (punto_interesse),
-    mai titolo o descrizione, e solo per la scena in corso: le scene future non
-    arrivano al browser. Più indizi con la stessa etichetta diventano una voce
-    sola, esaminata appena uno è scoperto: la lista non tradisce quanti indizi
-    nasconde un oggetto."""
+# Articoli iniziali ignorati nell'ordinamento: "Il letto" va sotto la L.
+_ARTICOLO_INIZIALE = re.compile(r"^(?:(?:il|lo|la|i|gli|le|un|uno|una)\s+|l'|un')", re.IGNORECASE)
+
+
+def _chiave_punto_extra(scena, etichetta):
+    return f"{scena}|{etichetta.strip().casefold()}"
+
+
+def _punti_interesse(nodi, stati_sblocco, scena_corrente, punti_extra, extra_esaminati, per_master=False):
+    """Cosa si può esaminare nella scena corrente, per la lista "Da esaminare".
+
+    Le voci vengono dall'etichetta player-safe dei nodi (punto_interesse) e dalle
+    esche della scena (cose da guardare che non nascondono indizi). Solo la scena
+    in corso, mai titoli o descrizioni. Più indizi con la stessa etichetta sono
+    una voce sola, esaminata appena uno è scoperto: la lista non tradisce quanti
+    indizi nasconde un oggetto. L'ordine è alfabetico, così le esche non si
+    riconoscono dalla posizione. Il flag "esca" va solo al master."""
     voci = {}
+
+    def voce(etichetta):
+        return voci.setdefault(etichetta.casefold(), {"etichetta": etichetta, "esaminato": False, "nodi": 0})
+
     for n in nodi:
         etichetta = (n.get("punto_interesse") or "").strip()
         if not etichetta or n["numero_nodo"] // 10 != scena_corrente:
             continue
-        voce = voci.setdefault(etichetta.casefold(), {"etichetta": etichetta, "esaminato": False})
+        v = voce(etichetta)
+        v["nodi"] += 1
         if stati_sblocco.get(n["id"], {}).get("scoperto"):
-            voce["esaminato"] = True
-    return list(voci.values())
+            v["esaminato"] = True
+    for etichetta in punti_extra.get(scena_corrente, []):
+        v = voce(etichetta)
+        if v["nodi"] == 0 and _chiave_punto_extra(scena_corrente, etichetta) in extra_esaminati:
+            v["esaminato"] = True
+
+    ordinate = sorted(voci.values(), key=lambda v: _ARTICOLO_INIZIALE.sub("", v["etichetta"].casefold()))
+    if per_master:
+        return [{"etichetta": v["etichetta"], "esaminato": v["esaminato"], "esca": v["nodi"] == 0} for v in ordinate]
+    return [{"etichetta": v["etichetta"], "esaminato": v["esaminato"]} for v in ordinate]
+
+
+def _punti_interesse_indagine(indagine_id, nodi, stati_sblocco, cronologia, scena_corrente, per_master=False):
+    esaminati = cronologia.get("punti_extra_esaminati") if cronologia else None
+    return _punti_interesse(
+        nodi, stati_sblocco, scena_corrente,
+        db.get_punti_extra(indagine_id),
+        set(json.loads(esaminati)) if esaminati else set(),
+        per_master=per_master,
+    )
 
 
 def _merge_sblocco_in_nodi(nodi, stati_sblocco):
@@ -223,6 +257,7 @@ def indagini_editor(indagine_id):
         scene_gifs=scene_gifs,
         scene_ereditate=scene_ereditate,
         scene_location=scene_location,
+        punti_extra=db.get_punti_extra(indagine_id),
         locations=db.get_all_locations(),
     )
 
@@ -359,6 +394,8 @@ def indagini_live(indagine_id):
         "cronologia_id": cronologia_attiva["id"] if cronologia_attiva else None,
         "scena_corrente": scena_corrente_val,
         "sipario_aperto": cronologia_attiva.get("sipario_aperto", False) if cronologia_attiva else False,
+        "punti_interesse": _punti_interesse_indagine(
+            indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val, per_master=True),
     })
     return render_template(
         "indagini_live.html",
@@ -389,6 +426,8 @@ def indagini_stato_live(indagine_id):
         "scena_corrente": scena_corrente_val,
         "sipario_aperto": cronologia_attiva.get("sipario_aperto", False) if cronologia_attiva else False,
         "stati": stati,
+        "punti_interesse": _punti_interesse_indagine(
+            indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val, per_master=True),
     })
 
 
@@ -426,6 +465,8 @@ def indagini_sblocca_nodo(indagine_id, nodo_id):
     return jsonify({
         "nodi": nodi,
         "stati": stati,
+        "punti_interesse": _punti_interesse_indagine(
+            indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val, per_master=True),
         "cronologia_nuova": {
             "id": cronologia_nuova["id"],
             "nome": cronologia_nuova["nome"],
@@ -487,6 +528,8 @@ def indagini_avanza_scena(indagine_id):
         "scena_corrente": nuova_scena,
         "sipario_aperto": sipario_aperto,
         "stati": stati,
+        "punti_interesse": _punti_interesse_indagine(
+            indagine_id, nodi, stati_sblocco, cronologia_attiva, nuova_scena, per_master=True),
         "cronologia_nuova": {
             "id": cronologia_nuova["id"],
             "nome": cronologia_nuova["nome"],
@@ -508,7 +551,7 @@ def indagini_player(indagine_id):
     cronologia_attiva = db.get_cronologia_attiva(indagine_id)
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"]) if cronologia_attiva else {}
     scena_corrente_val = _scena_corrente_effettiva(nodi, cronologia_attiva)
-    punti_interesse = _punti_interesse(nodi, stati_sblocco, scena_corrente_val)
+    punti_interesse = _punti_interesse_indagine(indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val)
     nodi = _redigi_nodi_non_scoperti(_merge_sblocco_in_nodi(nodi, stati_sblocco))
     scoperti_ids = [nid for nid, stato in stati_sblocco.items() if stato.get("scoperto")]
     scene_gifs = _scene_gifs_display(indagine_id)
@@ -545,7 +588,7 @@ def indagini_stato_player(indagine_id):
             "scena_corrente": prima_scena,
             "sipario_aperto": False,
             "nodi": [],
-            "punti_interesse": _punti_interesse(nodi, {}, prima_scena),
+            "punti_interesse": _punti_interesse_indagine(indagine_id, nodi, {}, None, prima_scena),
         })
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"])
     scoperti_ids = [nodo_id for nodo_id, stato in stati_sblocco.items() if stato.get("scoperto")]
@@ -563,7 +606,38 @@ def indagini_stato_player(indagine_id):
         "sipario_aperto": cronologia_attiva.get("sipario_aperto", False),
         "nodi": nodi_scoperti,
         "scene_gifs": scene_gifs_str,
-        "punti_interesse": _punti_interesse(nodi, stati_sblocco, scena_corrente_val),
+        "punti_interesse": _punti_interesse_indagine(
+            indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val),
+    })
+
+
+@bp.route("/<int:indagine_id>/scene/<int:numero_scena>/punti-extra", methods=["POST"])
+@richiedi_master
+def indagini_salva_punti_extra(indagine_id, numero_scena):
+    db.set_punti_extra_scena(indagine_id, numero_scena, request.form.get("punti_extra", ""))
+    return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
+
+
+@bp.route("/<int:indagine_id>/punti-extra/esaminato", methods=["POST"])
+@richiedi_master
+def indagini_toggle_punto_extra(indagine_id):
+    """Barra (o ripristina) un'esca della scena corrente: non avendo un nodo
+    da sbloccare, la segna a mano il master dalla vista live."""
+    etichetta = ((request.json or {}).get("etichetta") or "").strip() if request.is_json else ""
+    if not etichetta:
+        return jsonify({"error": "etichetta vuota"}), 400
+    cronologia = db.get_cronologia_attiva(indagine_id)
+    if not cronologia:
+        nome = f"Cronologia del {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        cronologia = db.crea_cronologia(indagine_id, nome)
+    nodi = db.get_nodi_indagine(indagine_id)
+    scena = _scena_corrente_effettiva(nodi, cronologia)
+    db.toggle_punto_extra_esaminato(cronologia["id"], _chiave_punto_extra(scena, etichetta))
+    cronologia = db.get_cronologia_attiva(indagine_id)
+    stati_sblocco = db.get_stato_nodi_cronologia(cronologia["id"])
+    return jsonify({
+        "punti_interesse": _punti_interesse_indagine(
+            indagine_id, nodi, stati_sblocco, cronologia, scena, per_master=True),
     })
 
 
