@@ -183,7 +183,10 @@ def indagini_editor(indagine_id):
     scene_gifs = _scene_gifs_dirette(indagine_id)
     scene_ereditate = _scene_gifs_ereditate(indagine_id)
     scene_location = {n: info["location_id"] for n, info in db.get_scene_gifs(indagine_id).items()}
-    scene_numeri = sorted(set(n["numero_nodo"] // 10 for n in nodi)) if nodi else []
+    # Anche le scene senza indizi (i buchi nella numerazione) vanno mostrate:
+    # il copione può passarci con @scena e hanno comunque bisogno di un luogo.
+    scene_note = {n["numero_nodo"] // 10 for n in nodi} | set(scene_location)
+    scene_numeri = sorted(set(range(1, max(scene_note) + 1)) | scene_note) if scene_note else []
     graph_data = _json_per_script({
         "nodi": nodi,
         "collegamenti": collegamenti,
