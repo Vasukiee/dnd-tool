@@ -76,10 +76,11 @@
         const stati = {};
         NODI.forEach(n => {
             const nid = n.id;
-            if (scena !== null && scenaNodo(n) > scena) {
-                stati[nid] = "ASSENTE";
-            } else if (scopertiSet.has(nid)) {
+            // Uno scoperto resta tale anche tornando a una scena precedente
+            if (scopertiSet.has(nid)) {
                 stati[nid] = "SCOPERTO";
+            } else if (scena !== null && scenaNodo(n) > scena) {
+                stati[nid] = "ASSENTE";
             } else {
                 stati[nid] = "BLOCCATO_VISIBILE";
             }
@@ -296,7 +297,6 @@
         const stato = statiCorrente[n.id];
         if (stato !== "SCOPERTO") return false;
         const scena = scenaNodo(n);
-        if (scena > scenaCorrente) return false;
         if (scena <= scenaCorrente - 2) {
             return nodoHaFigliScoperti(n.id);
         }
@@ -557,8 +557,6 @@
     function disegnaScene() {
         scenesGroup.innerHTML = "";
         tutteLeScene.forEach(scena => {
-            if (scena > scenaCorrente) return;
-
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             let haNodiVisibili = false;
             NODI.forEach(n => {
