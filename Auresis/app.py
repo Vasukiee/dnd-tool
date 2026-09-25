@@ -1,4 +1,5 @@
 import datetime
+import hashlib
 import hmac
 import json
 import os
@@ -105,6 +106,34 @@ def _cache_statici(response):
         response.headers.pop("Set-Cookie", None)
         response.headers.pop("Vary", None)
     return response
+
+
+_versioni_statici = {}
+
+
+def _versione_statico(filename):
+    """Impronta del contenuto di un file statico. Con la cache "immutable" di
+    un anno qui sopra, un URL che non cambia mai farebbe usare al browser la
+    versione vecchia anche dopo un deploy (e anche dopo un F5): l'impronta
+    nell'URL cambia solo quando cambia il file. Calcolata una volta per
+    processo, dopo la minimizzazione fatta all'avvio."""
+    versione = None if app.debug else _versioni_statici.get(filename)
+    if versione is None:
+        try:
+            with open(os.path.join(app.static_folder, filename), "rb") as f:
+                versione = hashlib.md5(f.read()).hexdigest()[:10]
+        except OSError:
+            versione = ""
+        _versioni_statici[filename] = versione
+    return versione
+
+
+@app.url_defaults
+def _versiona_statici(endpoint, values):
+    if endpoint == "static" and "filename" in values and "v" not in values:
+        versione = _versione_statico(values["filename"])
+        if versione:
+            values["v"] = versione
 
 
 app.register_blueprint(indagini_bp)
