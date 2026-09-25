@@ -400,6 +400,18 @@
             tNum.textContent = `#${n.numero_nodo}`;
             gEl.appendChild(tNum);
 
+            // Cosa si esamina per trovarlo: la stessa etichetta che vedono i giocatori
+            const punto = (n.punto_interesse || "").trim();
+            if (punto) {
+                const tPunto = document.createElementNS(SVG_NS, "text");
+                tPunto.setAttribute("x", pos.x); tPunto.setAttribute("y", y + 15);
+                tPunto.setAttribute("text-anchor", "middle");
+                tPunto.setAttribute("font-family", "IBM Plex Sans, sans-serif");
+                tPunto.setAttribute("font-size", "10"); tPunto.setAttribute("fill", "#6B5E48");
+                tPunto.textContent = punto.length > 26 ? punto.slice(0, 24) + "…" : punto;
+                gEl.appendChild(tPunto);
+            }
+
             const fo = document.createElementNS(SVG_NS, "foreignObject");
             fo.setAttribute("x", x + NODE_W / 2 - 36); fo.setAttribute("y", y + NODE_H - 22);
             fo.setAttribute("width", 72); fo.setAttribute("height", 20);

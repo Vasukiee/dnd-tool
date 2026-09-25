@@ -82,6 +82,24 @@ def _redigi_nodi_non_scoperti(nodi):
     return redatti
 
 
+def _punti_interesse(nodi, stati_sblocco, scena_corrente):
+    """Cosa si può esaminare nella scena corrente, per la lista della player view.
+    Espone solo l'etichetta scritta apposta per i giocatori (punto_interesse),
+    mai titolo o descrizione, e solo per la scena in corso: le scene future non
+    arrivano al browser. Più indizi con la stessa etichetta diventano una voce
+    sola, esaminata appena uno è scoperto: la lista non tradisce quanti indizi
+    nasconde un oggetto."""
+    voci = {}
+    for n in nodi:
+        etichetta = (n.get("punto_interesse") or "").strip()
+        if not etichetta or n["numero_nodo"] // 10 != scena_corrente:
+            continue
+        voce = voci.setdefault(etichetta.casefold(), {"etichetta": etichetta, "esaminato": False})
+        if stati_sblocco.get(n["id"], {}).get("scoperto"):
+            voce["esaminato"] = True
+    return list(voci.values())
+
+
 def _merge_sblocco_in_nodi(nodi, stati_sblocco):
     """Inietta scoperto/sbloccato_manualmente dalla cronologia nei dict nodo."""
     for n in nodi:
@@ -256,7 +274,9 @@ def indagini_nuovo_nodo(indagine_id):
     immagine_url = request.form.get("immagine_url", "").strip() or None
     regola_sblocco = request.form.get("regola_sblocco", "TUTTI")
     tipo_speciale = request.form.get("tipo_speciale", "").strip() or None
-    db.add_nodo(indagine_id, numero_nodo, titolo, descrizione, immagine_url, regola_sblocco, tipo_speciale)
+    punto_interesse = request.form.get("punto_interesse", "").strip() or None
+    db.add_nodo(indagine_id, numero_nodo, titolo, descrizione, immagine_url, regola_sblocco, tipo_speciale,
+                punto_interesse)
     return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
 
 
@@ -276,6 +296,7 @@ def indagini_edita_nodo(indagine_id, nodo_id):
         immagine_url=immagine_url,
         regola_sblocco=regola_sblocco,
         tipo_speciale=tipo_speciale,
+        punto_interesse=request.form.get("punto_interesse", "").strip() or None,
     )
     livello_sfx_str = request.form.get("livello_sfx", "").strip()
     if livello_sfx_str in ("1", "2", "3"):
@@ -487,6 +508,7 @@ def indagini_player(indagine_id):
     cronologia_attiva = db.get_cronologia_attiva(indagine_id)
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"]) if cronologia_attiva else {}
     scena_corrente_val = _scena_corrente_effettiva(nodi, cronologia_attiva)
+    punti_interesse = _punti_interesse(nodi, stati_sblocco, scena_corrente_val)
     nodi = _redigi_nodi_non_scoperti(_merge_sblocco_in_nodi(nodi, stati_sblocco))
     scoperti_ids = [nid for nid, stato in stati_sblocco.items() if stato.get("scoperto")]
     scene_gifs = _scene_gifs_display(indagine_id)
@@ -498,6 +520,7 @@ def indagini_player(indagine_id):
         "scena_corrente": scena_corrente_val,
         "sipario_aperto": cronologia_attiva.get("sipario_aperto", False) if cronologia_attiva else False,
         "scene_gifs": scene_gifs_str,
+        "punti_interesse": punti_interesse,
     })
     return render_template(
         "indagini_player.html",
@@ -516,8 +539,14 @@ def indagini_stato_player(indagine_id):
     cronologia_attiva = db.get_cronologia_attiva(indagine_id)
     if not cronologia_attiva:
         nodi = db.get_nodi_indagine(indagine_id)
-        return jsonify(
-            {"scoperti_ids": [], "scena_corrente": _prima_scena_nodi(nodi), "sipario_aperto": False, "nodi": []})
+        prima_scena = _prima_scena_nodi(nodi)
+        return jsonify({
+            "scoperti_ids": [],
+            "scena_corrente": prima_scena,
+            "sipario_aperto": False,
+            "nodi": [],
+            "punti_interesse": _punti_interesse(nodi, {}, prima_scena),
+        })
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"])
     scoperti_ids = [nodo_id for nodo_id, stato in stati_sblocco.items() if stato.get("scoperto")]
     scene_gifs = _scene_gifs_display(indagine_id)
@@ -527,12 +556,14 @@ def indagini_stato_player(indagine_id):
     # il frontend può renderizzare quelli rivelati durante la sessione.
     nodi = _merge_sblocco_in_nodi(db.get_nodi_indagine(indagine_id), stati_sblocco)
     nodi_scoperti = [n for n in nodi if n.get("scoperto")]
+    scena_corrente_val = _scena_corrente_effettiva(nodi, cronologia_attiva)
     return jsonify({
         "scoperti_ids": scoperti_ids,
-        "scena_corrente": _scena_corrente_effettiva(nodi, cronologia_attiva),
+        "scena_corrente": scena_corrente_val,
         "sipario_aperto": cronologia_attiva.get("sipario_aperto", False),
         "nodi": nodi_scoperti,
         "scene_gifs": scene_gifs_str,
+        "punti_interesse": _punti_interesse(nodi, stati_sblocco, scena_corrente_val),
     })
 
 

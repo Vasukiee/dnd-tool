@@ -27,6 +27,7 @@ def get_storage_mode():
 _pg_pool = None
 _indici_performance_assicurati = False
 _quest_locations_assicurata = False
+_punto_interesse_assicurato = False
 
 
 class _ConnessioneDalPool:
@@ -1711,15 +1712,35 @@ def ricalcola_livello_sfx_singolo(nodo_id):
     conn.close()
 
 
+def assicura_colonna_punto_interesse(force=False):
+    """Aggiunge nodi_indagine.punto_interesse sui database creati prima della
+    colonna. Serve solo in scrittura: le letture usano SELECT * e il campo
+    assente vale semplicemente "nessuna etichetta". Cacheato per processo."""
+    global _punto_interesse_assicurato
+    if (_punto_interesse_assicurato and not force) or is_sqlite():
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("ALTER TABLE nodi_indagine ADD COLUMN IF NOT EXISTS punto_interesse TEXT")
+    conn.commit()
+    cur.close()
+    conn.close()
+    _punto_interesse_assicurato = True
+
+
 def add_nodo(indagine_id, numero_nodo, titolo, descrizione=None,
-             immagine_url=None, regola_sblocco='TUTTI', tipo_speciale=None):
+             immagine_url=None, regola_sblocco='TUTTI', tipo_speciale=None,
+             punto_interesse=None):
+    assicura_colonna_punto_interesse()
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
         """INSERT INTO nodi_indagine
-           (indagine_id, numero_nodo, titolo, descrizione, immagine_url, regola_sblocco, tipo_speciale)
-           VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-        (indagine_id, numero_nodo, titolo, descrizione, immagine_url, regola_sblocco, tipo_speciale),
+           (indagine_id, numero_nodo, titolo, descrizione, immagine_url, regola_sblocco, tipo_speciale,
+            punto_interesse)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+        (indagine_id, numero_nodo, titolo, descrizione, immagine_url, regola_sblocco, tipo_speciale,
+         punto_interesse),
     )
     new_id = cur.fetchone()[0]
     conn.commit()
@@ -1733,6 +1754,8 @@ def update_nodo(nodo_id, **kwargs):
     if not kwargs:
         return
     _valida_nomi_colonna(kwargs)
+    if "punto_interesse" in kwargs:
+        assicura_colonna_punto_interesse()
     cols = ", ".join(f"{k} = %s" for k in kwargs)
     vals = list(kwargs.values()) + [nodo_id]
     conn = get_connection()

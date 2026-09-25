@@ -89,6 +89,12 @@
                     <input type="text" name="titolo" id="edit_titolo" required>
                 </div>
                 <div class="form-field">
+                    <label>Cosa si può esaminare</label>
+                    <input type="text" name="punto_interesse" id="edit_punto_interesse" maxlength="60"
+                           placeholder="es. La scrivania">
+                    <span style="font-size:0.68rem;color:var(--bone-dim);line-height:1.35;">Visibile ai giocatori nella lista "Da esaminare". Vuoto per gli indizi dedotti.</span>
+                </div>
+                <div class="form-field">
                     <label>Descrizione</label>
                     <textarea name="descrizione" id="edit_descrizione" rows="3"></textarea>
                 </div>
@@ -144,6 +150,11 @@
                 <div class="form-field">
                     <label>Titolo *</label>
                     <input type="text" name="titolo" required placeholder="Nome indizio…">
+                </div>
+                <div class="form-field">
+                    <label>Cosa si può esaminare</label>
+                    <input type="text" name="punto_interesse" maxlength="60" placeholder="es. La scrivania">
+                    <span style="font-size:0.68rem;color:var(--bone-dim);line-height:1.35;">Visibile ai giocatori nella lista "Da esaminare". Vuoto per gli indizi dedotti.</span>
                 </div>
                 <div class="form-field">
                     <label>Descrizione</label>
@@ -404,6 +415,7 @@
         document.getElementById("edit_numero_nodo").value = n.numero_nodo;
         document.getElementById("edit_titolo").value = n.titolo;
         document.getElementById("edit_descrizione").value = n.descrizione || "";
+        document.getElementById("edit_punto_interesse").value = n.punto_interesse || "";
         document.getElementById("edit_immagine_url").value = n.immagine_url || "";
         document.getElementById("edit_regola_sblocco").value = n.regola_sblocco;
         document.getElementById("edit_tipo_speciale").value = n.tipo_speciale || "";

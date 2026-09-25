@@ -238,6 +238,9 @@ CREATE INDEX IF NOT EXISTS idx_collegamenti_figlio ON collegamenti_nodi(nodo_fig
 ALTER TABLE nodi_indagine ADD COLUMN IF NOT EXISTS tipo_speciale TEXT DEFAULT NULL CHECK (tipo_speciale IN ('rivelazione', NULL));
 ALTER TABLE nodi_indagine ADD COLUMN IF NOT EXISTS livello_sfx INTEGER CHECK (livello_sfx IN (1, 2, 3));
 ALTER TABLE nodi_indagine ADD COLUMN IF NOT EXISTS livello_sfx_manuale BOOLEAN NOT NULL DEFAULT FALSE;
+-- Etichetta player-safe ("La scrivania"): compare nella lista "Da esaminare"
+-- della player view. Mai titolo o descrizione, che restano segreti fino allo sblocco.
+ALTER TABLE nodi_indagine ADD COLUMN IF NOT EXISTS punto_interesse TEXT;
 
 -- Rimuove le colonne di stato che ora vivono in stato_nodi_cronologia
 ALTER TABLE nodi_indagine DROP COLUMN IF EXISTS scoperto;

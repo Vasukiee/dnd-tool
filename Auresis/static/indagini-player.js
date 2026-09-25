@@ -53,6 +53,54 @@
             graphSceneOverlay.classList.add("attivo");
         }
     }
+    // --- Lista "Da esaminare" ---
+    // Il server manda solo le etichette player-safe della scena corrente
+    // (mai titoli o descrizioni), già raggruppate e con lo stato esaminato.
+    const esploraBox = document.getElementById("playerEsplora");
+    const esploraLista = document.getElementById("playerEsploraLista");
+    let puntiPrecedenti = null; // {etichetta: esaminato} dell'ultimo render
+
+    function aggiornaPuntiInteresse(voci) {
+        voci = voci || [];
+        const attuali = {};
+        voci.forEach(v => { attuali[v.etichetta] = v.esaminato; });
+        const etichette = Object.keys(attuali);
+        if (puntiPrecedenti) {
+            const vecchie = Object.keys(puntiPrecedenti);
+            const identiche = vecchie.length === etichette.length &&
+                etichette.every(e => puntiPrecedenti[e] === attuali[e]);
+            if (identiche) return;
+        }
+        // Lista nuova (primo caricamento o cambio scena): le voci entrano in
+        // sequenza. Stessa lista: si anima solo il tratto su quelle appena esaminate.
+        const listaNuova = !puntiPrecedenti ||
+            etichette.some(e => !(e in puntiPrecedenti)) ||
+            Object.keys(puntiPrecedenti).some(e => !(e in attuali));
+
+        esploraLista.innerHTML = "";
+        voci.forEach((v, i) => {
+            const li = document.createElement("li");
+            li.className = "player-esplora__voce";
+            li.textContent = v.etichetta;
+            if (v.esaminato) {
+                li.classList.add("player-esplora__voce--esaminata");
+                if (!listaNuova && puntiPrecedenti[v.etichetta] === false) {
+                    li.classList.add("player-esplora__voce--appena");
+                }
+            }
+            if (listaNuova) {
+                li.classList.add("player-esplora__voce--entra");
+                li.style.animationDelay = `${120 + i * 70}ms`;
+            }
+            esploraLista.appendChild(li);
+        });
+        esploraBox.hidden = voci.length === 0;
+        esploraBox.classList.toggle("player-esplora--completa", voci.length > 0 && voci.every(v => v.esaminato));
+        puntiPrecedenti = attuali;
+    }
+
+    aggiornaPuntiInteresse(RAW.punti_interesse);
+
     const NODE_W = 170;
     const NODE_H = 80;
     const PAD = 40;
@@ -732,6 +780,7 @@
             if (data.scene_gifs) {
                 SCENE_GIFS = data.scene_gifs;
             }
+            aggiornaPuntiInteresse(data.punti_interesse);
 
             const nuoviScopertiIds = new Set(data.scoperti_ids.map(Number));
             const nuovaScena = data.scena_corrente;
