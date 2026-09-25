@@ -238,6 +238,9 @@ CREATE INDEX IF NOT EXISTS idx_collegamenti_figlio ON collegamenti_nodi(nodo_fig
 ALTER TABLE nodi_indagine ADD COLUMN IF NOT EXISTS tipo_speciale TEXT DEFAULT NULL CHECK (tipo_speciale IN ('rivelazione', NULL));
 ALTER TABLE nodi_indagine ADD COLUMN IF NOT EXISTS livello_sfx INTEGER CHECK (livello_sfx IN (1, 2, 3));
 ALTER TABLE nodi_indagine ADD COLUMN IF NOT EXISTS livello_sfx_manuale BOOLEAN NOT NULL DEFAULT FALSE;
+-- Etichetta player-safe ("La scrivania"): compare nella lista "Da esaminare"
+-- della player view. Mai titolo o descrizione, che restano segreti fino allo sblocco.
+ALTER TABLE nodi_indagine ADD COLUMN IF NOT EXISTS punto_interesse TEXT;
 
 -- Rimuove le colonne di stato che ora vivono in stato_nodi_cronologia
 ALTER TABLE nodi_indagine DROP COLUMN IF EXISTS scoperto;
@@ -256,6 +259,8 @@ CREATE TABLE IF NOT EXISTS cronologie_indagine (
 ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS scena_corrente INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE cronologie_indagine ALTER COLUMN scena_corrente SET DEFAULT 0;
 ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS sipario_aperto BOOLEAN NOT NULL DEFAULT FALSE;
+-- Voci esca della lista "Da esaminare" già segnate come esaminate (array JSON di "scena|etichetta")
+ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS punti_extra_esaminati TEXT;
 
 CREATE TABLE IF NOT EXISTS stato_nodi_cronologia (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -286,6 +291,8 @@ CREATE TABLE IF NOT EXISTS scene_indagine (
 ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS gif_data BYTEA;
 ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS gif_mime TEXT;
 ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS gif_data_aggiornata TIMESTAMPTZ;
+-- Voci esca della lista "Da esaminare": si guardano ma non nascondono indizi (una per riga)
+ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS punti_extra TEXT;
 
 -- Sfondo per luogo: una scena senza immagine propria eredita quella del suo
 -- luogo, risalendo la catena location_padre_id. Tabella separata perché

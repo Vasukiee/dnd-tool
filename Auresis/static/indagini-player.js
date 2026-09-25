@@ -53,6 +53,54 @@
             graphSceneOverlay.classList.add("attivo");
         }
     }
+    // --- Lista "Da esaminare" ---
+    // Il server manda solo le etichette player-safe della scena corrente
+    // (mai titoli o descrizioni), già raggruppate e con lo stato esaminato.
+    const esploraBox = document.getElementById("playerEsplora");
+    const esploraLista = document.getElementById("playerEsploraLista");
+    let puntiPrecedenti = null; // {etichetta: esaminato} dell'ultimo render
+
+    function aggiornaPuntiInteresse(voci) {
+        voci = voci || [];
+        const attuali = {};
+        voci.forEach(v => { attuali[v.etichetta] = v.esaminato; });
+        const etichette = Object.keys(attuali);
+        if (puntiPrecedenti) {
+            const vecchie = Object.keys(puntiPrecedenti);
+            const identiche = vecchie.length === etichette.length &&
+                etichette.every(e => puntiPrecedenti[e] === attuali[e]);
+            if (identiche) return;
+        }
+        // Lista nuova (primo caricamento o cambio scena): le voci entrano in
+        // sequenza. Stessa lista: si anima solo il tratto su quelle appena esaminate.
+        const listaNuova = !puntiPrecedenti ||
+            etichette.some(e => !(e in puntiPrecedenti)) ||
+            Object.keys(puntiPrecedenti).some(e => !(e in attuali));
+
+        esploraLista.innerHTML = "";
+        voci.forEach((v, i) => {
+            const li = document.createElement("li");
+            li.className = "player-esplora__voce";
+            li.textContent = v.etichetta;
+            if (v.esaminato) {
+                li.classList.add("player-esplora__voce--esaminata");
+                if (!listaNuova && puntiPrecedenti[v.etichetta] === false) {
+                    li.classList.add("player-esplora__voce--appena");
+                }
+            }
+            if (listaNuova) {
+                li.classList.add("player-esplora__voce--entra");
+                li.style.animationDelay = `${120 + i * 70}ms`;
+            }
+            esploraLista.appendChild(li);
+        });
+        esploraBox.hidden = voci.length === 0;
+        esploraBox.classList.toggle("player-esplora--completa", voci.length > 0 && voci.every(v => v.esaminato));
+        puntiPrecedenti = attuali;
+    }
+
+    aggiornaPuntiInteresse(RAW.punti_interesse);
+
     const NODE_W = 170;
     const NODE_H = 80;
     const PAD = 40;
@@ -107,7 +155,6 @@
 
         let html = `
             <p class="player-detail__scena">Scena ${scena}</p>
-            <p class="player-detail__num">#${n.numero_nodo}</p>
             <h2 class="player-detail__titolo">${escHtml(n.titolo)}</h2>`;
 
         if (n.immagine_url) {
@@ -132,69 +179,78 @@
     detailClose.addEventListener("click", chiudiDettaglio);
 
     // ----------------------------------------------------------------
-    // Dagre layout (identico alla pagina live)
+    // Dagre layout — SOLO sui nodi visibili, ricalcolato a ogni render.
+    // Se i nodi non ancora scoperti tenessero il loro posto, il grafo
+    // mostrerebbe i buchi (e quindi quanti indizi mancano): qui la scena
+    // resta sempre compatta e i nodi già presenti scivolano nelle nuove
+    // posizioni quando ne arriva uno.
     // ----------------------------------------------------------------
-    const g = new dagre.graphlib.Graph();
-    g.setGraph({ rankdir: "LR", nodesep: 28, ranksep: 160, marginx: PAD, marginy: PAD });
-    g.setDefaultEdgeLabel(() => ({}));
-    NODI.forEach(n => g.setNode(String(n.id), { width: NODE_W, height: NODE_H }));
-    COLL.forEach(c => g.setEdge(String(c.nodo_genitore_id), String(c.nodo_figlio_id)));
+    let g = null;
 
-    // Virtual roots per scena
-    const figliIds = new Set(COLL.map(c => c.nodo_figlio_id));
-    const radiciPerScena = {};
-    NODI.forEach(n => {
-        if (!figliIds.has(n.id)) {
-            const scena = scenaNodo(n);
-            (radiciPerScena[scena] = radiciPerScena[scena] || []).push(n.id);
-        }
-    });
-    const genitoriDiId = {};
-    COLL.forEach(c => {
-        genitoriDiId[c.nodo_figlio_id] = genitoriDiId[c.nodo_figlio_id] || [];
-        genitoriDiId[c.nodo_figlio_id].push(c.nodo_genitore_id);
-    });
-    let prevScenaVId = null;
-    tutteLeScene.forEach(scena => {
-        const vId = `__scena_${scena}__`;
-        g.setNode(vId, { width: 0, height: 0 });
-        if (prevScenaVId) g.setEdge(prevScenaVId, vId);
-        if (radiciPerScena[scena]) {
-            radiciPerScena[scena].forEach(id => g.setEdge(vId, String(id)));
-        } else {
-            NODI.forEach(n => {
-                if (scenaNodo(n) !== scena) return;
-                const parents = genitoriDiId[n.id] || [];
-                if (parents.some(pid => nodoById[pid] && scenaNodo(nodoById[pid]) !== scena))
-                    g.setEdge(vId, String(n.id));
-            });
-        }
-        prevScenaVId = vId;
-    });
-    tutteLeScene.forEach((scena, i) => {
-        if (radiciPerScena[scena] || i === tutteLeScene.length - 1) return;
-        const nextVId = `__scena_${tutteLeScene[i + 1]}__`;
-        NODI.forEach(n => {
-            if (scenaNodo(n) !== scena) return;
-            const hasChildInSameScene = COLL.some(c =>
-                c.nodo_genitore_id === n.id &&
-                nodoById[c.nodo_figlio_id] &&
-                scenaNodo(nodoById[c.nodo_figlio_id]) === scena
-            );
-            if (!hasChildInSameScene) g.setEdge(String(n.id), nextVId);
+    function calcolaLayout() {
+        const visibili = NODI.filter(nodoDovrebbeEssereVisibile);
+        const visIds = new Set(visibili.map(n => n.id));
+        const coll = COLL.filter(c => visIds.has(c.nodo_genitore_id) && visIds.has(c.nodo_figlio_id));
+        const scene = [...new Set(visibili.map(scenaNodo))].sort((a, b) => a - b);
+
+        const gl = new dagre.graphlib.Graph();
+        gl.setGraph({ rankdir: "LR", nodesep: 28, ranksep: 160, marginx: PAD, marginy: PAD });
+        gl.setDefaultEdgeLabel(() => ({}));
+        visibili.forEach(n => gl.setNode(String(n.id), { width: NODE_W, height: NODE_H }));
+        coll.forEach(c => gl.setEdge(String(c.nodo_genitore_id), String(c.nodo_figlio_id)));
+
+        // Virtual roots per scena: tengono le scene in colonna da sinistra a destra
+        const figliIds = new Set(coll.map(c => c.nodo_figlio_id));
+        const radiciPerScena = {};
+        visibili.forEach(n => {
+            if (!figliIds.has(n.id)) {
+                (radiciPerScena[scenaNodo(n)] = radiciPerScena[scenaNodo(n)] || []).push(n.id);
+            }
         });
-    });
+        const genitoriDiId = {};
+        coll.forEach(c => {
+            (genitoriDiId[c.nodo_figlio_id] = genitoriDiId[c.nodo_figlio_id] || []).push(c.nodo_genitore_id);
+        });
+        let prevScenaVId = null;
+        scene.forEach(scena => {
+            const vId = `__scena_${scena}__`;
+            gl.setNode(vId, { width: 0, height: 0 });
+            if (prevScenaVId) gl.setEdge(prevScenaVId, vId);
+            if (radiciPerScena[scena]) {
+                radiciPerScena[scena].forEach(id => gl.setEdge(vId, String(id)));
+            } else {
+                visibili.forEach(n => {
+                    if (scenaNodo(n) !== scena) return;
+                    const parents = genitoriDiId[n.id] || [];
+                    if (parents.some(pid => nodoById[pid] && scenaNodo(nodoById[pid]) !== scena))
+                        gl.setEdge(vId, String(n.id));
+                });
+            }
+            prevScenaVId = vId;
+        });
+        scene.forEach((scena, i) => {
+            if (radiciPerScena[scena] || i === scene.length - 1) return;
+            const nextVId = `__scena_${scene[i + 1]}__`;
+            visibili.forEach(n => {
+                if (scenaNodo(n) !== scena) return;
+                const hasChildInSameScene = coll.some(c =>
+                    c.nodo_genitore_id === n.id &&
+                    nodoById[c.nodo_figlio_id] &&
+                    scenaNodo(nodoById[c.nodo_figlio_id]) === scena
+                );
+                if (!hasChildInSameScene) gl.setEdge(String(n.id), nextVId);
+            });
+        });
 
-    dagre.layout(g);
+        dagre.layout(gl);
 
-    // Post-processing: redistribuzione nodi per eliminare gap verticali
-    {
+        // Post-processing: redistribuzione nodi per eliminare gap verticali
         const STEP_Y = NODE_H + 28;
-        tutteLeScene.forEach(scena => {
+        scene.forEach(scena => {
             const byRank = {};
-            NODI.forEach(n => {
-                if (Math.floor(n.numero_nodo / 10) !== scena) return;
-                const pos = g.node(String(n.id));
+            visibili.forEach(n => {
+                if (scenaNodo(n) !== scena) return;
+                const pos = gl.node(String(n.id));
                 if (!pos) return;
                 const rk = Math.round(pos.x);
                 (byRank[rk] = byRank[rk] || []).push({ id: String(n.id), pos });
@@ -208,8 +264,8 @@
                     const dy = newY - item.pos.y;
                     if (Math.abs(dy) < 0.5) return;
                     item.pos.y = newY;
-                    (g.nodeEdges(item.id) || []).forEach(e => {
-                        const edge = g.edge(e);
+                    (gl.nodeEdges(item.id) || []).forEach(e => {
+                        const edge = gl.edge(e);
                         if (!edge || !edge.points || !edge.points.length) return;
                         if (e.v === item.id) edge.points[0].y += dy;
                         else edge.points[edge.points.length - 1].y += dy;
@@ -217,6 +273,7 @@
                 });
             });
         });
+        return gl;
     }
 
     // ----------------------------------------------------------------
@@ -243,9 +300,12 @@
     const PZ_MIN = 0.15, PZ_MAX = 4;
     let pz = { tx: 0, ty: 0, s: 1 };
     let pzInit = false;
+    // Dopo un pan/zoom a mano la vista resta dove l'ha messa il master
+    let pzManuale = false;
 
-    function applyPZ() {
-        root.setAttribute("transform", `translate(${pz.tx},${pz.ty}) scale(${pz.s})`);
+    function applyPZ(animato) {
+        root.style.transition = animato ? "transform 0.8s cubic-bezier(0.4, 0, 0.2, 1)" : "none";
+        root.style.transform = `translate(${pz.tx}px, ${pz.ty}px) scale(${pz.s})`;
     }
 
     svg.addEventListener("wheel", e => {
@@ -258,6 +318,7 @@
         pz.tx = mx - (mx - pz.tx) * (ns / pz.s);
         pz.ty = my - (my - pz.ty) * (ns / pz.s);
         pz.s = ns;
+        pzManuale = true;
         applyPZ();
     }, { passive: false });
 
@@ -272,8 +333,10 @@
         if (!pzDrag) return;
         const nx = e.clientX - pzDragStart.x;
         const ny = e.clientY - pzDragStart.y;
-        if (!pzDragMoved && (Math.abs(nx - pz.tx) > 3 || Math.abs(ny - pz.ty) > 3))
+        if (!pzDragMoved && (Math.abs(nx - pz.tx) > 3 || Math.abs(ny - pz.ty) > 3)) {
             pzDragMoved = true;
+            pzManuale = true;
+        }
         pz.tx = nx; pz.ty = ny;
         applyPZ();
     });
@@ -439,12 +502,7 @@
             rect.setAttribute("stroke-width", "1");
             gEl.appendChild(rect);
 
-            const tNum = document.createElementNS(SVG_NS, "text");
-            tNum.setAttribute("x", x + 8); tNum.setAttribute("y", y + 14);
-            tNum.setAttribute("font-family", "JetBrains Mono, monospace");
-            tNum.setAttribute("font-size", "10"); tNum.setAttribute("fill", "#9C7A3C");
-            tNum.textContent = `#${n.numero_nodo}`;
-            gEl.appendChild(tNum);
+            // Niente numero del nodo: i salti (#11, #16…) direbbero quanti indizi mancano
 
             const titolo = n.titolo.length > 22 ? n.titolo.slice(0, 20) + "…" : n.titolo;
             const tTit = document.createElementNS(SVG_NS, "text");
@@ -554,15 +612,15 @@
     const BOX_PAD = 22;
     const BOX_TITLE_H = 18;
 
+    const sceneEls = {}; // scena -> {rect, label}: riusati perché il riquadro si allarghi/stringa con transizione
+
     function disegnaScene() {
-        scenesGroup.innerHTML = "";
+        const disegnate = new Set();
         tutteLeScene.forEach(scena => {
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            let haNodiVisibili = false;
             NODI.forEach(n => {
                 if (scenaNodo(n) !== scena) return;
                 if (!nodoDovrebbeEssereVisibile(n)) return;
-                haNodiVisibili = true;
                 const pos = g.node(String(n.id));
                 if (!pos) return;
                 minX = Math.min(minX, pos.x - NODE_W / 2);
@@ -571,7 +629,8 @@
                 maxY = Math.max(maxY, pos.y + NODE_H / 2);
             });
             // Player: mostra il riquadro scena SOLO se ci sono nodi scoperti dentro
-            if (!haNodiVisibili || minX === Infinity) return;
+            if (minX === Infinity) return;
+            disegnate.add(scena);
 
             const isCorrente = scena === scenaCorrente;
             const isChiusa = scena < scenaCorrente;
@@ -581,26 +640,41 @@
             const bw = maxX - minX + BOX_PAD * 2;
             const bh = maxY - minY + BOX_PAD * 2 + BOX_TITLE_H;
 
-            const rect = document.createElementNS(SVG_NS, "rect");
-            rect.setAttribute("x", bx); rect.setAttribute("y", by);
-            rect.setAttribute("width", bw); rect.setAttribute("height", bh);
-            rect.setAttribute("rx", 6);
+            let els = sceneEls[scena];
+            if (!els) {
+                const rect = document.createElementNS(SVG_NS, "rect");
+                rect.classList.add("scena-box");
+                rect.setAttribute("rx", 6);
+                const label = document.createElementNS(SVG_NS, "text");
+                label.classList.add("scena-box__label");
+                label.setAttribute("x", 0); label.setAttribute("y", 0);
+                label.setAttribute("font-family", "JetBrains Mono, monospace");
+                label.setAttribute("font-size", "9");
+                label.setAttribute("letter-spacing", "0.08em");
+                label.textContent = `SCENA ${scena}`;
+                els = sceneEls[scena] = { rect, label };
+                scenesGroup.appendChild(rect);
+                scenesGroup.appendChild(label);
+            }
+            const { rect, label } = els;
+            // Attributi per il layout, proprietà CSS per la transizione
+            [["x", bx], ["y", by], ["width", bw], ["height", bh]].forEach(([k, v]) => {
+                rect.setAttribute(k, v);
+                rect.style[k] = `${v}px`;
+            });
             rect.setAttribute("fill", isChiusa ? "#08070A" : "none");
             rect.setAttribute("stroke", isCorrente ? "#5C5040" : "#221E18");
             rect.setAttribute("stroke-width", isCorrente ? "1.5" : "1");
             rect.setAttribute("stroke-dasharray", isChiusa ? "none" : "4 3");
-            if (isChiusa) rect.setAttribute("opacity", "0.7");
-            scenesGroup.appendChild(rect);
-
-            const label = document.createElementNS(SVG_NS, "text");
-            label.setAttribute("x", bx + 8);
-            label.setAttribute("y", by + 13);
-            label.setAttribute("font-family", "JetBrains Mono, monospace");
-            label.setAttribute("font-size", "9");
-            label.setAttribute("letter-spacing", "0.08em");
+            rect.setAttribute("opacity", isChiusa ? "0.7" : "1");
+            label.style.transform = `translate(${bx + 8}px, ${by + 13}px)`;
             label.setAttribute("fill", isCorrente ? "#9C7A3C" : "#3A322A");
-            label.textContent = `SCENA ${scena}`;
-            scenesGroup.appendChild(label);
+        });
+        Object.keys(sceneEls).forEach(k => {
+            if (disegnate.has(Number(k))) return;
+            sceneEls[k].rect.remove();
+            sceneEls[k].label.remove();
+            delete sceneEls[k];
         });
     }
 
@@ -643,7 +717,8 @@
     }
 
     function aggiornaSVG(forceRefit) {
-        if (pzInit && !forceRefit) return;
+        if (pzInit && (!forceRefit || pzManuale)) return;
+        const animato = pzInit;
         const svgRect = svg.getBoundingClientRect();
         const cw = calcolaWidthSVG();
         const ch = calcolaAltezzaSVG();
@@ -655,14 +730,41 @@
         pz.s  = scale;
         pz.tx = (svgRect.width  - cw * scale) / 2;
         pz.ty = Math.max(0, (svgRect.height - ch * scale) / 2);
-        applyPZ();
+        applyPZ(animato);
         pzInit = true;
     }
 
     // ----------------------------------------------------------------
     // Render completo
     // ----------------------------------------------------------------
+    // Nodo già in scena spostato dal nuovo layout: parte dalla vecchia
+    // posizione e scivola nella nuova (FLIP su un gruppo contenitore, così
+    // non interferisce con le animazioni del nodo stesso).
+    function avvolgiSpostamento(el, prima, ora) {
+        const dx = prima.x - ora.x, dy = prima.y - ora.y;
+        if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return el;
+        const wrap = document.createElementNS(SVG_NS, "g");
+        wrap.classList.add("g-node-sposta");
+        wrap.style.transform = `translate(${dx}px, ${dy}px)`;
+        wrap.appendChild(el);
+        requestAnimationFrame(() => requestAnimationFrame(() => { wrap.style.transform = ""; }));
+        return wrap;
+    }
+
+    let frecceTimer = null;
+
     function renderTutti(animNew, animRevealed, skipIds, animEdgeSet, recallIds) {
+        const posPrecedenti = {};
+        if (g) g.nodes().forEach(id => {
+            const p = g.node(id);
+            if (p && !id.startsWith("__")) posPrecedenti[id] = { x: p.x, y: p.y };
+        });
+        g = calcolaLayout();
+        const spostati = Object.keys(posPrecedenti).some(id => {
+            const p = g.node(id);
+            return p && (Math.abs(p.x - posPrecedenti[id].x) > 0.5 || Math.abs(p.y - posPrecedenti[id].y) > 0.5);
+        });
+
         nodesGroup.innerHTML = "";
         const ghostsDaAggiungere = [];
 
@@ -671,18 +773,45 @@
             if (skipIds && skipIds.has(n.id)) return;
             let animClass = null;
             if (animNew && animNew.has(n.id)) animClass = "g-node-new";
-            else if (animRevealed && animRevealed.has(n.id)) animClass = "g-node-revealed";
+            else if (animRevealed && animRevealed.has(n.id)) animClass = "g-node-arriva";
             else if (recallIds && recallIds.has(n.id)) animClass = "g-node-richiamato";
             const el = creaElementoNodo(n, animClass);
             if (!el) return;
-            nodesGroup.appendChild(el);
-            if (el._ghostDaAggiungere) ghostsDaAggiungere.push(el._ghostDaAggiungere);
+            // Chi arriva aspetta che gli altri gli abbiano fatto posto. Transizione
+            // inline oltre all'animazione: funziona anche con le animazioni del sito spente.
+            if (spostati && animClass) {
+                el.style.animationDelay = "0.45s";
+                el.style.opacity = "0";
+                setTimeout(() => {
+                    el.style.transition = "opacity 0.45s ease";
+                    el.style.opacity = "";
+                }, 450);
+            }
+            const prima = posPrecedenti[String(n.id)];
+            const wrapped = prima ? avvolgiSpostamento(el, prima, g.node(String(n.id))) : el;
+            nodesGroup.appendChild(wrapped);
+            if (el._ghostDaAggiungere) {
+                if (wrapped !== el) wrapped.appendChild(el._ghostDaAggiungere);
+                else ghostsDaAggiungere.push(el._ghostDaAggiungere);
+            }
         });
 
         ghostsDaAggiungere.forEach(gh => nodesGroup.appendChild(gh));
         disegnaScene();
         disegnaFrecce(animEdgeSet);
-        aggiornaSVG(false);
+        // Le frecce sono già nelle posizioni nuove: compaiono a spostamento finito
+        clearTimeout(frecceTimer);
+        if (spostati) {
+            edgesGroup.style.transition = "none";
+            edgesGroup.style.opacity = "0";
+            frecceTimer = setTimeout(() => {
+                edgesGroup.style.transition = "opacity 0.4s ease";
+                edgesGroup.style.opacity = "";
+            }, 700);
+        } else {
+            edgesGroup.style.opacity = "";
+        }
+        aggiornaSVG(true);
     }
 
     // ----------------------------------------------------------------
@@ -732,6 +861,7 @@
             if (data.scene_gifs) {
                 SCENE_GIFS = data.scene_gifs;
             }
+            aggiornaPuntiInteresse(data.punti_interesse);
 
             const nuoviScopertiIds = new Set(data.scoperti_ids.map(Number));
             const nuovaScena = data.scena_corrente;
