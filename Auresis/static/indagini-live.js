@@ -400,6 +400,18 @@
             tNum.textContent = `#${n.numero_nodo}`;
             gEl.appendChild(tNum);
 
+            // Cosa si esamina per trovarlo: la stessa etichetta che vedono i giocatori
+            const punto = (n.punto_interesse || "").trim();
+            if (punto) {
+                const tPunto = document.createElementNS(SVG_NS, "text");
+                tPunto.setAttribute("x", pos.x); tPunto.setAttribute("y", y + 15);
+                tPunto.setAttribute("text-anchor", "middle");
+                tPunto.setAttribute("font-family", "IBM Plex Sans, sans-serif");
+                tPunto.setAttribute("font-size", "10"); tPunto.setAttribute("fill", "#6B5E48");
+                tPunto.textContent = punto.length > 26 ? punto.slice(0, 24) + "…" : punto;
+                gEl.appendChild(tPunto);
+            }
+
             const fo = document.createElementNS(SVG_NS, "foreignObject");
             fo.setAttribute("x", x + NODE_W / 2 - 36); fo.setAttribute("y", y + NODE_H - 22);
             fo.setAttribute("width", 72); fo.setAttribute("height", 20);
@@ -709,6 +721,7 @@
         const siparioCambiato = typeof data.sipario_aperto === "boolean" && data.sipario_aperto !== siparioAperto;
         if (data.cronologia_id) cronologiaId = data.cronologia_id;
         if (siparioCambiato || opts.forceSipario) aggiornaBottoneSipario(data.sipario_aperto);
+        aggiornaPuntiInteresse(data.punti_interesse);
         if (!scenaCambiata && !statiCambiati) return;
 
         const statiPrecedenti = Object.assign({}, statiCorrente);
@@ -769,6 +782,7 @@
             });
             scenaCorrente = data.scena_corrente;
             aggiornaBottoneSipario(data.sipario_aperto);
+            aggiornaPuntiInteresse(data.punti_interesse);
             statiCorrente = {};
             Object.entries(data.stati).forEach(([k, v]) => { statiCorrente[parseInt(k)] = v; });
 
@@ -797,7 +811,52 @@
         btn.style.opacity = sfxMuted ? "0.6" : "1";
     }
 
+    // ----------------------------------------------------------------
+    // Lista "Da esaminare": la stessa dei giocatori, più le esche da barrare a mano
+    // ----------------------------------------------------------------
+    const esploraBox = document.getElementById("liveEsplora");
+    const esploraLista = document.getElementById("liveEsploraLista");
+
+    function aggiornaPuntiInteresse(voci) {
+        if (!voci || !esploraBox) return;
+        esploraLista.innerHTML = "";
+        voci.forEach(v => {
+            const li = document.createElement("li");
+            li.className = "player-esplora__voce";
+            li.textContent = v.etichetta;
+            if (v.esaminato) li.classList.add("player-esplora__voce--esaminata");
+            if (v.esca) {
+                li.classList.add("player-esplora__voce--esca");
+                const tag = document.createElement("span");
+                tag.className = "player-esplora__tag";
+                tag.textContent = "esca";
+                li.appendChild(tag);
+                li.title = v.esaminato ? "Esca: clic per rimetterla da esaminare" : "Esca: clic quando l'hanno guardata";
+                li.addEventListener("click", () => togglePuntoExtra(v.etichetta));
+            } else {
+                li.title = "Si barra sbloccando l'indizio";
+            }
+            esploraLista.appendChild(li);
+        });
+        esploraBox.hidden = voci.length === 0;
+    }
+
+    async function togglePuntoExtra(etichetta) {
+        try {
+            const resp = await fetch(window.INDAGINI_LIVE_CONFIG.endpoints.puntoExtraEsaminato, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ etichetta }),
+            });
+            if (!resp.ok) { console.error("Errore esca"); return; }
+            aggiornaPuntiInteresse((await resp.json()).punti_interesse);
+        } catch (e) {
+            console.error("Errore fetch esca:", e);
+        }
+    }
+
     // Render iniziale
+    aggiornaPuntiInteresse(RAW.punti_interesse);
     renderTutti(null, null, null, null, null);
     aggiornaBottoneAvanza();
     updateMuteBtnUI();
@@ -879,6 +938,7 @@
             const data = await resp.json();
 
             data.nodi.forEach(n => { nodoById[n.id] = n; });
+            aggiornaPuntiInteresse(data.punti_interesse);
             const nuoviStati = data.stati;
 
             const animNew = new Set();

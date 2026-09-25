@@ -6263,6 +6263,135 @@ html.indagini-player-page.has-react-motion .main > * {
 .graph-scene-overlay.attivo { opacity: 1; }
 .player-graph svg { display: block; width: 100%; height: 100%; position: relative; z-index: 2; }
 
+/* --- Layout dinamico della bacheca: i nodi scivolano quando ne arriva uno --- */
+.g-node-sposta { transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+.player-graph .scena-box {
+    transition: x 0.8s cubic-bezier(0.4, 0, 0.2, 1), y 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+                width 0.8s cubic-bezier(0.4, 0, 0.2, 1), height 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+                stroke 0.6s ease, fill 0.6s ease;
+}
+.player-graph .scena-box__label { transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+.g-node-arriva {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: nodeArriva 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes nodeArriva {
+    from { opacity: 0; transform: scale(0.92); }
+    to   { opacity: 1; transform: none; }
+}
+
+/* --- Lista "Da esaminare": cosa si può ancora ispezionare nella scena --- */
+.player-esplora {
+    position: absolute;
+    left: 24px;
+    bottom: 24px;
+    z-index: 3;
+    max-width: 300px;
+    padding: 14px 40px 16px 16px;
+    border-left: 1px solid rgba(156, 122, 60, 0.45);
+    background: linear-gradient(90deg, rgba(15, 13, 11, 0.85), rgba(15, 13, 11, 0.6) 65%, rgba(15, 13, 11, 0));
+    pointer-events: none;
+    transition: opacity 0.8s ease;
+}
+.player-esplora[hidden] { display: none; }
+.player-esplora--completa { opacity: 0.4; }
+.player-esplora__titolo {
+    margin: 0 0 10px 0;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--gold);
+}
+.player-esplora__lista {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+.player-esplora__voce {
+    position: relative;
+    width: fit-content;
+    padding-left: 15px;
+    font-family: var(--font-display);
+    font-size: 1rem;
+    line-height: 1.3;
+    color: var(--bone);
+    transition: color 0.6s ease, opacity 0.6s ease;
+}
+/* Rombo come segnaposto: vuoto da esaminare, pieno una volta esaminato */
+.player-esplora__voce::before {
+    content: "";
+    position: absolute;
+    left: 1px;
+    top: 0.5em;
+    width: 5px;
+    height: 5px;
+    border: 1px solid var(--gold);
+    transform: rotate(45deg);
+}
+.player-esplora__voce::after {
+    content: "";
+    position: absolute;
+    left: 13px;
+    right: -2px;
+    top: 0.68em;
+    height: 1px;
+    background: var(--bone-dim);
+    transform: scaleX(0);
+    transform-origin: left center;
+}
+.player-esplora__voce--esaminata {
+    color: var(--bone-dim);
+    opacity: 0.5;
+}
+.player-esplora__voce--esaminata::before { background: var(--gold); }
+.player-esplora__voce--esaminata::after { transform: scaleX(1); }
+/* Appena esaminata: prima si guarda l'indizio che compare, poi la voce si spegne */
+.player-esplora__voce--appena { animation: esploraSpegni 0.9s ease 0.7s both; }
+.player-esplora__voce--appena::after { animation: esploraTratto 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.7s both; }
+.player-esplora__voce--entra { animation: esploraEntra 0.5s ease both; }
+@keyframes esploraSpegni {
+    from { color: var(--bone); opacity: 1; }
+    to { color: var(--bone-dim); opacity: 0.5; }
+}
+@keyframes esploraTratto {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+}
+@keyframes esploraEntra {
+    from { opacity: 0; transform: translateX(-6px); }
+}
+/* Versione master (vista live): stessa lista, con le esche cliccabili */
+.live-graph { position: relative; }
+.player-esplora--master { padding-bottom: 14px; }
+.player-esplora--master .player-esplora__voce--esca {
+    pointer-events: auto;
+    cursor: pointer;
+}
+.player-esplora--master .player-esplora__voce--esca:hover { color: var(--gold-bright); }
+.player-esplora__tag {
+    margin-left: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--rust-bright);
+    vertical-align: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+    .player-esplora__voce--appena,
+    .player-esplora__voce--appena::after,
+    .player-esplora__voce--entra,
+    .g-node-arriva { animation: none; }
+    .g-node-sposta,
+    .player-graph .scena-box,
+    .player-graph .scena-box__label { transition: none; }
+}
+
 /* --- Pannello dettaglio nodo (versione player) --- */
 .player-detail {
     flex: 0 0 0;

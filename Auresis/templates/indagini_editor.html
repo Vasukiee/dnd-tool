@@ -89,6 +89,12 @@
                     <input type="text" name="titolo" id="edit_titolo" required>
                 </div>
                 <div class="form-field">
+                    <label>Cosa si può esaminare</label>
+                    <input type="text" name="punto_interesse" id="edit_punto_interesse" maxlength="60"
+                           placeholder="es. La scrivania">
+                    <span style="font-size:0.68rem;color:var(--bone-dim);line-height:1.35;">Visibile ai giocatori nella lista "Da esaminare". Vuoto per gli indizi dedotti.</span>
+                </div>
+                <div class="form-field">
                     <label>Descrizione</label>
                     <textarea name="descrizione" id="edit_descrizione" rows="3"></textarea>
                 </div>
@@ -146,6 +152,11 @@
                     <input type="text" name="titolo" required placeholder="Nome indizio…">
                 </div>
                 <div class="form-field">
+                    <label>Cosa si può esaminare</label>
+                    <input type="text" name="punto_interesse" maxlength="60" placeholder="es. La scrivania">
+                    <span style="font-size:0.68rem;color:var(--bone-dim);line-height:1.35;">Visibile ai giocatori nella lista "Da esaminare". Vuoto per gli indizi dedotti.</span>
+                </div>
+                <div class="form-field">
                     <label>Descrizione</label>
                     <textarea name="descrizione" rows="2"></textarea>
                 </div>
@@ -198,7 +209,7 @@
         <!-- Luogo di ogni scena: lo sfondo si sceglie nella pagina del luogo -->
         {% if scene_numeri %}
         <div class="panel-section">
-            <p class="panel-title">Luoghi delle scene</p>
+            <p class="panel-title">Scene: luogo ed esche</p>
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 {% for s in scene_numeri %}
                 <div>
@@ -235,6 +246,15 @@
                     <a href="{{ url_for('edita_location', location_id=scene_location[s]) }}"
                        style="display: block; font-family: var(--font-mono); font-size: 0.62rem; color: var(--bone-dim);">sfondo di {{ nome_luogo }} da aggiungere →</a>
                     {% endif %}
+                    <form method="POST"
+                          action="{{ url_for('indagini.indagini_salva_punti_extra', indagine_id=indagine.id, numero_scena=s) }}"
+                          style="display: flex; flex-direction: column; gap: 5px; margin-top: 8px;">
+                        <label style="font-size: 0.72rem; color: var(--bone-dim);">Esche da esaminare (una per riga)</label>
+                        <textarea name="punti_extra" rows="2" style="font-size: 0.78rem; width: 100%; box-sizing: border-box;"
+                                  placeholder="es. Il mazzo di chiavi">{{ (punti_extra.get(s) or []) | join('\n') }}</textarea>
+                        <span style="font-size:0.68rem;color:var(--bone-dim);line-height:1.35;">Compaiono nella lista "Da esaminare" insieme agli indizi, ma non nascondono niente: le barri tu dalla vista live.</span>
+                        <button type="submit" class="btn btn--ghost" style="font-size: 0.72rem; padding: 4px 9px; align-self: flex-start;">Salva esche</button>
+                    </form>
                 </div>
                 {% endfor %}
             </div>
@@ -404,6 +424,7 @@
         document.getElementById("edit_numero_nodo").value = n.numero_nodo;
         document.getElementById("edit_titolo").value = n.titolo;
         document.getElementById("edit_descrizione").value = n.descrizione || "";
+        document.getElementById("edit_punto_interesse").value = n.punto_interesse || "";
         document.getElementById("edit_immagine_url").value = n.immagine_url || "";
         document.getElementById("edit_regola_sblocco").value = n.regola_sblocco;
         document.getElementById("edit_tipo_speciale").value = n.tipo_speciale || "";
