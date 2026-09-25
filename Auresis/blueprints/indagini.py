@@ -32,14 +32,17 @@ def _calcola_stati_nodi(nodi, collegamenti, stati_sblocco, scena_corrente=None):
     Addendum 9: dentro una scena già raggiunta ogni nodo è sempre BLOCCATO_VISIBILE
     indipendentemente dai genitori. La gerarchia genitore→figlio non è più un gatekeeper
     per lo sblocco — serve solo a decidere quando disegnare una freccia (lato frontend).
+
+    Un nodo già scoperto resta SCOPERTO anche se la scena corrente torna indietro:
+    le scene si possono giocare fuori ordine (es. sessione 3, piste 2-3-4).
     """
     stati = {}
     for nodo in nodi:
         nid = nodo["id"]
-        if scena_corrente is not None and nodo["numero_nodo"] // 10 > scena_corrente:
-            stati[nid] = "ASSENTE"
-        elif stati_sblocco.get(nid, {}).get("scoperto"):
+        if stati_sblocco.get(nid, {}).get("scoperto"):
             stati[nid] = "SCOPERTO"
+        elif scena_corrente is not None and nodo["numero_nodo"] // 10 > scena_corrente:
+            stati[nid] = "ASSENTE"
         else:
             stati[nid] = "BLOCCATO_VISIBILE"
     return stati

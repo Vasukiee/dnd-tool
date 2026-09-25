@@ -254,7 +254,8 @@
         const stato = statiCorrente[n.id];
         if (stato === "ASSENTE") return false;
         const scena = scenaNodo(n);
-        if (scena > scenaCorrente) return false;
+        // Scena futura: resta visibile solo ciò che era già stato scoperto (scene fuori ordine)
+        if (scena > scenaCorrente) return stato === "SCOPERTO";
         if (scena <= scenaCorrente - 2) {
             // Concetto 5: visibile solo se ha almeno un figlio scoperto (richiamo retroattivo)
             return nodoHaFigliScoperti(n.id);
@@ -632,8 +633,8 @@
     function disegnaScene() {
         scenesGroup.innerHTML = "";
         tutteLeScene.forEach(scena => {
-            if (scena > scenaCorrente) return; // Concetto 3: scene future invisibili
-
+            // Concetto 3: le scene future non hanno riquadro, salvo nodi già scoperti
+            // (il riquadro nasce solo dai nodi visibili, vedi il controllo su minX).
             // Bbox da TUTTI i nodi della scena visibili (radici + figli), non solo le radici.
             // Questo garantisce che nodi come #33/#34 (figli di nodi della stessa scena)
             // siano contenuti nel riquadro della loro scena di appartenenza.
