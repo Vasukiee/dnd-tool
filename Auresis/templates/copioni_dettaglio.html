@@ -1306,6 +1306,41 @@
             }
         });
 
+        // Gestione bottoni "lista da esaminare" inline
+        document.body.addEventListener('click', async function(e) {
+            const btn = e.target.closest('.btn-inline-esamina');
+            if (!btn) return;
+
+            {% if modalita_giocatrice %}
+            return;
+            {% endif %}
+
+            const indagineId = btn.dataset.indagineId;
+            const scenaId = btn.dataset.scenaId;
+
+            try {
+                const resp = await fetch(`/indagini/${indagineId}/lista-esamina`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scena: parseInt(scenaId, 10), mostra: true })
+                });
+
+                if (resp.ok) {
+                    btn.style.backgroundColor = 'rgba(201, 163, 92, 0.2)';
+                    btn.style.borderColor = 'var(--gold)';
+                    btn.style.color = 'var(--gold-bright)';
+                    btn.innerHTML = btn.innerHTML + ' ✓';
+                    btn.disabled = true;
+                    btn.style.cursor = 'default';
+                } else {
+                    alert('Errore nel mostrare la lista da esaminare.');
+                }
+            } catch (err) {
+                console.error("Errore:", err);
+                alert('Errore di rete nel mostrare la lista da esaminare.');
+            }
+        });
+
         // Gestione bottoni sipario inline
         document.body.addEventListener('click', async function(e) {
             const btn = e.target.closest('.btn-inline-sipario');

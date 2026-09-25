@@ -28,6 +28,7 @@
     <button type="button" class="editor-btn" onclick="apriAudioSelector()" title="Inserisci musica">𝄞</button>
     <button type="button" class="editor-btn" onclick="apriIndizioSelector()" title="Inserisci indizio">🔍</button>
     <button type="button" class="editor-btn" onclick="apriScenaSelector()" title="Cambia scena">🎬</button>
+    <button type="button" class="editor-btn" onclick="apriEsaminaSelector()" title="Mostra la lista da esaminare">📋</button>
     <button type="button" class="editor-btn" onclick="inserisciRigaIntera('\n@sipario: toggle\n')" title="Sipario">🎭</button>
     <input type="file" id="img-file-input" accept="image/*" style="display:none"
            onchange="inserisciImmagineFile(this.files[0]); this.value='';">
@@ -121,6 +122,28 @@
             {% for s in info.scene %}
             <button type="button" class="audio-dialog__item" onclick="inserisciScena({{ info.indagine.id }}, {{ s }}, '{{ info.indagine.titolo | replace("'", "\\'") }} (Scena {{ s }})')">
                 <span class="audio-dialog__icon">🎬</span>
+                <span class="audio-dialog__name">Scena {{ s }}</span>
+            </button>
+            {% endfor %}
+            {% endif %}
+        {% endfor %}
+    </div>
+</dialog>
+
+<dialog id="esamina-selector" class="audio-dialog">
+    <div class="audio-dialog__header">
+        <h3 style="margin: 0; font-family: var(--font-display); font-size: 1.1rem; color: var(--gold);">Mostra lista da esaminare</h3>
+        <button type="button" class="audio-dialog__close" onclick="document.getElementById('esamina-selector').close()">✕</button>
+    </div>
+    <div class="audio-dialog__list">
+        {% for info in indagini_con_nodi %}
+            {% if info.scene | reject('equalto', 0) | list %}
+            <div style="padding: 8px 16px; background: rgba(255,255,255,0.05); font-weight: bold; color: var(--gold); font-size: 0.9rem;">
+                {{ info.indagine.titolo }}
+            </div>
+            {% for s in info.scene if s != 0 %}
+            <button type="button" class="audio-dialog__item" onclick="inserisciEsamina({{ info.indagine.id }}, {{ s }})">
+                <span class="audio-dialog__icon">📋</span>
                 <span class="audio-dialog__name">Scena {{ s }}</span>
             </button>
             {% endfor %}
@@ -261,6 +284,14 @@ function inserisciScena(indagine_id, scena_id, titolo) {
     inserisciRigaIntera(`@scena: ${indagine_id}-${scena_id} | ${titolo}`);
 }
 
+function apriEsaminaSelector() {
+    document.getElementById('esamina-selector').showModal();
+}
+function inserisciEsamina(indagine_id, scena_id) {
+    document.getElementById('esamina-selector').close();
+    inserisciRigaIntera(`@esamina: ${indagine_id}-${scena_id} | Mostra cosa esaminare`);
+}
+
 function normAlign(a) {
     a = (a || '').toLowerCase();
     if (a === 'left')   return 'sx';
@@ -380,6 +411,9 @@ function renderMd(src) {
 
     s = s.replace(/@scena:\s*(\d+)-(\d+)\s*\|\s*([^\n]+)/g,
         '<span class="audio-recommendation-wrapper"><span class="audio-recommendation-label" style="color:var(--gold);">Cambio scena:</span> <button type="button" class="btn-inline-scena btn-audio-large" style="pointer-events:none;" tabindex="-1">$3</button></span>');
+
+    s = s.replace(/@esamina:\s*(\d+)-(\d+)\s*\|\s*([^\n]+)/g,
+        '<span class="audio-recommendation-wrapper"><span class="audio-recommendation-label" style="color:var(--gold);">Lista da esaminare:</span> <button type="button" class="btn-inline-esamina btn-audio-large" style="pointer-events:none;" tabindex="-1">$3</button></span>');
 
     const lines = s.split('\n');
     const out = [];

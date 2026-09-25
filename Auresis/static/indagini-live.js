@@ -722,6 +722,7 @@
         if (data.cronologia_id) cronologiaId = data.cronologia_id;
         if (siparioCambiato || opts.forceSipario) aggiornaBottoneSipario(data.sipario_aperto);
         aggiornaPuntiInteresse(data.punti_interesse);
+        aggiornaListaMostrata(data.lista_mostrata);
         if (!scenaCambiata && !statiCambiati) return;
 
         const statiPrecedenti = Object.assign({}, statiCorrente);
@@ -783,6 +784,7 @@
             scenaCorrente = data.scena_corrente;
             aggiornaBottoneSipario(data.sipario_aperto);
             aggiornaPuntiInteresse(data.punti_interesse);
+            aggiornaListaMostrata(data.lista_mostrata);
             statiCorrente = {};
             Object.entries(data.stati).forEach(([k, v]) => { statiCorrente[parseInt(k)] = v; });
 
@@ -816,6 +818,31 @@
     // ----------------------------------------------------------------
     const esploraBox = document.getElementById("liveEsplora");
     const esploraLista = document.getElementById("liveEsploraLista");
+    const esploraMostra = document.getElementById("liveEsploraMostra");
+    let listaMostrata = !!RAW.lista_mostrata;
+
+    function aggiornaListaMostrata(mostrata) {
+        if (typeof mostrata !== "boolean" || !esploraBox) return;
+        listaMostrata = mostrata;
+        esploraBox.classList.toggle("player-esplora--nascosta", !mostrata);
+        esploraMostra.textContent = mostrata ? "Visibile · nascondi" : "Nascosta · mostra";
+    }
+
+    esploraMostra.addEventListener("click", async () => {
+        try {
+            const resp = await fetch(window.INDAGINI_LIVE_CONFIG.endpoints.listaEsamina, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mostra: !listaMostrata }),
+            });
+            if (!resp.ok) { console.error("Errore lista da esaminare"); return; }
+            const data = await resp.json();
+            aggiornaListaMostrata(data.lista_mostrata);
+            aggiornaPuntiInteresse(data.punti_interesse);
+        } catch (e) {
+            console.error("Errore fetch lista da esaminare:", e);
+        }
+    });
 
     function aggiornaPuntiInteresse(voci) {
         if (!voci || !esploraBox) return;
@@ -857,6 +884,7 @@
 
     // Render iniziale
     aggiornaPuntiInteresse(RAW.punti_interesse);
+    aggiornaListaMostrata(listaMostrata);
     renderTutti(null, null, null, null, null);
     aggiornaBottoneAvanza();
     updateMuteBtnUI();
