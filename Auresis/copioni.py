@@ -224,6 +224,27 @@ def _processa_scene_tags(testo_md):
     return pattern.sub(sostituisci, testo_md)
 
 
+def _processa_esamina_tags(testo_md):
+    """@esamina: indagine-scena | etichetta → bottone che mostra ai giocatori
+    la lista "Da esaminare" di quella scena."""
+    pattern = re.compile(r"@esamina:\s*(\d+)-(\d+)\s*\|\s*([^\n]+)")
+
+    def sostituisci(m):
+        indagine_id = escape(m.group(1))
+        scena_id = escape(m.group(2))
+        nome = escape(m.group(3).strip())
+
+        return (f'<span class="audio-recommendation-wrapper">'
+                f'<span class="audio-recommendation-label" style="color:var(--gold);">Lista da esaminare:</span> '
+                f'<button class="btn-inline-esamina btn-audio-large" '
+                f'data-indagine-id="{indagine_id}" '
+                f'data-scena-id="{scena_id}" '
+                f'title="Mostra ai giocatori cosa si può esaminare nella scena {scena_id}">{nome}</button>'
+                f'</span>')
+
+    return pattern.sub(sostituisci, testo_md)
+
+
 def _processa_sipario_tags(testo_md):
     pattern = re.compile(r"@sipario:\s*toggle", re.IGNORECASE)
     
@@ -325,6 +346,7 @@ def renderizza_sessione(numero_sessione):
     testo_protetto = _processa_audio_tags(testo_protetto)
     testo_protetto = _processa_indizi_tags(testo_protetto)
     testo_protetto = _processa_scene_tags(testo_protetto)
+    testo_protetto = _processa_esamina_tags(testo_protetto)
     testo_protetto = _processa_sipario_tags(testo_protetto)
 
     # toc ci serve solo per assegnare id univoci agli heading (gestisce da

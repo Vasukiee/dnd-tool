@@ -1724,6 +1724,7 @@ def assicura_colonne_punti_interesse(force=False):
     cur.execute("ALTER TABLE nodi_indagine ADD COLUMN IF NOT EXISTS punto_interesse TEXT")
     cur.execute("ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS punti_extra TEXT")
     cur.execute("ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS punti_extra_esaminati TEXT")
+    cur.execute("ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS liste_mostrate TEXT")
     conn.commit()
     cur.close()
     conn.close()
@@ -2109,6 +2110,31 @@ def toggle_punto_extra_esaminato(cronologia_id, chiave):
     cur.close()
     conn.close()
     return esaminato
+
+
+def set_lista_mostrata(cronologia_id, scena, mostra):
+    """Mostra o nasconde ai giocatori la lista "Da esaminare" di una scena.
+    Le scene mostrate vivono in un array JSON nella cronologia."""
+    assicura_colonne_punti_interesse()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT liste_mostrate FROM cronologie_indagine WHERE id = %s FOR UPDATE",
+        (cronologia_id,),
+    )
+    row = cur.fetchone()
+    scene = set(json.loads(row[0])) if row and row[0] else set()
+    if mostra:
+        scene.add(scena)
+    else:
+        scene.discard(scena)
+    cur.execute(
+        "UPDATE cronologie_indagine SET liste_mostrate = %s WHERE id = %s",
+        (json.dumps(sorted(scene)), cronologia_id),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
 
 
 def get_sfondi_ereditati(indagine_id):

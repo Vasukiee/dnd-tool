@@ -1774,12 +1774,14 @@ details[open] .filtri-section__toggle::before {
 .btn-inline-scena span,
 .btn-inline-scena,
 .btn-inline-sipario span,
-.btn-inline-sipario {
+.btn-inline-sipario,
+.btn-inline-esamina span,
+.btn-inline-esamina {
     position: relative;
     z-index: 1;
 }
 
-.btn-inline-indizio, .btn-inline-scena, .btn-inline-sipario {
+.btn-inline-indizio, .btn-inline-scena, .btn-inline-sipario, .btn-inline-esamina {
     position: relative;
     display: inline-flex;
     align-items: center;
@@ -1828,7 +1830,8 @@ details[open] .filtri-section__toggle::before {
     padding-bottom: 4px;
 }
 
-.btn-inline-sipario::after {
+.btn-inline-sipario::after,
+.btn-inline-esamina::after {
     content: '🎭';
     order: -1;
     flex-shrink: 0;
@@ -1841,14 +1844,16 @@ details[open] .filtri-section__toggle::before {
     padding-bottom: 4px;
 }
 
-.btn-inline-indizio:hover, .btn-inline-scena:hover, .btn-inline-sipario:hover {
+.btn-inline-esamina::after { content: '📋'; }
+
+.btn-inline-indizio:hover, .btn-inline-scena:hover, .btn-inline-sipario:hover, .btn-inline-esamina:hover {
     border-color: var(--gold);
     color: var(--bone-bright);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(156, 122, 60, 0.08);
 }
 
-.btn-inline-indizio:hover::after, .btn-inline-scena:hover::after, .btn-inline-sipario:hover::after {
+.btn-inline-indizio:hover::after, .btn-inline-scena:hover::after, .btn-inline-sipario:hover::after, .btn-inline-esamina:hover::after {
     color: var(--gold-bright);
     text-shadow: 0 0 8px rgba(201, 163, 92, 0.4);
 }
@@ -6368,6 +6373,29 @@ html.indagini-player-page.has-react-motion .main > * {
 /* Versione master (vista live): stessa lista, con le esche cliccabili */
 .live-graph { position: relative; }
 .player-esplora--master { padding-bottom: 14px; }
+.player-esplora__testa {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+.player-esplora__testa .player-esplora__titolo { margin: 0; white-space: nowrap; }
+.player-esplora__mostra {
+    pointer-events: auto;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--verdigris-bright);
+    white-space: nowrap;
+}
+.player-esplora__mostra:hover { text-decoration: underline; }
+.player-esplora--nascosta .player-esplora__mostra { color: var(--rust-bright); }
+.player-esplora--nascosta .player-esplora__lista { opacity: 0.5; }
 .player-esplora--master .player-esplora__voce--esca {
     pointer-events: auto;
     cursor: pointer;
