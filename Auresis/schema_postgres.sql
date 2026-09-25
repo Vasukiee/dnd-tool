@@ -261,6 +261,8 @@ ALTER TABLE cronologie_indagine ALTER COLUMN scena_corrente SET DEFAULT 0;
 ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS sipario_aperto BOOLEAN NOT NULL DEFAULT FALSE;
 -- Voci esca della lista "Da esaminare" già segnate come esaminate (array JSON di "scena|etichetta")
 ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS punti_extra_esaminati TEXT;
+-- Scene in cui il master ha già mostrato la lista "Da esaminare" ai giocatori (array JSON)
+ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS liste_mostrate TEXT;
 
 CREATE TABLE IF NOT EXISTS stato_nodi_cronologia (
     id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
