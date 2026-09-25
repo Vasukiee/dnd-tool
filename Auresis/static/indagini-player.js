@@ -878,6 +878,14 @@
                 }
             });
 
+            // Scoperti spariti: nuova run o cronologia eliminata dal master
+            scopertiIds.forEach(id => {
+                if (!nuoviScopertiIds.has(id)) {
+                    cambiato = true;
+                    if (nodoDetailId === id) chiudiDettaglio();
+                }
+            });
+
             // Scena cambiata
             if (nuovaScena !== scenaCorrente) {
                 cambiato = true;
