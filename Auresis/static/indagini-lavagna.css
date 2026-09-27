@@ -11,6 +11,13 @@
     opacity: 0;
     pointer-events: none;
 }
+/* Lavagna e indizi classici sono esclusivi: via anche la lista "Da esaminare" */
+.player-graph.lavagna-aperta .player-esplora {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.4s ease, visibility 0s linear 0.4s;
+}
 
 .lavagna {
     --carta-w: clamp(104px, 9vw, 158px);

@@ -1932,6 +1932,7 @@ def assicura_colonne_lavagna(force=False):
     cur.execute("ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS lavagna BOOLEAN NOT NULL DEFAULT FALSE")
     cur.execute("ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna TEXT")
     cur.execute("ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna_versione INTEGER NOT NULL DEFAULT 0")
+    cur.execute("ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna_aperta BOOLEAN NOT NULL DEFAULT FALSE")
     conn.commit()
     cur.close()
     conn.close()
@@ -2386,6 +2387,20 @@ def scena_e_lavagna(indagine_id, numero_scena):
     cur.close()
     conn.close()
     return bool(row and row[0])
+
+
+def set_lavagna_aperta(cronologia_id, aperta):
+    """Lavagna o indizi classici nella player view (esclusivi)."""
+    assicura_colonne_lavagna()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE cronologie_indagine SET lavagna_aperta = %s WHERE id = %s",
+        (bool(aperta), cronologia_id),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
 
 
 def modifica_lavagna(cronologia_id, applica):
