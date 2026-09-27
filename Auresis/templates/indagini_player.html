@@ -46,7 +46,7 @@
                     <svg class="lavagna__fili" id="lavagnaFili">
                         <path class="lavagna-filo-temp" id="lavagnaFiloTemp" style="display: none"/>
                     </svg>
-                    {% if puo_modificare_lavagna %}
+                    {% if puo_gestire_lavagna %}
                     <div class="lavagna-vassoio" id="lavagnaVassoio" hidden>
                         <button class="lavagna-vassoio__linguetta" id="lavagnaVassoioApri" type="button">
                             Da parte <span id="lavagnaVassoioConta">0</span>
@@ -88,9 +88,9 @@
         defaultBackgroundUrl: "{{ url_for('sfondo_default') }}",
         endpoints: {
             statoPlayer: "{{ url_for('indagini.indagini_stato_player', indagine_id=indagine.id) }}",
-            salvaLavagna: "{{ url_for('indagini.indagini_salva_lavagna', indagine_id=indagine.id) }}"
+            lavagna: "{{ url_for('indagini.indagini_lavagna', indagine_id=indagine.id) }}"
         },
-        lavagnaModificabile: {{ 'true' if puo_modificare_lavagna else 'false' }},
+        lavagnaGestione: {{ 'true' if puo_gestire_lavagna else 'false' }},
         sfx: {
             rivelazione: "{{ url_for('static', filename='audio/sfx/rivelazione.mp3') }}",
             livelloBase: "{{ url_for('static', filename='audio/sfx/livello__LIVELLO__.mp3') }}"

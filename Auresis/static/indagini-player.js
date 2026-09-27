@@ -843,8 +843,8 @@
     // ----------------------------------------------------------------
     const lavagna = window.IndaginiLavagna;
     lavagna.init({
-        modificabile: window.INDAGINI_PLAYER_CONFIG.lavagnaModificabile,
-        endpointSalva: window.INDAGINI_PLAYER_CONFIG.endpoints.salvaLavagna,
+        gestione: window.INDAGINI_PLAYER_CONFIG.lavagnaGestione,
+        endpoint: window.INDAGINI_PLAYER_CONFIG.endpoints.lavagna,
         onApriDettaglio: n => (nodoDetailId === n.id ? chiudiDettaglio() : apriDettaglio(n)),
     });
     lavagna.aggiorna(RAW.lavagna, NODI.filter(n => scopertiIds.has(n.id)));

@@ -2388,24 +2388,35 @@ def scena_e_lavagna(indagine_id, numero_scena):
     return bool(row and row[0])
 
 
-def salva_lavagna(cronologia_id, stato):
-    """Sostituisce lo stato della bacheca e ne incrementa la versione, che i
-    client usano per non sovrascrivere modifiche locali con dati vecchi."""
+def modifica_lavagna(cronologia_id, applica):
+    """Applica `applica(stato) -> nuovo_stato` alla lavagna della cronologia
+    dentro una transazione con la riga bloccata: master e giocatrice possono
+    modificarla insieme senza che uno cancelli le modifiche dell'altro.
+    Incrementa la versione, che i client usano per riconoscere i dati nuovi.
+    Ritorna (versione, nuovo_stato), o (None, None) se la cronologia non c'è."""
     assicura_colonne_lavagna()
     conn = get_connection()
     cur = conn.cursor()
+    cur.execute("SELECT lavagna FROM cronologie_indagine WHERE id = %s FOR UPDATE", (cronologia_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.rollback()
+        cur.close()
+        conn.close()
+        return None, None
+    nuovo = applica(get_lavagna({"lavagna": row[0]}))
     cur.execute(
         """UPDATE cronologie_indagine
            SET lavagna = %s, lavagna_versione = lavagna_versione + 1
            WHERE id = %s
            RETURNING lavagna_versione""",
-        (json.dumps(stato), cronologia_id),
+        (json.dumps(nuovo), cronologia_id),
     )
-    row = cur.fetchone()
+    versione = cur.fetchone()[0]
     conn.commit()
     cur.close()
     conn.close()
-    return row[0] if row else None
+    return versione, nuovo
 
 
 def get_sfondi_ereditati(indagine_id):
