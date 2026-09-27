@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Note del Master — Il Registro{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">Riservato al Master</p>
+    <h1 class="page-title">Note del Master</h1>
+</div>
+
+<p style="color: var(--bone-dim); font-size: 0.88rem; margin: -8px 0 28px;">
+    Ramo del copione giocato, verità nascoste e continuità, sessione per sessione.
+    Non compaiono nella Cronaca né nella vista della giocatrice.
+</p>
+
+{% if sessioni %}
+<div class="timeline">
+    {% for s in sessioni %}
+    <div class="timeline-item" id="sessione-{{ s.sessione }}">
+        <div class="timeline-item__session">Sess. {{ s.sessione }}</div>
+        <div class="timeline-item__body">
+            {% for r in s.riassunti %}
+            <p style="color: var(--bone-dim); font-size: 0.86rem;">{{ r }}</p>
+            {% else %}
+            <p style="color: var(--bone-dim); font-size: 0.86rem; font-style: italic;">Nessun evento in cronaca per questa sessione.</p>
+            {% endfor %}
+
+            <form method="POST" class="form-grid" style="margin-top: 14px; gap: 10px;">
+                <input type="hidden" name="sessione" value="{{ s.sessione }}">
+                <div class="form-field">
+                    <label for="ramo-{{ s.sessione }}">Ramo giocato</label>
+                    <textarea id="ramo-{{ s.sessione }}" name="ramo_giocato" rows="3">{{ s.nota.ramo_giocato or '' if s.nota else '' }}</textarea>
+                </div>
+                <div class="form-field">
+                    <label for="note-{{ s.sessione }}">Note</label>
+                    <textarea id="note-{{ s.sessione }}" name="note" rows="5">{{ s.nota.note or '' if s.nota else '' }}</textarea>
+                </div>
+                <div class="actions-row" style="align-items: center; gap: 12px;">
+                    <button type="submit" class="btn" style="font-size: 0.72rem; padding: 6px 12px;">Salva</button>
+                    {% if s.nota %}
+                    <span style="font-family: var(--font-mono); font-size: 0.65rem; color: var(--bone-dim);">aggiornato {{ s.nota.aggiornato.strftime('%d/%m/%Y %H:%M') if s.nota.aggiornato.strftime is defined else s.nota.aggiornato }}</span>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <p class="empty-state__title">Nessuna sessione in cronaca.</p>
+    <p>Aggiungi qui sotto le note della prima sessione.</p>
+</div>
+{% endif %}
+
+<div class="page-header" style="margin-top: 40px;">
+    <p class="page-eyebrow">Sessione senza eventi in cronaca</p>
+</div>
+<form method="POST" class="form-grid" style="gap: 10px;">
+    <div class="form-field">
+        <label for="nuova-sessione">Numero sessione</label>
+        <input type="number" id="nuova-sessione" name="sessione" required min="0">
+    </div>
+    <div class="form-field">
+        <label for="nuovo-ramo">Ramo giocato</label>
+        <textarea id="nuovo-ramo" name="ramo_giocato" rows="3"></textarea>
+    </div>
+    <div class="form-field">
+        <label for="nuove-note">Note</label>
+        <textarea id="nuove-note" name="note" rows="5"></textarea>
+    </div>
+    <div class="actions-row">
+        <button type="submit" class="btn">Salva note</button>
+    </div>
+</form>
+
+{% endblock %}

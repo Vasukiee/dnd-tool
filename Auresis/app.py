@@ -1,11 +1,13 @@
 import datetime
 import hashlib
 import hmac
+from functools import wraps
 import json
 import os
 import secrets
 import time
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, make_response, abort
 from werkzeug.security import check_password_hash
@@ -789,6 +791,46 @@ def elimina_evento(evento_id):
     db.delete_record("eventi", evento_id)
     flash("Evento eliminato dalla cronaca.")
     return redirect(url_for("lista_eventi"))
+
+
+# --- NOTE DEL MASTER ---
+
+def _solo_master_o_404(view):
+    """Come solo_master, ma per chi non è master la pagina non esiste (404):
+    il redirect allo sblocco ne rivelerebbe l'esistenza alla giocatrice."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if vista_ristretta():
+            abort(404)
+        return view(*args, **kwargs)
+    return wrapped
+
+
+@app.route("/master/note", methods=["GET", "POST"])
+@_solo_master_o_404
+def note_master():
+    if request.method == "POST":
+        sessione = _int_or_none(request.form.get("sessione"))
+        if sessione is None:
+            flash("Indica il numero della sessione.")
+            return redirect(url_for("note_master"))
+        db.upsert_note_master(
+            sessione,
+            ramo_giocato=request.form.get("ramo_giocato", "").strip() or None,
+            note=request.form.get("note", "").strip() or None,
+        )
+        flash(f"Note della sessione {sessione} salvate.")
+        return redirect(url_for("note_master", _anchor=f"sessione-{sessione}"))
+
+    sessioni = db.get_note_master_per_sessione()
+    for s in sessioni:
+        # Il server (Render) è in UTC: l'orario di aggiornamento si mostra in ora italiana
+        if s["nota"] and isinstance(s["nota"]["aggiornato"], datetime.datetime):
+            try:
+                s["nota"]["aggiornato"] = s["nota"]["aggiornato"].astimezone(ZoneInfo("Europe/Rome"))
+            except (ZoneInfoNotFoundError, ValueError):
+                pass
+    return render_template("master_note.html", active="note_master", sessioni=sessioni)
 
 
 # --- FATTI ACCERTATI ---
