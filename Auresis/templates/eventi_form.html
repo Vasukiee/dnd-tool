@@ -1,26 +1,26 @@
 {% extends "base.html" %}
-{% block title %}Registra evento — Il Registro{% endblock %}
+{% block title %}{{ 'Modifica evento' if evento else 'Registra evento' }} — Il Registro{% endblock %}
 {% block content %}
 
 <div class="page-header">
-    <p class="page-eyebrow">Nuova voce di cronaca</p>
-    <h1 class="page-title">Registra evento</h1>
+    <p class="page-eyebrow">{{ 'Voce di cronaca' if evento else 'Nuova voce di cronaca' }}</p>
+    <h1 class="page-title">{{ 'Modifica evento' if evento else 'Registra evento' }}</h1>
 </div>
 
 <form method="POST" class="form-grid">
     <div class="form-field">
         <label for="sessione">Numero sessione</label>
-        <input type="number" id="sessione" name="sessione" required>
+        <input type="number" id="sessione" name="sessione" required value="{{ evento.sessione if evento else '' }}">
     </div>
 
     <div class="form-field">
         <label for="riassunto">Riassunto (1-3 frasi, fattuale)</label>
-        <textarea id="riassunto" name="riassunto" required></textarea>
+        <textarea id="riassunto" name="riassunto" required>{{ evento.riassunto if evento else '' }}</textarea>
     </div>
 
     <div class="form-field">
         <label for="conseguenze_attive">Conseguenze ancora attive (opzionale)</label>
-        <textarea id="conseguenze_attive" name="conseguenze_attive"></textarea>
+        <textarea id="conseguenze_attive" name="conseguenze_attive">{{ (evento.conseguenze_attive or '') if evento else '' }}</textarea>
     </div>
 
     <div class="form-field">
@@ -28,14 +28,14 @@
         <select id="location_id" name="location_id">
             <option value="">— nessuna —</option>
             {% for l in locations %}
-            <option value="{{ l.id }}">{{ l.nome }}</option>
+            <option value="{{ l.id }}" {% if evento and evento.location_id == l.id %}selected{% endif %}>{{ l.nome }}</option>
             {% endfor %}
         </select>
     </div>
 
     <div class="actions-row">
-        <button type="submit" class="btn">Registra</button>
-        <a class="btn btn--ghost" href="{{ url_for('lista_eventi') }}">Annulla</a>
+        <button type="submit" class="btn">{{ 'Salva modifiche' if evento else 'Registra' }}</button>
+        <a class="btn btn--ghost" href="{{ url_for('lista_eventi', _anchor='evento-' ~ evento.id) if evento else url_for('lista_eventi') }}">Annulla</a>
     </div>
 </form>
 
