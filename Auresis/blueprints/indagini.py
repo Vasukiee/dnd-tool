@@ -482,6 +482,9 @@ def indagini_live(indagine_id):
         "punti_interesse": _punti_interesse_indagine(
             indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val, per_master=True),
         "lista_mostrata": _lista_mostrata(cronologia_attiva, scena_corrente_val),
+        # Le scene lavagna di solito non hanno indizi: senza questo elenco
+        # "Avanza →" non ci arriverebbe mai. Vista solo master.
+        "scene_lavagna": sorted(n for n, info in db.get_scene_gifs(indagine_id).items() if info["lavagna"]),
     })
     return render_template(
         "indagini_live.html",

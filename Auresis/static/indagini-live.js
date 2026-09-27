@@ -85,6 +85,9 @@
     // Tutte le scene presenti (da TUTTI i nodi, non solo radici) — usata da disegnaScene
     // e da aggiornaBottoneAvanza/avanzaScena per rilevare scene con soli nodi-figli.
     const tutteLeScene = listaTutteLeScene(NODI);
+    // "Avanza →" passa anche dalle scene lavagna, che spesso non hanno indizi
+    // (il layout del grafo invece usa solo le scene con nodi)
+    const sceneNavigabili = [...new Set(tutteLeScene.concat(RAW.scene_lavagna || []))].sort((a, b) => a - b);
 
     // --- Dagre layout ---
     const g = new dagre.graphlib.Graph();
@@ -699,9 +702,9 @@
     // ----------------------------------------------------------------
 
     function aggiornaBottoneAvanza() {
-        const ultimaScena = tutteLeScene[tutteLeScene.length - 1];
+        const ultimaScena = sceneNavigabili[sceneNavigabili.length - 1];
         const btn = document.getElementById("avanzaBtn");
-        if (btn) btn.hidden = !(tutteLeScene.length > 1 && scenaCorrente < ultimaScena);
+        if (btn) btn.hidden = !(sceneNavigabili.length > 1 && scenaCorrente < ultimaScena);
     }
 
     function aggiornaBottoneSipario(aperto) {
@@ -761,9 +764,9 @@
     }
 
     async function avanzaScena() {
-        const idx = tutteLeScene.indexOf(scenaCorrente);
-        if (idx === -1 || idx === tutteLeScene.length - 1) return;
-        const nuovaScena = tutteLeScene[idx + 1];
+        const idx = sceneNavigabili.indexOf(scenaCorrente);
+        if (idx === -1 || idx === sceneNavigabili.length - 1) return;
+        const nuovaScena = sceneNavigabili[idx + 1];
         const statiPrecedenti = Object.assign({}, statiCorrente);
 
         try {
