@@ -63,6 +63,11 @@ _MIME_PER_EXT_IMMAGINE = {
 _MIME_IMMAGINE_CONSENTITI = set(_MIME_PER_EXT_IMMAGINE.values())
 _MAX_SFONDO_BYTES = 8 * 1024 * 1024
 
+# In locale (SQLite, senza DATABASE_URL) il database si crea e si aggiorna da
+# solo all'avvio: tabelle e colonne mancanti vengono aggiunte da schema.sql.
+if db.is_sqlite():
+    db.init_db()
+
 _secret_key = os.environ.get("SECRET_KEY")
 if not _secret_key:
     try:

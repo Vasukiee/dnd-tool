@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS fazioni (
 -- LOCATIONS
 CREATE TABLE IF NOT EXISTS locations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    visibile_giocatrice INTEGER DEFAULT 0,  -- 1 = visibile in modalità giocatrice
     nome TEXT NOT NULL UNIQUE,
     tipo TEXT,                       -- città / quartiere / dungeon / regione...
     descrizione_breve TEXT,
@@ -37,6 +38,7 @@ CREATE TABLE IF NOT EXISTS palette_personalizzata (
 
 CREATE TABLE IF NOT EXISTS npc (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    visibile_giocatrice INTEGER DEFAULT 0,  -- 1 = visibile in modalità giocatrice
     nome TEXT NOT NULL,
     ruolo TEXT,                      -- es. "fornitore", "antagonista minore", "alleato"
     fazione_id INTEGER,
@@ -55,6 +57,7 @@ CREATE TABLE IF NOT EXISTS npc (
 -- QUEST
 CREATE TABLE IF NOT EXISTS quest (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    visibile_giocatrice INTEGER DEFAULT 0,  -- 1 = visibile in modalità giocatrice
     nome TEXT NOT NULL,
     tipo TEXT DEFAULT 'side',         -- main / side
     stato TEXT DEFAULT 'attiva',      -- attiva / completata / fallita / in_pausa
@@ -104,7 +107,7 @@ CREATE TABLE IF NOT EXISTS note_master (
     sessione INTEGER NOT NULL UNIQUE,
     ramo_giocato TEXT,
     note TEXT,
-    aggiornato TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    aggiornato TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- STATO DEL PERSONAGGIO (singola riga aggiornata, single-player)
@@ -180,7 +183,9 @@ CREATE TABLE IF NOT EXISTS traccia_audio_tag (
 
 CREATE TABLE IF NOT EXISTS sessioni_copioni (
                                                 numero_sessione INTEGER PRIMARY KEY,
-                                                completata INTEGER DEFAULT 0  -- 0 = non completata (nascosta in modalità giocatrice), 1 = completata
+                                                completata INTEGER DEFAULT 0, -- 0 = non completata (nascosta in modalità giocatrice), 1 = completata
+                                                testo_md TEXT,                -- testo del copione quando STORAGE_MODE=db
+                                                data_modifica TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================
@@ -198,6 +203,87 @@ CREATE TABLE IF NOT EXISTS impostazioni_sicurezza (
     id INTEGER PRIMARY KEY,
     password_master TEXT
 );
+
+-- ============================================================
+-- INDAGINI (versione SQLite dello schema Postgres: stessi nomi e colonne)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS indagini (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    titolo TEXT NOT NULL,
+    descrizione TEXT,
+    attiva BOOLEAN NOT NULL DEFAULT 1,
+    visibile_giocatrice BOOLEAN NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS nodi_indagine (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    indagine_id INTEGER NOT NULL REFERENCES indagini(id) ON DELETE CASCADE,
+    numero_nodo INTEGER NOT NULL,
+    titolo TEXT NOT NULL,
+    descrizione TEXT,
+    immagine_url TEXT,
+    regola_sblocco TEXT NOT NULL DEFAULT 'TUTTI' CHECK (regola_sblocco IN ('TUTTI', 'ALMENO_UNO')),
+    tipo_speciale TEXT DEFAULT NULL CHECK (tipo_speciale IN ('rivelazione', NULL)),
+    livello_sfx INTEGER CHECK (livello_sfx IN (1, 2, 3)),
+    livello_sfx_manuale BOOLEAN NOT NULL DEFAULT 0,
+    punto_interesse TEXT
+);
+
+CREATE TABLE IF NOT EXISTS collegamenti_nodi (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    indagine_id INTEGER NOT NULL REFERENCES indagini(id) ON DELETE CASCADE,
+    nodo_genitore_id INTEGER NOT NULL REFERENCES nodi_indagine(id) ON DELETE CASCADE,
+    nodo_figlio_id INTEGER NOT NULL REFERENCES nodi_indagine(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS cronologie_indagine (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    indagine_id INTEGER NOT NULL REFERENCES indagini(id) ON DELETE CASCADE,
+    nome TEXT NOT NULL,
+    attiva BOOLEAN NOT NULL DEFAULT 0,
+    creata_il TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    scena_corrente INTEGER NOT NULL DEFAULT 0,
+    sipario_aperto BOOLEAN NOT NULL DEFAULT 0,
+    punti_extra_esaminati TEXT,
+    liste_mostrate TEXT
+);
+
+CREATE TABLE IF NOT EXISTS stato_nodi_cronologia (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cronologia_id INTEGER NOT NULL REFERENCES cronologie_indagine(id) ON DELETE CASCADE,
+    nodo_id INTEGER NOT NULL REFERENCES nodi_indagine(id) ON DELETE CASCADE,
+    scoperto BOOLEAN NOT NULL DEFAULT 0,
+    sbloccato_manualmente BOOLEAN NOT NULL DEFAULT 0,
+    UNIQUE (cronologia_id, nodo_id)
+);
+
+CREATE TABLE IF NOT EXISTS scene_indagine (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    indagine_id INTEGER NOT NULL REFERENCES indagini(id) ON DELETE CASCADE,
+    numero_scena INTEGER NOT NULL,
+    gif_url TEXT,
+    gif_data BLOB,
+    gif_mime TEXT,
+    gif_data_aggiornata TIMESTAMP,
+    punti_extra TEXT,
+    location_id INTEGER REFERENCES locations(id) ON DELETE SET NULL,
+    UNIQUE (indagine_id, numero_scena)
+);
+
+CREATE TABLE IF NOT EXISTS sfondi_location (
+    location_id INTEGER PRIMARY KEY REFERENCES locations(id) ON DELETE CASCADE,
+    url TEXT,
+    data BLOB,
+    mime TEXT,
+    aggiornato TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_nodi_indagine ON nodi_indagine(indagine_id);
+CREATE INDEX IF NOT EXISTS idx_collegamenti_indagine ON collegamenti_nodi(indagine_id);
+CREATE INDEX IF NOT EXISTS idx_collegamenti_figlio ON collegamenti_nodi(nodo_figlio_id);
+CREATE INDEX IF NOT EXISTS idx_cronologie_indagine ON cronologie_indagine(indagine_id);
+CREATE INDEX IF NOT EXISTS idx_stato_nodi_cron ON stato_nodi_cronologia(cronologia_id);
 
 -- ============================================================
 -- INDICI PERFORMANCE / MAPPA RELAZIONALE
