@@ -4,6 +4,7 @@
 {{ super() }}
 <script>document.documentElement.classList.add("indagini-player-page");</script>
 <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+<link href="{{ url_for('static', filename='indagini-lavagna.css') }}" rel="stylesheet">
 {% endblock %}
 {% block content %}
 
@@ -35,6 +36,29 @@
                 <p class="player-esplora__titolo">Da esaminare</p>
                 <ul class="player-esplora__lista" id="playerEsploraLista"></ul>
             </aside>
+
+            <!-- Lavagna indizi: si srotola nelle scene marcate "lavagna" -->
+            <div class="lavagna" id="lavagna" hidden aria-hidden="true">
+                <div class="lavagna__telo" id="lavagnaTelo">
+                    <p class="lavagna__targa">Indizi raccolti</p>
+                    <p class="lavagna__vuota" id="lavagnaVuota" hidden>Nessun indizio raccolto</p>
+                    <div class="lavagna__carte" id="lavagnaCarte"></div>
+                    <svg class="lavagna__fili" id="lavagnaFili">
+                        <path class="lavagna-filo-temp" id="lavagnaFiloTemp" style="display: none"/>
+                    </svg>
+                    {% if puo_gestire_lavagna %}
+                    <div class="lavagna-vassoio" id="lavagnaVassoio" hidden>
+                        <button class="lavagna-vassoio__linguetta" id="lavagnaVassoioApri" type="button">
+                            Da parte <span id="lavagnaVassoioConta">0</span>
+                        </button>
+                        <div class="lavagna-vassoio__lista" id="lavagnaVassoioLista"></div>
+                    </div>
+                    {% endif %}
+                    <p class="lavagna__avviso" id="lavagnaAvviso" hidden></p>
+                </div>
+                <div class="lavagna__rotolo lavagna__rotolo--sx"></div>
+                <div class="lavagna__rotolo lavagna__rotolo--dx"></div>
+            </div>
         </div>
         <div class="player-detail" id="playerDetail">
             <button class="player-detail__close" id="playerDetailClose" title="Chiudi (×)">×</button>
@@ -63,8 +87,10 @@
         pollMs: 2000,
         defaultBackgroundUrl: "{{ url_for('sfondo_default') }}",
         endpoints: {
-            statoPlayer: "{{ url_for('indagini.indagini_stato_player', indagine_id=indagine.id) }}"
+            statoPlayer: "{{ url_for('indagini.indagini_stato_player', indagine_id=indagine.id) }}",
+            lavagna: "{{ url_for('indagini.indagini_lavagna', indagine_id=indagine.id) }}"
         },
+        lavagnaGestione: {{ 'true' if puo_gestire_lavagna else 'false' }},
         sfx: {
             rivelazione: "{{ url_for('static', filename='audio/sfx/rivelazione.mp3') }}",
             livelloBase: "{{ url_for('static', filename='audio/sfx/livello__LIVELLO__.mp3') }}"
@@ -72,6 +98,7 @@
     };
 </script>
 <script src="{{ url_for('static', filename='indagini-shared.js') }}"></script>
+<script src="{{ url_for('static', filename='indagini-lavagna.js') }}"></script>
 <script src="{{ url_for('static', filename='indagini-player.js') }}"></script>
 
 {% endblock %}

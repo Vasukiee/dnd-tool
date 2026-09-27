@@ -246,7 +246,9 @@ CREATE TABLE IF NOT EXISTS cronologie_indagine (
     scena_corrente INTEGER NOT NULL DEFAULT 0,
     sipario_aperto BOOLEAN NOT NULL DEFAULT 0,
     punti_extra_esaminati TEXT,
-    liste_mostrate TEXT
+    liste_mostrate TEXT,
+    lavagna TEXT,
+    lavagna_versione INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS stato_nodi_cronologia (
@@ -268,6 +270,7 @@ CREATE TABLE IF NOT EXISTS scene_indagine (
     gif_data_aggiornata TIMESTAMP,
     punti_extra TEXT,
     location_id INTEGER REFERENCES locations(id) ON DELETE SET NULL,
+    lavagna BOOLEAN NOT NULL DEFAULT 0,
     UNIQUE (indagine_id, numero_scena)
 );
 
