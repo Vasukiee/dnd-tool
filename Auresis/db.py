@@ -1152,6 +1152,34 @@ def get_all_fatti():
     return _dictify(rows)
 
 
+# Riferimenti da sistemare prima di cancellare un record: le chiavi esterne
+# senza ON DELETE farebbero fallire la cancellazione. I legami incarico-personaggio
+# si cancellano; i riferimenti "dove si trova / a chi appartiene" si svuotano,
+# così personaggi, eventi e tracce restano, solo senza quel collegamento.
+# (quest_locations, sfondi_location e scene_indagine si arrangiano già da sole.)
+_PULIZIA_PRIMA_DI_ELIMINARE = {
+    "quest": [
+        "DELETE FROM quest_npc WHERE quest_id = %s",
+        "UPDATE tracce_audio SET quest_id = NULL WHERE quest_id = %s",
+    ],
+    "npc": [
+        "DELETE FROM quest_npc WHERE npc_id = %s",
+    ],
+    "locations": [
+        "UPDATE npc SET location_attuale_id = NULL WHERE location_attuale_id = %s",
+        "UPDATE quest SET location_id = NULL WHERE location_id = %s",
+        "UPDATE eventi SET location_id = NULL WHERE location_id = %s",
+        "UPDATE tracce_audio SET location_id = NULL WHERE location_id = %s",
+        "UPDATE pg_stato SET location_attuale_id = NULL WHERE location_attuale_id = %s",
+        "UPDATE locations SET location_padre_id = NULL WHERE location_padre_id = %s",
+    ],
+    "fazioni": [
+        "UPDATE npc SET fazione_id = NULL WHERE fazione_id = %s",
+        "UPDATE locations SET fazione_controllante_id = NULL WHERE fazione_controllante_id = %s",
+    ],
+}
+
+
 def delete_record(tabella, record_id):
     """Cancellazione generica per id, usata dalle route di delete della dashboard."""
     tabelle_consentite = {"npc", "fazioni", "locations", "quest", "eventi", "fatti_accertati"}
@@ -1159,6 +1187,10 @@ def delete_record(tabella, record_id):
         raise ValueError(f"Tabella non consentita: {tabella}")
     conn = get_connection()
     cur = conn.cursor()
+    # Tutto nella stessa transazione: se la cancellazione fallisce, anche la
+    # pulizia dei riferimenti viene annullata.
+    for query in _PULIZIA_PRIMA_DI_ELIMINARE.get(tabella, []):
+        cur.execute(query, (record_id,))
     cur.execute(f"DELETE FROM {tabella} WHERE id = %s", (record_id,))
     conn.commit()
     cur.close()
