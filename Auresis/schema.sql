@@ -248,7 +248,8 @@ CREATE TABLE IF NOT EXISTS cronologie_indagine (
     punti_extra_esaminati TEXT,
     liste_mostrate TEXT,
     lavagna TEXT,
-    lavagna_versione INTEGER NOT NULL DEFAULT 0
+    lavagna_versione INTEGER NOT NULL DEFAULT 0,
+    lavagna_aperta BOOLEAN NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS stato_nodi_cronologia (

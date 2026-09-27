@@ -97,6 +97,49 @@
         flex-direction: column;
     }
 
+    /* Selettore della player view: indizi classici o lavagna (esclusivi) */
+    .copione-vista-player {
+        margin-bottom: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+    .copione-vista-player[hidden] { display: none; }
+    .copione-vista-player__etichetta {
+        font-family: var(--font-mono);
+        font-size: 0.66rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.7;
+    }
+    .copione-vista-player__scelte {
+        display: inline-flex;
+        align-self: flex-start;
+        border: 1px solid var(--ink-line);
+        border-radius: 6px;
+        overflow: hidden;
+    }
+    .copione-vista-player__scelte button {
+        border: none;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-size: 0.85rem;
+        padding: 6px 12px;
+        cursor: pointer;
+        opacity: 0.65;
+        transition: background 0.15s, color 0.15s, opacity 0.15s;
+    }
+    .copione-vista-player__scelte button + button { border-left: 1px solid var(--ink-line); }
+    .copione-vista-player__scelte button:hover { opacity: 1; }
+    .copione-vista-player__scelte button[aria-pressed="true"] {
+        background: rgba(201, 163, 92, 0.2);
+        color: var(--gold-bright);
+        opacity: 1;
+        cursor: default;
+    }
+    .copione-vista-player__scelte button:disabled { cursor: wait; }
+
     .btn-scene-mode {
         margin-bottom: 8px;
         align-self: flex-start;
@@ -597,8 +640,19 @@
 
     <!-- Outline a dx -->
     <div class="copione-col-right">
-        {% if heading_list %}
+        {% if heading_list or not modalita_giocatrice %}
         <div class="copione-outline-wrapper">
+            {% if not modalita_giocatrice %}
+            <!-- Visibile solo se il copione richiama un'indagine (vedi script) -->
+            <div class="copione-vista-player" id="copioneVistaPlayer" hidden role="group" aria-label="Cosa mostra la player view">
+                <span class="copione-vista-player__etichetta">Player view</span>
+                <div class="copione-vista-player__scelte">
+                    <button type="button" data-lavagna="0" aria-pressed="true" title="Mostra il grafo degli indizi">🔍 Indizi</button>
+                    <button type="button" data-lavagna="1" aria-pressed="false" title="Srotola la lavagna con gli indizi raccolti">🧵 Lavagna</button>
+                </div>
+            </div>
+            {% endif %}
+            {% if heading_list %}
             <button type="button" class="btn btn--ghost btn-scene-mode" id="toggle-scene-btn" title="Modalità di lettura focalizzata a scene">
                 🎭 Lettura a Scene
             </button>
@@ -609,6 +663,7 @@
                 </a>
                 {% endfor %}
             </nav>
+            {% endif %}
         </div>
         {% endif %}
     </div>
@@ -1295,6 +1350,8 @@
                     btn.style.borderColor = 'var(--gold)';
                     btn.style.color = 'var(--gold-bright)';
                     btn.innerHTML = btn.innerHTML + (data.sipario_aperto ? ' ✓ Sipario aperto' : ' ✓');
+                    // Entrando in una scena marcata lavagna la player view cambia da sola
+                    if (window.vistaPlayerImposta) window.vistaPlayerImposta(data.lavagna_aperta);
                     btn.disabled = true;
                     btn.style.cursor = 'default';
                 } else {
@@ -1305,6 +1362,56 @@
                 alert('Errore di rete durante il cambio scena.');
             }
         });
+
+        // Selettore player view: indizi classici o lavagna, in qualunque scena
+        (function () {
+            const box = document.getElementById('copioneVistaPlayer');
+            const indagineEl = document.querySelector('[data-indagine-id]');
+            if (!box || !indagineEl) return;
+            const indagineId = indagineEl.dataset.indagineId;
+            const bottoni = box.querySelectorAll('button[data-lavagna]');
+            let inVolo = false;
+
+            function imposta(aperta) {
+                if (typeof aperta !== 'boolean') return;
+                bottoni.forEach(b => b.setAttribute('aria-pressed', String((b.dataset.lavagna === '1') === aperta)));
+            }
+            window.vistaPlayerImposta = imposta;
+
+            async function leggi() {
+                if (inVolo || document.hidden) return;
+                try {
+                    const resp = await fetch(`/indagini/${indagineId}/lavagna`);
+                    if (resp.ok) imposta(!!(await resp.json()).attiva);
+                } catch (err) { /* rete assente: resta l'ultimo stato noto */ }
+            }
+
+            bottoni.forEach(b => b.addEventListener('click', async () => {
+                if (inVolo || b.getAttribute('aria-pressed') === 'true') return;
+                inVolo = true;
+                bottoni.forEach(x => { x.disabled = true; });
+                try {
+                    const resp = await fetch(`/indagini/${indagineId}/lavagna/stato`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ aperta: b.dataset.lavagna === '1' })
+                    });
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    imposta((await resp.json()).lavagna_aperta);
+                } catch (err) {
+                    console.error('Errore:', err);
+                    alert('Impossibile cambiare la vista della player view.');
+                } finally {
+                    inVolo = false;
+                    bottoni.forEach(x => { x.disabled = false; });
+                }
+            }));
+
+            box.hidden = false;
+            leggi();
+            // Si riallinea se la vista cambia altrove (live, altro copione, cambio scena)
+            setInterval(leggi, 4000);
+        })();
 
         // Gestione bottoni "lista da esaminare" inline
         document.body.addEventListener('click', async function(e) {
