@@ -1321,6 +1321,29 @@ def link_npc_quest(quest_id, npc_id, ruolo_nella_quest=None):
     conn.close()
 
 
+def get_evento(evento_id):
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM eventi WHERE id = %s", (evento_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return dict(row) if row else None
+
+
+def update_evento(evento_id, sessione, riassunto, conseguenze_attive=None, location_id=None):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """UPDATE eventi SET sessione = %s, riassunto = %s, conseguenze_attive = %s, location_id = %s
+           WHERE id = %s""",
+        (sessione, riassunto, conseguenze_attive, location_id, evento_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
 def add_evento(sessione, riassunto, conseguenze_attive=None, location_id=None):
     conn = get_connection()
     cur = conn.cursor()

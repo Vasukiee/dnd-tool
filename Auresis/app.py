@@ -760,6 +760,29 @@ def nuovo_evento():
     return render_template("eventi_form.html", active="eventi", locations=locations)
 
 
+@app.route("/eventi/<int:evento_id>/edita", methods=["GET", "POST"])
+@solo_master
+def edita_evento(evento_id):
+    evento = db.get_evento(evento_id)
+    if not evento:
+        flash("Evento non trovato.")
+        return redirect(url_for("lista_eventi"))
+
+    if request.method == "POST":
+        db.update_evento(
+            evento_id,
+            sessione=int(request.form["sessione"]),
+            riassunto=request.form["riassunto"],
+            conseguenze_attive=request.form.get("conseguenze_attive", "").strip() or None,
+            location_id=_int_or_none(request.form.get("location_id")),
+        )
+        flash("Evento aggiornato.")
+        return redirect(url_for("lista_eventi", _anchor=f"evento-{evento_id}"))
+
+    locations = db.get_all_locations()
+    return render_template("eventi_form.html", active="eventi", locations=locations, evento=evento)
+
+
 @app.route("/eventi/<int:evento_id>/elimina", methods=["POST"])
 @solo_master
 def elimina_evento(evento_id):
