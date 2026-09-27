@@ -247,10 +247,11 @@ def _normalizza_lavagna(raw, ammessi):
     return {"posizioni": posizioni, "rimossi": rimossi, "fili": fili}
 
 
-def _lavagna_player(indagine_id, cronologia_attiva, scena_corrente, scoperti_ids):
-    """Stato della lavagna per la player view. Dice solo se la scena CORRENTE
-    è una lavagna: l'elenco delle scene marcate anticiperebbe il copione."""
-    attiva = db.scena_e_lavagna(indagine_id, scena_corrente)
+def _lavagna_player(cronologia_attiva, scoperti_ids):
+    """Stato della lavagna per la player view. Dice solo se è aperta ORA:
+    l'elenco delle scene marcate anticiperebbe il copione."""
+    db.assicura_colonne_lavagna()
+    attiva = bool(cronologia_attiva and cronologia_attiva.get("lavagna_aperta"))
     out = {"attiva": attiva, "versione": 0, "cronologia": None}
     if attiva and cronologia_attiva:
         out["cronologia"] = cronologia_attiva["id"]
@@ -604,6 +605,10 @@ def indagini_avanza_scena(indagine_id):
 
     sipario_aperto = cronologia_attiva.get("sipario_aperto", False)
     db.avanza_scena_cronologia(cronologia_attiva["id"], nuova_scena)
+    # Entrando in una scena la lavagna segue il segno dell'editor; il copione
+    # può poi commutarla a mano (indagini_stato_lavagna).
+    lavagna_aperta = db.scena_e_lavagna(indagine_id, nuova_scena)
+    db.set_lavagna_aperta(cronologia_attiva["id"], lavagna_aperta)
     if nuova_scena == 0:
         db.set_sipario_aperto(cronologia_attiva["id"], True)
         sipario_aperto = True
@@ -617,6 +622,7 @@ def indagini_avanza_scena(indagine_id):
     return jsonify({
         "scena_corrente": nuova_scena,
         "sipario_aperto": sipario_aperto,
+        "lavagna_aperta": lavagna_aperta,
         "stati": stati,
         "punti_interesse": _punti_interesse_indagine(
             indagine_id, nodi, stati_sblocco, cronologia_attiva, nuova_scena, per_master=True),
@@ -655,7 +661,7 @@ def indagini_player(indagine_id):
         "sipario_aperto": cronologia_attiva.get("sipario_aperto", False) if cronologia_attiva else False,
         "scene_gifs": scene_gifs_str,
         "punti_interesse": punti_interesse,
-        "lavagna": _lavagna_player(indagine_id, cronologia_attiva, scena_corrente_val, scoperti_ids),
+        "lavagna": _lavagna_player(cronologia_attiva, scoperti_ids),
     })
     return render_template(
         "indagini_player.html",
@@ -682,7 +688,7 @@ def indagini_stato_player(indagine_id):
             "sipario_aperto": False,
             "nodi": [],
             "punti_interesse": _punti_interesse_indagine(indagine_id, nodi, {}, None, prima_scena),
-            "lavagna": _lavagna_player(indagine_id, None, prima_scena, []),
+            "lavagna": _lavagna_player(None, []),
         })
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"])
     scoperti_ids = [nodo_id for nodo_id, stato in stati_sblocco.items() if stato.get("scoperto")]
@@ -702,7 +708,7 @@ def indagini_stato_player(indagine_id):
         "scene_gifs": scene_gifs_str,
         "punti_interesse": _punti_interesse_indagine(
             indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val),
-        "lavagna": _lavagna_player(indagine_id, cronologia_attiva, scena_corrente_val, scoperti_ids),
+        "lavagna": _lavagna_player(cronologia_attiva, scoperti_ids),
     })
 
 
@@ -762,23 +768,21 @@ def indagini_lista_esamina(indagine_id):
 
 
 def _lavagna_corrente(indagine_id):
-    """(cronologia attiva, scena corrente, id scoperti) per le rotte della lavagna."""
+    """(cronologia attiva, id scoperti) per le rotte della lavagna."""
     cronologia = db.get_cronologia_attiva(indagine_id)
-    nodi = db.get_nodi_indagine(indagine_id)
-    scena = _scena_corrente_effettiva(nodi, cronologia)
     scoperti = []
     if cronologia:
         stati = db.get_stato_nodi_cronologia(cronologia["id"])
         scoperti = [nid for nid, s in stati.items() if s.get("scoperto")]
-    return cronologia, scena, scoperti
+    return cronologia, scoperti
 
 
 @bp.route("/<int:indagine_id>/lavagna")
 def indagini_lavagna(indagine_id):
     """Stato della lavagna, per l'aggiornamento rapido mentre è aperta.
     Pubblico come stato-player: contiene solo indizi già scoperti."""
-    cronologia, scena, scoperti = _lavagna_corrente(indagine_id)
-    return jsonify(_lavagna_player(indagine_id, cronologia, scena, scoperti))
+    cronologia, scoperti = _lavagna_corrente(indagine_id)
+    return jsonify(_lavagna_player(cronologia, scoperti))
 
 
 # Spostare le carte e tendere o tagliare i fili è il gioco della lavagna, e lo
@@ -824,15 +828,15 @@ def _applica_op_lavagna(stato, dati, scoperti):
 @bp.route("/<int:indagine_id>/lavagna", methods=["POST"])
 def indagini_modifica_lavagna(indagine_id):
     """Una modifica alla lavagna: {"op": ..., "posizioni"?: {...}, ...}.
-    Si modifica solo mentre la scena corrente è una lavagna, e solo con
+    Si modifica solo mentre la lavagna è aperta, e solo con
     indizi scoperti nella cronologia attiva."""
     dati = request.get_json(silent=True)
     if not isinstance(dati, dict) or dati.get("op") not in LAVAGNA_OP_MASTER:
         return jsonify({"error": "operazione non valida"}), 400
     if dati["op"] not in LAVAGNA_OP_GIOCATRICE and not utente_e_master():
         return jsonify({"ok": False, "errore": "Autenticazione master richiesta"}), 403
-    cronologia, scena, scoperti = _lavagna_corrente(indagine_id)
-    if not cronologia or not db.scena_e_lavagna(indagine_id, scena):
+    cronologia, scoperti = _lavagna_corrente(indagine_id)
+    if not cronologia or not cronologia.get("lavagna_aperta"):
         return jsonify({"error": "la lavagna non è aperta"}), 409
     ammessi = set(scoperti)
     versione, stato = db.modifica_lavagna(
@@ -840,6 +844,24 @@ def indagini_modifica_lavagna(indagine_id):
     if versione is None:
         return jsonify({"error": "nessuna cronologia attiva"}), 409
     return jsonify({"attiva": True, "cronologia": cronologia["id"], "versione": versione, **stato})
+
+
+@bp.route("/<int:indagine_id>/lavagna/stato", methods=["POST"])
+@richiedi_master
+def indagini_stato_lavagna(indagine_id):
+    """Passa la player view dalla lavagna agli indizi classici e viceversa,
+    in qualunque scena. JSON {"aperta": bool}; senza, inverte lo stato."""
+    dati = request.get_json(silent=True) or {}
+    cronologia = db.get_cronologia_attiva(indagine_id)
+    if not cronologia:
+        nome = f"Cronologia del {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        cronologia = db.crea_cronologia(indagine_id, nome)
+    db.assicura_colonne_lavagna()
+    aperta = dati.get("aperta")
+    if not isinstance(aperta, bool):
+        aperta = not cronologia.get("lavagna_aperta")
+    db.set_lavagna_aperta(cronologia["id"], aperta)
+    return jsonify({"lavagna_aperta": aperta})
 
 
 @bp.route("/<int:indagine_id>/sipario", methods=["POST"])

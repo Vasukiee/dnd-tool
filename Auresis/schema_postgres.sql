@@ -319,6 +319,9 @@ ALTER TABLE sfondi_location ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS lavagna BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna TEXT;
 ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna_versione INTEGER NOT NULL DEFAULT 0;
+-- Cosa mostra la player view: la lavagna o gli indizi classici. Si accende da
+-- solo entrando in una scena marcata lavagna, e il copione lo commuta ovunque.
+ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna_aperta BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Migrazione per testo dei copioni salvato nel database
 ALTER TABLE sessioni_copioni ADD COLUMN IF NOT EXISTS testo_md TEXT;
