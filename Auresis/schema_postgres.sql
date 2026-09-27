@@ -310,6 +310,16 @@ CREATE TABLE IF NOT EXISTS sfondi_location (
 -- Come le altre tabelle di public: l'app si connette come owner e non ne risente.
 ALTER TABLE sfondi_location ENABLE ROW LEVEL SECURITY;
 
+-- Lavagna indizi: una scena marcata come "lavagna" apre nella player view la
+-- bacheca in cuoio dove il master dispone e collega gli indizi raccolti.
+-- Lo stato della bacheca vive nella cronologia: ogni run ha la sua.
+-- lavagna = JSON {"posizioni": {"<nodo_id>": [x, y]}, "rimossi": [id], "fili": [[a, b]]}
+-- con x, y frazioni 0..1 della bacheca (centro della carta).
+-- Aggiunte anche a runtime da db.assicura_colonne_lavagna.
+ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS lavagna BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna TEXT;
+ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna_versione INTEGER NOT NULL DEFAULT 0;
+
 -- Migrazione per testo dei copioni salvato nel database
 ALTER TABLE sessioni_copioni ADD COLUMN IF NOT EXISTS testo_md TEXT;
 

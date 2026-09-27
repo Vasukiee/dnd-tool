@@ -206,10 +206,10 @@
         </div>
         {% endif %}
 
-        <!-- Luogo di ogni scena: lo sfondo si sceglie nella pagina del luogo -->
+        <!-- Luogo e lavagna di ogni scena: lo sfondo si sceglie nella pagina del luogo -->
         {% if scene_numeri %}
         <div class="panel-section">
-            <p class="panel-title">Scene: luogo ed esche</p>
+            <p class="panel-title">Scene: luogo, esche e lavagna</p>
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 {% for s in scene_numeri %}
                 <div>
@@ -226,6 +226,10 @@
                             </select>
                             <button type="submit" class="btn btn--ghost" style="font-size: 0.72rem; padding: 4px 9px; white-space: nowrap;">Salva</button>
                         </div>
+                        <label style="font-size: 0.72rem; color: var(--bone-dim); display: flex; gap: 5px; align-items: center;"
+                               title="Nella player view si apre la lavagna in cuoio con gli indizi raccolti, da disporre e collegare">
+                            <input type="checkbox" name="lavagna" value="1" {% if s in scene_lavagna %}checked{% endif %}> Lavagna indizi
+                        </label>
                         {% if scene_gifs.get(s) %}
                         <label style="font-size: 0.72rem; color: var(--bone-dim); display: flex; gap: 5px; align-items: center;">
                             <input type="checkbox" name="rimuovi_immagine" value="1"> Rimuovi l'immagine della scena (usa quella del luogo)

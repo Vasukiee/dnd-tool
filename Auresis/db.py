@@ -29,6 +29,7 @@ _pg_pool = None
 _indici_performance_assicurati = False
 _quest_locations_assicurata = False
 _punto_interesse_assicurato = False
+_lavagna_assicurata = False
 
 
 class _ConnessioneDalPool:
@@ -1920,6 +1921,34 @@ def assicura_colonne_punti_interesse(force=False):
     _punto_interesse_assicurato = True
 
 
+def assicura_colonne_lavagna(force=False):
+    """Aggiunge le colonne della lavagna indizi sui database creati prima
+    della funzione (sono anche in schema_postgres.sql). Cacheato per processo."""
+    global _lavagna_assicurata
+    if (_lavagna_assicurata and not force) or is_sqlite():
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS lavagna BOOLEAN NOT NULL DEFAULT FALSE")
+    cur.execute("ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna TEXT")
+    cur.execute("ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna_versione INTEGER NOT NULL DEFAULT 0")
+    conn.commit()
+    cur.close()
+    conn.close()
+    _lavagna_assicurata = True
+
+
+def get_lavagna(cronologia):
+    """Stato grezzo della lavagna di una cronologia (dict), {} se assente."""
+    raw = (cronologia or {}).get("lavagna")
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            return {}
+    return raw if isinstance(raw, dict) else {}
+
+
 def add_nodo(indagine_id, numero_nodo, titolo, descrizione=None,
              immagine_url=None, regola_sblocco='TUTTI', tipo_speciale=None,
              punto_interesse=None):
@@ -2158,10 +2187,11 @@ def get_scene_gifs(indagine_id):
     """Restituisce {numero_scena: {"gif_url", "has_file", "versione"}} per
     un'indagine. "has_file" indica che l'immagine è salvata nel DB (gif_data);
     "versione" è un epoch usato come cache-buster negli URL."""
+    assicura_colonne_lavagna()
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
-        f"""SELECT numero_scena, gif_url, location_id,
+        f"""SELECT numero_scena, gif_url, location_id, lavagna,
                   (gif_data IS NOT NULL) AS has_file,
                   {_sql_epoch("gif_data_aggiornata")} AS versione
            FROM scene_indagine WHERE indagine_id = %s""",
@@ -2174,6 +2204,7 @@ def get_scene_gifs(indagine_id):
         row["numero_scena"]: {
             "gif_url": row["gif_url"],
             "location_id": row["location_id"],
+            "lavagna": bool(row["lavagna"]),
             "has_file": row["has_file"],
             "versione": row["versione"],
         }
@@ -2274,6 +2305,23 @@ def set_punti_extra_scena(indagine_id, numero_scena, testo):
     conn.close()
 
 
+def set_scena_lavagna(indagine_id, numero_scena, lavagna):
+    """Marca una scena come "lavagna": nella player view apre la bacheca indizi."""
+    assicura_colonne_lavagna()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO scene_indagine (indagine_id, numero_scena, lavagna)
+           VALUES (%s, %s, %s)
+           ON CONFLICT (indagine_id, numero_scena)
+           DO UPDATE SET lavagna = EXCLUDED.lavagna""",
+        (indagine_id, numero_scena, bool(lavagna)),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
 def toggle_punto_extra_esaminato(cronologia_id, chiave):
     """Segna o toglie una voce esca come esaminata nella cronologia.
     Le chiavi ("scena|etichetta") vivono in un array JSON. Ritorna il nuovo stato."""
@@ -2324,6 +2372,51 @@ def set_lista_mostrata(cronologia_id, scena, mostra):
     conn.commit()
     cur.close()
     conn.close()
+
+
+def scena_e_lavagna(indagine_id, numero_scena):
+    assicura_colonne_lavagna()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT lavagna FROM scene_indagine WHERE indagine_id = %s AND numero_scena = %s",
+        (indagine_id, numero_scena),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return bool(row and row[0])
+
+
+def modifica_lavagna(cronologia_id, applica):
+    """Applica `applica(stato) -> nuovo_stato` alla lavagna della cronologia
+    dentro una transazione con la riga bloccata: master e giocatrice possono
+    modificarla insieme senza che uno cancelli le modifiche dell'altro.
+    Incrementa la versione, che i client usano per riconoscere i dati nuovi.
+    Ritorna (versione, nuovo_stato), o (None, None) se la cronologia non c'è."""
+    assicura_colonne_lavagna()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT lavagna FROM cronologie_indagine WHERE id = %s FOR UPDATE", (cronologia_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.rollback()
+        cur.close()
+        conn.close()
+        return None, None
+    nuovo = applica(get_lavagna({"lavagna": row[0]}))
+    cur.execute(
+        """UPDATE cronologie_indagine
+           SET lavagna = %s, lavagna_versione = lavagna_versione + 1
+           WHERE id = %s
+           RETURNING lavagna_versione""",
+        (json.dumps(nuovo), cronologia_id),
+    )
+    versione = cur.fetchone()[0]
+    conn.commit()
+    cur.close()
+    conn.close()
+    return versione, nuovo
 
 
 def get_sfondi_ereditati(indagine_id):
