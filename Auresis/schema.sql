@@ -98,6 +98,15 @@ CREATE TABLE IF NOT EXISTS eventi (
     FOREIGN KEY (location_id) REFERENCES locations(id)
 );
 
+-- NOTE DEL MASTER (riservate, una per sessione; solo pagina /master/note)
+CREATE TABLE IF NOT EXISTS note_master (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sessione INTEGER NOT NULL UNIQUE,
+    ramo_giocato TEXT,
+    note TEXT,
+    aggiornato TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- STATO DEL PERSONAGGIO (singola riga aggiornata, single-player)
 CREATE TABLE IF NOT EXISTS pg_stato (
     id INTEGER PRIMARY KEY CHECK (id = 1),  -- forziamo una sola riga

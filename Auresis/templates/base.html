@@ -395,6 +395,15 @@
                 </svg>
                 <span class="nav__label">Cronaca</span>
             </a>
+            {% if not modalita_giocatrice %}
+            <a class="nav__item {% if active == 'note_master' %}active{% endif %}" href="{{ url_for('note_master') }}" title="Note del Master">
+                <svg class="nav__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="4" y="11" width="16" height="10" rx="2"/>
+                    <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+                </svg>
+                <span class="nav__label">Note del Master</span>
+            </a>
+            {% endif %}
             <a class="nav__item {% if active == 'mappa' %}active{% endif %}" href="{{ url_for('mappa_relazioni') }}"
                title="Mappa relazioni">
                 <svg class="nav__icon" fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
@@ -577,6 +586,10 @@
                 <span>Il Soggetto</span><small>Stato speciale</small>
             </a>
             {% if not modalita_giocatrice %}
+            <a class="command-palette__item" data-command="note master riservate ramo copione verita continuita"
+               href="{{ url_for('note_master') }}" role="option">
+                <span>Note del Master</span><small>Riservate, per sessione</small>
+            </a>
             <a class="command-palette__item" data-command="nuovo npc personaggio soggetto crea"
                href="{{ url_for('nuovo_npc') }}" role="option">
                 <span>Nuovo personaggio</span><small>Crea NPC</small>

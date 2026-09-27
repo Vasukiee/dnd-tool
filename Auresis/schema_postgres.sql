@@ -341,3 +341,20 @@ CREATE INDEX IF NOT EXISTS idx_eventi_location ON eventi(location_id);
 CREATE INDEX IF NOT EXISTS idx_eventi_sessione ON eventi(sessione);
 CREATE INDEX IF NOT EXISTS idx_audio_location ON tracce_audio(location_id);
 CREATE INDEX IF NOT EXISTS idx_audio_quest ON tracce_audio(quest_id);
+
+-- ============================================================
+-- NOTE DEL MASTER (riservate: ramo del copione giocato, verità nascoste,
+-- continuità). Lette e scritte solo dalla pagina /master/note; incluse nel backup.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS note_master (
+    id SERIAL PRIMARY KEY,
+    sessione INTEGER NOT NULL UNIQUE,
+    ramo_giocato TEXT,
+    note TEXT,
+    aggiornato TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Nessuna policy: il server usa il ruolo proprietario delle tabelle, anon e
+-- authenticated non devono poterla leggere dalla REST API di Supabase.
+ALTER TABLE note_master ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON note_master FROM anon, authenticated;
+REVOKE ALL ON SEQUENCE note_master_id_seq FROM anon, authenticated;

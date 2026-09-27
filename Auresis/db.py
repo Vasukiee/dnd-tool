@@ -350,6 +350,7 @@ _TABELLE_EXPORT = [
     "traccia_audio_tag", "sessioni_copioni",
     "indagini", "nodi_indagine", "collegamenti_nodi", "cronologie_indagine",
     "stato_nodi_cronologia", "scene_indagine", "impostazioni_globali",
+    "note_master",
 ]
 
 
@@ -1338,6 +1339,48 @@ def update_evento(evento_id, sessione, riassunto, conseguenze_attive=None, locat
         """UPDATE eventi SET sessione = %s, riassunto = %s, conseguenze_attive = %s, location_id = %s
            WHERE id = %s""",
         (sessione, riassunto, conseguenze_attive, location_id, evento_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_note_master_per_sessione():
+    """Sessioni della Cronaca con le note riservate al Master.
+
+    Usata SOLO dalla pagina /master/note: le note non vanno lette altrove,
+    così non finiscono mai in una pagina servita alla giocatrice.
+    [{"sessione", "riassunti": [..], "nota": {ramo_giocato, note, aggiornato} | None}]
+    """
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT sessione, riassunto FROM eventi ORDER BY sessione DESC, id")
+    eventi = _dictify(cur.fetchall())
+    cur.execute("SELECT sessione, ramo_giocato, note, aggiornato FROM note_master")
+    note = {r["sessione"]: dict(r) for r in cur.fetchall()}
+    cur.close()
+    conn.close()
+    riassunti = {}
+    for e in eventi:
+        riassunti.setdefault(e["sessione"], []).append(e["riassunto"])
+    sessioni = sorted(set(riassunti) | set(note), reverse=True)
+    return [
+        {"sessione": s, "riassunti": riassunti.get(s, []), "nota": note.get(s)}
+        for s in sessioni
+    ]
+
+
+def upsert_note_master(sessione, ramo_giocato=None, note=None):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO note_master (sessione, ramo_giocato, note)
+           VALUES (%s, %s, %s)
+           ON CONFLICT (sessione) DO UPDATE SET
+               ramo_giocato = EXCLUDED.ramo_giocato,
+               note = EXCLUDED.note,
+               aggiornato = CURRENT_TIMESTAMP""",
+        (sessione, ramo_giocato, note)
     )
     conn.commit()
     cur.close()
