@@ -731,7 +731,9 @@
         pz.tx = (svgRect.width  - cw * scale) / 2;
         pz.ty = Math.max(0, (svgRect.height - ch * scale) / 2);
         applyPZ(animato);
-        pzInit = true;
+        // Un fit fatto su un grafo vuoto (es. pagina aperta sulla scena
+        // lavagna) non vale: si rifà quando compare il primo nodo.
+        pzInit = NODI.some(nodoDovrebbeEssereVisibile);
     }
 
     // ----------------------------------------------------------------
@@ -837,6 +839,17 @@
     aggiornaSfondoScena(scenaCorrente);
 
     // ----------------------------------------------------------------
+    // Lavagna indizi (indagini-lavagna.js)
+    // ----------------------------------------------------------------
+    const lavagna = window.IndaginiLavagna;
+    lavagna.init({
+        modificabile: window.INDAGINI_PLAYER_CONFIG.lavagnaModificabile,
+        endpointSalva: window.INDAGINI_PLAYER_CONFIG.endpoints.salvaLavagna,
+        onApriDettaglio: n => (nodoDetailId === n.id ? chiudiDettaglio() : apriDettaglio(n)),
+    });
+    lavagna.aggiorna(RAW.lavagna, NODI.filter(n => scopertiIds.has(n.id)));
+
+    // ----------------------------------------------------------------
     // POLLING: aggiornamento automatico ogni 2 secondi
     // ----------------------------------------------------------------
     let pollingAttivo = true;
@@ -891,6 +904,10 @@
                 cambiato = true;
                 aggiornaSfondoScena(nuovaScena);
             }
+
+            // La lavagna si aggiorna a ogni giro: le sue modifiche non
+            // passano per scoperti/scena, che decidono il `return` più sotto.
+            lavagna.aggiorna(data.lavagna, NODI.filter(n => nuoviScopertiIds.has(n.id)));
 
             // Aggiorna stato sipario indipendentemente dal resto
             const siparioOverlay = document.getElementById("siparioOverlay");

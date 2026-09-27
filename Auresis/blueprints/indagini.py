@@ -1,9 +1,10 @@
 import json
+import math
 import re
 from datetime import datetime
 
 import db
-from auth import richiedi_master, vista_ristretta
+from auth import richiedi_master, utente_e_master, vista_ristretta
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for, \
     Response
 
@@ -189,6 +190,75 @@ def _scene_gifs_display(indagine_id):
     return out
 
 
+LAVAGNA_MAX_FILI = 500
+
+
+def _coordinata(v):
+    """Frazione 0..1 della bacheca; None se non è un numero finito."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+        return None
+    return min(1.0, max(0.0, float(v)))
+
+
+def _normalizza_lavagna(raw, ammessi):
+    """Riduce lo stato della bacheca ai soli indizi in `ammessi` (gli scoperti
+    della cronologia) e scarta tutto ciò che non ha la forma attesa. Si usa sia
+    in scrittura (dati dal client) sia in lettura (la player view è pubblica)."""
+    raw = raw if isinstance(raw, dict) else {}
+
+    posizioni = {}
+    pos_raw = raw.get("posizioni")
+    if isinstance(pos_raw, dict):
+        for k, v in pos_raw.items():
+            try:
+                nid = int(k)
+            except (TypeError, ValueError):
+                continue
+            if nid not in ammessi or not isinstance(v, (list, tuple)) or len(v) != 2:
+                continue
+            x, y = _coordinata(v[0]), _coordinata(v[1])
+            if x is not None and y is not None:
+                posizioni[str(nid)] = [round(x, 4), round(y, 4)]
+
+    rimossi = []
+    rim_raw = raw.get("rimossi")
+    if isinstance(rim_raw, list):
+        for v in rim_raw:
+            if isinstance(v, int) and not isinstance(v, bool) and v in ammessi and v not in rimossi:
+                rimossi.append(v)
+
+    fili, visti = [], set()
+    fili_raw = raw.get("fili")
+    if isinstance(fili_raw, list):
+        for f in fili_raw:
+            if not isinstance(f, (list, tuple)) or len(f) != 2:
+                continue
+            a, b = f
+            if not all(isinstance(v, int) and not isinstance(v, bool) for v in (a, b)):
+                continue
+            chiave = (min(a, b), max(a, b))
+            if a == b or a not in ammessi or b not in ammessi or chiave in visti:
+                continue
+            visti.add(chiave)
+            fili.append(list(chiave))
+            if len(fili) >= LAVAGNA_MAX_FILI:
+                break
+
+    return {"posizioni": posizioni, "rimossi": rimossi, "fili": fili}
+
+
+def _lavagna_player(indagine_id, cronologia_attiva, scena_corrente, scoperti_ids):
+    """Stato della lavagna per la player view. Dice solo se la scena CORRENTE
+    è una lavagna: l'elenco delle scene marcate anticiperebbe il copione."""
+    attiva = db.scena_e_lavagna(indagine_id, scena_corrente)
+    out = {"attiva": attiva, "versione": 0, "cronologia": None}
+    if attiva and cronologia_attiva:
+        out["cronologia"] = cronologia_attiva["id"]
+        out["versione"] = cronologia_attiva.get("lavagna_versione") or 0
+        out.update(_normalizza_lavagna(db.get_lavagna(cronologia_attiva), set(scoperti_ids)))
+    return out
+
+
 @bp.route("/")
 def lista_indagini():
     indagini = db.get_all_indagini(solo_visibili=vista_ristretta())
@@ -246,11 +316,14 @@ def indagini_editor(indagine_id):
     collegamenti = db.get_collegamenti(indagine_id)
     scene_gifs = _scene_gifs_dirette(indagine_id)
     scene_ereditate = _scene_gifs_ereditate(indagine_id)
-    scene_location = {n: info["location_id"] for n, info in db.get_scene_gifs(indagine_id).items()}
+    info_scene = db.get_scene_gifs(indagine_id)
+    scene_location = {n: info["location_id"] for n, info in info_scene.items()}
+    scene_lavagna = {n for n, info in info_scene.items() if info["lavagna"]}
     # Anche le scene senza indizi (i buchi nella numerazione) vanno mostrate:
     # il copione può passarci con @scena e hanno comunque bisogno di un luogo.
+    # Più una scena oltre l'ultima: di solito è lì che va la lavagna di fine sessione.
     scene_note = {n["numero_nodo"] // 10 for n in nodi} | set(scene_location)
-    scene_numeri = sorted(set(range(1, max(scene_note) + 1)) | scene_note) if scene_note else []
+    scene_numeri = sorted(set(range(1, max(scene_note) + 2)) | scene_note) if scene_note else [1]
     graph_data = _json_per_script({
         "nodi": nodi,
         "collegamenti": collegamenti,
@@ -267,6 +340,7 @@ def indagini_editor(indagine_id):
         scene_ereditate=scene_ereditate,
         scene_location=scene_location,
         punti_extra=db.get_punti_extra(indagine_id),
+        scene_lavagna=scene_lavagna,
         locations=db.get_all_locations(),
     )
 
@@ -278,6 +352,8 @@ def indagini_salva_scena_gif(indagine_id, numero_scena):
     Le immagini salvate in passato sulla scena restano (e hanno la precedenza)
     finché non vengono rimosse da qui."""
     db.set_scena_location(indagine_id, numero_scena, request.form.get("location_id", type=int))
+    # Checkbox: se non è spuntata il browser non manda nulla.
+    db.set_scena_lavagna(indagine_id, numero_scena, request.form.get("lavagna") == "1")
     if request.form.get("rimuovi_immagine") == "1":
         db.upsert_scena_gif(indagine_id, numero_scena, None)
     return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
@@ -576,11 +652,13 @@ def indagini_player(indagine_id):
         "sipario_aperto": cronologia_attiva.get("sipario_aperto", False) if cronologia_attiva else False,
         "scene_gifs": scene_gifs_str,
         "punti_interesse": punti_interesse,
+        "lavagna": _lavagna_player(indagine_id, cronologia_attiva, scena_corrente_val, scoperti_ids),
     })
     return render_template(
         "indagini_player.html",
         indagine=indagine,
         graph_data=graph_data,
+        puo_modificare_lavagna=utente_e_master(),
     )
 
 
@@ -601,6 +679,7 @@ def indagini_stato_player(indagine_id):
             "sipario_aperto": False,
             "nodi": [],
             "punti_interesse": _punti_interesse_indagine(indagine_id, nodi, {}, None, prima_scena),
+            "lavagna": _lavagna_player(indagine_id, None, prima_scena, []),
         })
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"])
     scoperti_ids = [nodo_id for nodo_id, stato in stati_sblocco.items() if stato.get("scoperto")]
@@ -620,6 +699,7 @@ def indagini_stato_player(indagine_id):
         "scene_gifs": scene_gifs_str,
         "punti_interesse": _punti_interesse_indagine(
             indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val),
+        "lavagna": _lavagna_player(indagine_id, cronologia_attiva, scena_corrente_val, scoperti_ids),
     })
 
 
@@ -676,6 +756,24 @@ def indagini_lista_esamina(indagine_id):
         "punti_interesse": _punti_interesse_indagine(
             indagine_id, nodi, stati_sblocco, cronologia, scena_corrente, per_master=True),
     })
+
+
+@bp.route("/<int:indagine_id>/lavagna", methods=["POST"])
+@richiedi_master
+def indagini_salva_lavagna(indagine_id):
+    """Salva la disposizione della lavagna (posizioni, indizi tolti, fili).
+    Il client manda lo stato intero; qui resta solo ciò che riguarda indizi
+    scoperti nella cronologia attiva."""
+    dati = request.get_json(silent=True)
+    if not isinstance(dati, dict):
+        return jsonify({"error": "JSON non valido"}), 400
+    cronologia = db.get_cronologia_attiva(indagine_id)
+    if not cronologia:
+        return jsonify({"error": "nessuna cronologia attiva"}), 409
+    stati = db.get_stato_nodi_cronologia(cronologia["id"])
+    scoperti = {nid for nid, s in stati.items() if s.get("scoperto")}
+    versione = db.salva_lavagna(cronologia["id"], _normalizza_lavagna(dati, scoperti))
+    return jsonify({"versione": versione})
 
 
 @bp.route("/<int:indagine_id>/sipario", methods=["POST"])
