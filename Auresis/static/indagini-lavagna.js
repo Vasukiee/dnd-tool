@@ -149,14 +149,15 @@
         const corpo = document.createElement("div");
         corpo.className = "lavagna-carta__corpo";
 
-        const conFoto = !!n.immagine_url;
+        const src = urlImmagine(n);
+        const conFoto = src !== null;
         carta.classList.toggle("lavagna-carta--foto", conFoto);
         carta.classList.toggle("lavagna-carta--nota", !conFoto);
         carta.classList.toggle("lavagna-carta--rivelazione", n.tipo_speciale === "rivelazione");
 
         if (conFoto) {
             const img = document.createElement("img");
-            img.src = n.immagine_url;
+            img.src = src;
             img.alt = n.titolo || "";
             img.draggable = false;
             img.loading = "lazy";
@@ -180,6 +181,15 @@
         }
         carta.insertBefore(corpo, carta.firstChild.nextSibling);
         carta.dataset.firma = firmaNodo(n);
+    }
+
+    // Solo immagini http(s) o percorsi dello stesso sito: un URL con un altro
+    // schema (javascript:, data:…) non finisce mai in un attributo src.
+    const URL_IMMAGINE_SICURO = /^(https?:\/\/|\/(?!\/))/i;
+
+    function urlImmagine(n) {
+        const u = typeof n.immagine_url === "string" ? n.immagine_url.trim() : "";
+        return URL_IMMAGINE_SICURO.test(u) ? u : null;
     }
 
     function firmaNodo(n) {
