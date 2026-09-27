@@ -189,7 +189,14 @@
 
     function urlImmagine(n) {
         const u = typeof n.immagine_url === "string" ? n.immagine_url.trim() : "";
-        return URL_IMMAGINE_SICURO.test(u) ? u : null;
+        if (!URL_IMMAGINE_SICURO.test(u)) return null;
+        // decode+encode: gli URL validi restano uguali (anche con %xx già
+        // presenti), i caratteri come < > " escono sempre codificati.
+        try {
+            return encodeURI(decodeURI(u));
+        } catch (_) {
+            return null;  // sequenze %xx malformate
+        }
     }
 
     function firmaNodo(n) {
