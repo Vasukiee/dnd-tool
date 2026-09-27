@@ -75,29 +75,80 @@ def get_connection():
         return _get_pg_connection()
     else:
         db_path = os.path.join(os.path.dirname(__file__), "campagna.db")
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(db_path, factory=_ConnessioneSQLite,
+                               detect_types=sqlite3.PARSE_DECLTYPES)
         conn.row_factory = sqlite3.Row
-        
-        original_cursor = conn.cursor
-        def patched_cursor(*args, **kwargs):
-            # Ignoriamo cursor_factory=... passato da psycopg2
-            cur = original_cursor()
-            original_execute = cur.execute
-            
-            def execute_wrapper(query, params=None):
-                query = query.replace("%s", "?")
-                query = query.replace(" ILIKE ", " LIKE ")
-                query = query.replace(" NOW()", " CURRENT_TIMESTAMP")
-                query = query.replace(" TRUE", " 1").replace(" FALSE", " 0")
-                if params is not None:
-                    return original_execute(query, params)
-                return original_execute(query)
-                
-            cur.execute = execute_wrapper
-            return cur
-            
-        conn.cursor = patched_cursor
+        conn.execute("PRAGMA foreign_keys = ON")
         return conn
+
+
+def _converti_timestamp_sqlite(valore):
+    testo = valore.decode()
+    try:
+        return datetime.datetime.fromisoformat(testo)
+    except ValueError:
+        return testo
+
+
+# Le colonne dichiarate BOOLEAN / TIMESTAMP tornano bool e datetime, come con
+# psycopg2: il codice (e il JSON verso il browser) si aspetta questi tipi.
+sqlite3.register_converter("BOOLEAN", lambda v: v not in (b"0", b"", b"false", b"False"))
+sqlite3.register_converter("TIMESTAMP", _converti_timestamp_sqlite)
+
+
+def _sql_epoch(colonna):
+    """Espressione SQL: secondi epoch di un timestamp (0 se NULL), per i cache-buster."""
+    if is_sqlite():
+        return f"COALESCE(CAST((julianday({colonna}) - 2440587.5) * 86400 AS INTEGER), 0)"
+    return f"COALESCE(EXTRACT(EPOCH FROM {colonna})::bigint, 0)"
+
+
+def _binario(data):
+    """Byte da salvare in una colonna BYTEA / BLOB."""
+    if data is None:
+        return None
+    return bytes(data) if is_sqlite() else psycopg2.Binary(data)
+
+
+def _adatta_query_sqlite(query):
+    """Traduce i pochi costrutti Postgres usati dalle query dell'app."""
+    query = query.replace("%s", "?")
+    query = query.replace(" ILIKE ", " LIKE ")
+    query = query.replace(" NOW()", " CURRENT_TIMESTAMP")
+    query = query.replace(" TRUE", " 1").replace(" FALSE", " 0")
+    query = query.replace(" FOR UPDATE", "")
+    return query
+
+
+class _CursoreSQLite(sqlite3.Cursor):
+    """Cursore SQLite che accetta le query scritte per psycopg2."""
+
+    def execute(self, query, params=None):
+        query = _adatta_query_sqlite(query)
+        try:
+            return super().execute(query) if params is None else super().execute(query, params)
+        except sqlite3.Error:
+            # Una transazione lasciata aperta bloccherebbe l'intero file per
+            # le richieste successive ("database is locked"): la annulliamo subito.
+            self.connection.rollback()
+            raise
+
+    def executemany(self, query, seq_params):
+        try:
+            return super().executemany(_adatta_query_sqlite(query), seq_params)
+        except sqlite3.Error:
+            self.connection.rollback()
+            raise
+
+
+class _ConnessioneSQLite(sqlite3.Connection):
+    """Da Python 3.11 non si può più sostituire conn.cursor a runtime:
+    la traduzione delle query passa da una sottoclasse. Ignora
+    cursor_factory=RealDictCursor (le righe sono già sqlite3.Row)."""
+
+    def cursor(self, *args, **kwargs):
+        return super().cursor(_CursoreSQLite)
+
 
 _RE_IDENTIFICATORE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -171,7 +222,11 @@ def init_db():
     with open(schema_path, "r", encoding="utf-8") as f:
         schema = f.read()
     if is_sqlite():
+        # Prima le colonne delle tabelle già esistenti (gli indici dello schema
+        # possono riferirsi a colonne nuove), poi tabelle e indici mancanti.
+        _allinea_colonne_sqlite(conn, schema)
         cur.executescript(schema)
+        _allinea_colonne_sqlite(conn, schema)
     else:
         cur.execute(schema)
     conn.commit()
@@ -179,6 +234,36 @@ def init_db():
     conn.close()
     assicura_indici_performance()
     print(f"Database inizializzato ({'SQLite' if is_sqlite() else 'Postgres'}).")
+
+
+def _allinea_colonne_sqlite(conn, schema):
+    """Aggiunge a un database SQLite esistente le colonne che schema.sql prevede
+    ma il file non ha: CREATE TABLE IF NOT EXISTS non tocca le tabelle già create.
+    schema.sql è l'unico riferimento, letto da un database in memoria."""
+    riferimento = sqlite3.connect(":memory:")
+    riferimento.executescript(schema)
+    tabelle = riferimento.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+    ).fetchall()
+    for (tabella,) in tabelle:
+        attuali = {r[1] for r in conn.execute(f"PRAGMA table_info({tabella})")}
+        if not attuali:
+            continue  # tabella ancora da creare: ci pensa lo schema
+        for _, nome, tipo, notnull, default, pk in riferimento.execute(f"PRAGMA table_info({tabella})"):
+            if nome in attuali or pk:
+                continue
+            colonna = f"{nome} {tipo}".strip()
+            try:
+                if default is None:
+                    conn.execute(f"ALTER TABLE {tabella} ADD COLUMN {colonna}")
+                else:
+                    conn.execute(f"ALTER TABLE {tabella} ADD COLUMN {colonna} DEFAULT {default}"
+                                 + (" NOT NULL" if notnull else ""))
+            except sqlite3.OperationalError:
+                # default non costante (es. CURRENT_TIMESTAMP): ADD COLUMN non lo accetta
+                conn.execute(f"ALTER TABLE {tabella} ADD COLUMN {colonna}")
+    conn.commit()
+    riferimento.close()
 
 # --- IMPOSTAZIONI GLOBALI ---
 def get_impostazione(chiave):
@@ -287,9 +372,10 @@ def toggle_sipario_globale():
     nuovo_stato = not rows[0]["sipario_aperto"]
     ids = [r["id"] for r in rows]
     
+    segnaposto = ", ".join(["%s"] * len(ids))
     cur.execute(
-        "UPDATE cronologie_indagine SET sipario_aperto = %s WHERE id = ANY(%s)",
-        (nuovo_stato, ids)
+        f"UPDATE cronologie_indagine SET sipario_aperto = %s WHERE id IN ({segnaposto})",
+        (nuovo_stato, *ids)
     )
     conn.commit()
     cur.close()
@@ -605,11 +691,14 @@ def get_all_tracce_audio(tag=None):
     """Tutte le tracce con la lista dei loro tag, opzionalmente filtrate per un tag."""
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    # SQLite non ha array: i nomi arrivano uniti da un separatore e si dividono sotto
+    aggrega_tag = ("GROUP_CONCAT(ta.nome, char(31))" if is_sqlite()
+                   else "ARRAY_AGG(ta.nome ORDER BY ta.nome) FILTER (WHERE ta.nome IS NOT NULL)")
     if tag:
         cur.execute(
-            """
+            f"""
             SELECT t.*,
-                   ARRAY_AGG(ta.nome ORDER BY ta.nome) FILTER (WHERE ta.nome IS NOT NULL) AS tags
+                   {aggrega_tag} AS tags
             FROM tracce_audio t
             LEFT JOIN traccia_audio_tag tat ON tat.traccia_id = t.id
             LEFT JOIN tag_audio ta ON ta.id = tat.tag_id
@@ -625,9 +714,9 @@ def get_all_tracce_audio(tag=None):
         )
     else:
         cur.execute(
-            """
+            f"""
             SELECT t.*,
-                   ARRAY_AGG(ta.nome ORDER BY ta.nome) FILTER (WHERE ta.nome IS NOT NULL) AS tags
+                   {aggrega_tag} AS tags
             FROM tracce_audio t
             LEFT JOIN traccia_audio_tag tat ON tat.traccia_id = t.id
             LEFT JOIN tag_audio ta ON ta.id = tat.tag_id
@@ -642,6 +731,8 @@ def get_all_tracce_audio(tag=None):
     for r in result:
         if r.get('tags') is None:
             r['tags'] = []
+        elif isinstance(r['tags'], str):
+            r['tags'] = sorted(r['tags'].split(chr(31)))
     return result
 
 
@@ -2038,9 +2129,9 @@ def get_scene_gifs(indagine_id):
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
-        """SELECT numero_scena, gif_url, location_id,
+        f"""SELECT numero_scena, gif_url, location_id,
                   (gif_data IS NOT NULL) AS has_file,
-                  COALESCE(EXTRACT(EPOCH FROM gif_data_aggiornata)::bigint, 0) AS versione
+                  {_sql_epoch("gif_data_aggiornata")} AS versione
            FROM scene_indagine WHERE indagine_id = %s""",
         (indagine_id,),
     )
@@ -2211,7 +2302,7 @@ def get_sfondi_ereditati(indagine_id):
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
-        """WITH RECURSIVE catena AS (
+        f"""WITH RECURSIVE catena AS (
                SELECT s.numero_scena, l.id AS loc_id, l.location_padre_id, 0 AS prof
                FROM scene_indagine s JOIN locations l ON l.id = s.location_id
                WHERE s.indagine_id = %s
@@ -2219,16 +2310,19 @@ def get_sfondi_ereditati(indagine_id):
                SELECT c.numero_scena, p.id, p.location_padre_id, c.prof + 1
                FROM catena c JOIN locations p ON p.id = c.location_padre_id
                WHERE c.prof < 10
+           ),
+           candidati AS (
+               SELECT c.numero_scena, c.loc_id AS location_id, l.nome AS location_nome,
+                      sl.url, (sl.data IS NOT NULL) AS has_file,
+                      {_sql_epoch("sl.aggiornato")} AS versione,
+                      ROW_NUMBER() OVER (PARTITION BY c.numero_scena ORDER BY c.prof) AS rn
+               FROM catena c
+               JOIN sfondi_location sl ON sl.location_id = c.loc_id
+               JOIN locations l ON l.id = c.loc_id
+               WHERE sl.data IS NOT NULL OR sl.url IS NOT NULL
            )
-           SELECT DISTINCT ON (c.numero_scena)
-                  c.numero_scena, c.loc_id AS location_id, l.nome AS location_nome,
-                  sl.url, (sl.data IS NOT NULL) AS has_file,
-                  COALESCE(EXTRACT(EPOCH FROM sl.aggiornato)::bigint, 0) AS versione
-           FROM catena c
-           JOIN sfondi_location sl ON sl.location_id = c.loc_id
-           JOIN locations l ON l.id = c.loc_id
-           WHERE sl.data IS NOT NULL OR sl.url IS NOT NULL
-           ORDER BY c.numero_scena, c.prof""",
+           SELECT numero_scena, location_id, location_nome, url, has_file, versione
+           FROM candidati WHERE rn = 1 ORDER BY numero_scena""",
         (indagine_id,),
     )
     rows = cur.fetchall()
@@ -2247,7 +2341,7 @@ def save_sfondo_location(location_id, url=None, data=None, mime=None):
            ON CONFLICT (location_id)
            DO UPDATE SET url = EXCLUDED.url, data = EXCLUDED.data,
                          mime = EXCLUDED.mime, aggiornato = NOW()""",
-        (location_id, url, psycopg2.Binary(data) if data is not None else None, mime),
+        (location_id, url, _binario(data), mime),
     )
     conn.commit()
     cur.close()
