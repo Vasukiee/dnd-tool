@@ -658,7 +658,7 @@ def indagini_player(indagine_id):
         "indagini_player.html",
         indagine=indagine,
         graph_data=graph_data,
-        puo_modificare_lavagna=utente_e_master(),
+        puo_gestire_lavagna=utente_e_master(),
     )
 
 
@@ -758,22 +758,85 @@ def indagini_lista_esamina(indagine_id):
     })
 
 
-@bp.route("/<int:indagine_id>/lavagna", methods=["POST"])
-@richiedi_master
-def indagini_salva_lavagna(indagine_id):
-    """Salva la disposizione della lavagna (posizioni, indizi tolti, fili).
-    Il client manda lo stato intero; qui resta solo ciò che riguarda indizi
-    scoperti nella cronologia attiva."""
-    dati = request.get_json(silent=True)
-    if not isinstance(dati, dict):
-        return jsonify({"error": "JSON non valido"}), 400
+def _lavagna_corrente(indagine_id):
+    """(cronologia attiva, scena corrente, id scoperti) per le rotte della lavagna."""
     cronologia = db.get_cronologia_attiva(indagine_id)
-    if not cronologia:
+    nodi = db.get_nodi_indagine(indagine_id)
+    scena = _scena_corrente_effettiva(nodi, cronologia)
+    scoperti = []
+    if cronologia:
+        stati = db.get_stato_nodi_cronologia(cronologia["id"])
+        scoperti = [nid for nid, s in stati.items() if s.get("scoperto")]
+    return cronologia, scena, scoperti
+
+
+@bp.route("/<int:indagine_id>/lavagna")
+def indagini_lavagna(indagine_id):
+    """Stato della lavagna, per l'aggiornamento rapido mentre è aperta.
+    Pubblico come stato-player: contiene solo indizi già scoperti."""
+    cronologia, scena, scoperti = _lavagna_corrente(indagine_id)
+    return jsonify(_lavagna_player(indagine_id, cronologia, scena, scoperti))
+
+
+# Spostare le carte e tendere o tagliare i fili è il gioco della lavagna, e lo
+# fa anche la giocatrice; togliere o rimettere indizi resta del master.
+LAVAGNA_OP_GIOCATRICE = {"sposta", "collega", "taglia"}
+LAVAGNA_OP_MASTER = LAVAGNA_OP_GIOCATRICE | {"togli", "rimetti"}
+
+
+def _id_intero(v):
+    return v if isinstance(v, int) and not isinstance(v, bool) else None
+
+
+def _applica_op_lavagna(stato, dati, scoperti):
+    """Applica un'operazione allo stato corrente (già letto sotto lock).
+    `posizioni`, facoltativo su ogni operazione, fissa le carte ancora nella
+    griglia predefinita: il client la manda prima di cambiare la disposizione."""
+    stato = _normalizza_lavagna(stato, scoperti)
+    nuove = _normalizza_lavagna({"posizioni": dati.get("posizioni")}, scoperti)["posizioni"]
+    stato["posizioni"].update(nuove)
+
+    op = dati["op"]
+    if op in ("collega", "taglia"):
+        a, b = _id_intero(dati.get("a")), _id_intero(dati.get("b"))
+        if a is None or b is None or a == b or a not in scoperti or b not in scoperti:
+            return stato
+        filo = [min(a, b), max(a, b)]
+        if op == "collega" and filo not in stato["fili"] and len(stato["fili"]) < LAVAGNA_MAX_FILI:
+            stato["fili"].append(filo)
+        elif op == "taglia":
+            stato["fili"] = [f for f in stato["fili"] if f != filo]
+    elif op in ("togli", "rimetti"):
+        nid = _id_intero(dati.get("id"))
+        if nid is None or nid not in scoperti:
+            return stato
+        stato["posizioni"].pop(str(nid), None)
+        if op == "togli" and nid not in stato["rimossi"]:
+            stato["rimossi"].append(nid)
+        elif op == "rimetti":
+            stato["rimossi"] = [x for x in stato["rimossi"] if x != nid]
+    return stato
+
+
+@bp.route("/<int:indagine_id>/lavagna", methods=["POST"])
+def indagini_modifica_lavagna(indagine_id):
+    """Una modifica alla lavagna: {"op": ..., "posizioni"?: {...}, ...}.
+    Si modifica solo mentre la scena corrente è una lavagna, e solo con
+    indizi scoperti nella cronologia attiva."""
+    dati = request.get_json(silent=True)
+    if not isinstance(dati, dict) or dati.get("op") not in LAVAGNA_OP_MASTER:
+        return jsonify({"error": "operazione non valida"}), 400
+    if dati["op"] not in LAVAGNA_OP_GIOCATRICE and not utente_e_master():
+        return jsonify({"ok": False, "errore": "Autenticazione master richiesta"}), 403
+    cronologia, scena, scoperti = _lavagna_corrente(indagine_id)
+    if not cronologia or not db.scena_e_lavagna(indagine_id, scena):
+        return jsonify({"error": "la lavagna non è aperta"}), 409
+    ammessi = set(scoperti)
+    versione, stato = db.modifica_lavagna(
+        cronologia["id"], lambda s: _applica_op_lavagna(s, dati, ammessi))
+    if versione is None:
         return jsonify({"error": "nessuna cronologia attiva"}), 409
-    stati = db.get_stato_nodi_cronologia(cronologia["id"])
-    scoperti = {nid for nid, s in stati.items() if s.get("scoperto")}
-    versione = db.salva_lavagna(cronologia["id"], _normalizza_lavagna(dati, scoperti))
-    return jsonify({"versione": versione})
+    return jsonify({"attiva": True, "cronologia": cronologia["id"], "versione": versione, **stato})
 
 
 @bp.route("/<int:indagine_id>/sipario", methods=["POST"])

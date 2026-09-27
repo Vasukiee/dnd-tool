@@ -158,14 +158,16 @@
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
-    cursor: pointer;
+    cursor: grab;
     border-radius: 2px;
     filter: drop-shadow(0 6px 7px rgba(0, 0, 0, 0.45));
-    transition: scale 0.15s ease, rotate 0.2s ease, filter 0.15s ease;
+    /* left/top: le carte spostate dall'altro schermo scivolano al loro posto */
+    transition: scale 0.15s ease, rotate 0.2s ease, filter 0.15s ease,
+                left 0.45s cubic-bezier(0.3, 0.7, 0.3, 1), top 0.45s cubic-bezier(0.3, 0.7, 0.3, 1);
 }
-.lavagna.is-modificabile .lavagna-carta { cursor: grab; }
 .lavagna-carta.is-trascinata {
     cursor: grabbing;
+    transition: scale 0.15s ease, rotate 0.2s ease, filter 0.15s ease;
     scale: 1.06;
     rotate: 0deg;
     filter: drop-shadow(0 18px 18px rgba(0, 0, 0, 0.5));
@@ -262,15 +264,15 @@
     box-shadow: 1px 3px 3px rgba(0, 0, 0, 0.55);
     transition: transform 0.12s ease;
 }
-.lavagna.is-modificabile .lavagna-carta__spillo { cursor: crosshair; }
+.lavagna-carta__spillo { cursor: crosshair; }
 /* Area di presa più larga della capocchia: prenderla col mouse è facile */
-.lavagna.is-modificabile .lavagna-carta__spillo::before {
+.lavagna-carta__spillo::before {
     content: "";
     position: absolute;
     inset: -9px;
     border-radius: 50%;
 }
-.lavagna.is-modificabile .lavagna-carta__spillo:hover { transform: scale(1.3); }
+.lavagna-carta__spillo:hover { transform: scale(1.3); }
 
 .lavagna-carta__togli {
     position: absolute;

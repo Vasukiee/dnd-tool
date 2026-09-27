@@ -3,9 +3,11 @@
  *
  * Quando la scena corrente è marcata "lavagna" (editor → Scene), al centro
  * della player view si srotola una bacheca in cuoio con gli indizi scoperti.
- * Il master li sposta, li collega con un filo rosso (trascinando dallo
- * spillo di una carta a un'altra) o li mette da parte; chi guarda senza
- * sessione master vede la stessa bacheca aggiornarsi col polling.
+ * Master e giocatrice li spostano e li collegano con un filo rosso
+ * (trascinando dallo spillo di una carta a un'altra); solo il master può
+ * metterli da parte o rimetterli. Ogni modifica è un'operazione singola che
+ * il server applica sullo stato corrente, così due persone possono lavorare
+ * insieme; mentre la lavagna è aperta lo stato si rilegge ogni secondo.
  *
  * Stato salvato per cronologia: {posizioni: {id: [x, y]}, rimossi: [id], fili: [[a, b]]}
  * con x, y frazioni 0..1 del centro della carta. Solo le carte spostate a mano
@@ -20,6 +22,7 @@
     const PASSO_CARTE = 70;
     const SOGLIA_TRASCINAMENTO = 4;
     const COLONNE = 6;
+    const POLL_LAVAGNA_MS = 1000;
 
     let cfg = null;
     let el = {};
@@ -34,7 +37,10 @@
 
     let trascinamento = null;       // {id, carta, pointerId, dx, dy, mosso}
     let collegamento = null;        // {da, pointerId, linea}
-    let salvataggio = { timer: null, inVolo: false, sporco: false, bloccato: false };
+    const coda = [];                // operazioni in attesa di invio
+    let opInVolo = false;
+    let pollTimer = null;
+    let avvisoTimer = null;
 
     // ------------------------------------------------------------------
     // Utility
@@ -118,10 +124,10 @@
 
         riempiCarta(carta, n);
 
-        if (cfg.modificabile) {
-            spillo.title = "Trascina su un altro indizio per collegarli";
-            spillo.addEventListener("pointerdown", e => iniziaCollegamento(e, n.id));
+        spillo.title = "Trascina su un altro indizio per collegarli";
+        spillo.addEventListener("pointerdown", e => iniziaCollegamento(e, n.id));
 
+        if (cfg.gestione) {
             const togli = document.createElement("button");
             togli.type = "button";
             togli.className = "lavagna-carta__togli";
@@ -271,7 +277,7 @@
             filo.setAttribute("pathLength", "1");
             g.appendChild(filo);
 
-            if (cfg.modificabile) {
+            {
                 const presa = document.createElementNS(SVG_NS, "path");
                 presa.setAttribute("d", d);
                 presa.setAttribute("class", "lavagna-filo__presa");
@@ -309,101 +315,156 @@
     }
 
     // ------------------------------------------------------------------
-    // Modifiche (solo master) + salvataggio
+    // Modifiche: applicate subito in locale, poi mandate al server una alla
+    // volta. Quando la coda si svuota si adotta lo stato del server, che
+    // contiene anche le modifiche fatte nel frattempo dall'altro schermo.
     // ------------------------------------------------------------------
-    function programmaSalvataggio(ms) {
-        clearTimeout(salvataggio.timer);
-        salvataggio.timer = setTimeout(() => {
-            salvataggio.timer = null;
-            salva();
-        }, ms);
+    function mostraAvviso(testo) {
+        el.avviso.textContent = testo;
+        el.avviso.hidden = false;
+        clearTimeout(avvisoTimer);
+        avvisoTimer = setTimeout(() => { el.avviso.hidden = true; }, 4000);
     }
 
-    function modificato() {
-        salvataggio.sporco = true;
-        programmaSalvataggio(400);
+    function invia(op) {
+        coda.push(op);
+        prossimaOp();
     }
 
-    async function salva() {
-        if (salvataggio.inVolo || salvataggio.bloccato) return;
-        if (!salvataggio.sporco) return;
-        salvataggio.inVolo = true;
-        salvataggio.sporco = false;
+    async function prossimaOp() {
+        if (opInVolo || !coda.length) return;
+        opInVolo = true;
+        const op = coda.shift();
         try {
-            const resp = await fetch(cfg.endpointSalva, {
+            const resp = await fetch(cfg.endpoint, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(stato),
+                body: JSON.stringify(op),
             });
             if (resp.status === 403) {
-                salvataggio.bloccato = true;
-                el.avviso.textContent = "Sessione master scaduta: le modifiche non vengono salvate";
-                el.avviso.hidden = false;
-                return;
+                mostraAvviso("Serve la sessione master per questa modifica");
+                versione = -1;
+            } else if (resp.status === 409) {
+                versione = -1;  // lavagna chiusa nel frattempo: vale lo stato del server
+            } else if (!resp.ok) {
+                throw new Error(`HTTP ${resp.status}`);
+            } else {
+                const data = await resp.json();
+                if (!coda.length && !trascinamento && !collegamento) {
+                    adotta(data);
+                    render(false);
+                }
             }
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const data = await resp.json();
-            if (typeof data.versione === "number") versione = Math.max(versione, data.versione);
-            el.avviso.hidden = true;
         } catch (e) {
-            console.warn("Lavagna non salvata:", e);
-            salvataggio.sporco = true;
-            el.avviso.textContent = "Lavagna non salvata, riprovo…";
-            el.avviso.hidden = false;
-            programmaSalvataggio(3000);
+            console.warn("Modifica alla lavagna non salvata:", e);
+            mostraAvviso("Modifica non salvata");
+            versione = -1;  // al prossimo giro si riallinea al server
         } finally {
-            salvataggio.inVolo = false;
-            if (salvataggio.sporco && !salvataggio.bloccato && !salvataggio.timer) salva();
+            opInVolo = false;
+            prossimaOp();
         }
     }
 
-    function inAttesaDiSalvataggio() {
-        return salvataggio.sporco || salvataggio.inVolo;
+    function inattiva() {
+        return !trascinamento && !collegamento && !opInVolo && !coda.length;
     }
+
+    function arrotonda(p) { return p.map(v => Math.round(v * 10000) / 10000); }
 
     // La griglia predefinita dipende da quante carte ci sono: prima di ogni
     // modifica si fissano le posizioni correnti, così togliere o rimettere
-    // una carta non fa saltare tutte le altre.
+    // una carta non fa saltare tutte le altre. Ritorna quelle appena fissate,
+    // da mandare al server insieme all'operazione.
     function fissaPosizioni() {
-        const predef = layoutPredefinito(visibili());
-        Object.entries(predef).forEach(([id, p]) => {
-            stato.posizioni[id] = p.map(v => Math.round(v * 10000) / 10000);
+        const fisse = {};
+        Object.entries(layoutPredefinito(visibili())).forEach(([id, p]) => {
+            fisse[id] = stato.posizioni[id] = arrotonda(p);
         });
+        return fisse;
     }
 
     function togliCarta(id) {
-        fissaPosizioni();
+        const posizioni = fissaPosizioni();
         if (!stato.rimossi.includes(id)) stato.rimossi.push(id);
         delete stato.posizioni[String(id)];
         render(false);
-        modificato();
+        invia({ op: "togli", id, posizioni });
     }
 
     function rimettiCarta(id) {
-        fissaPosizioni();
+        const posizioni = fissaPosizioni();
         stato.rimossi = stato.rimossi.filter(x => x !== id);
         delete stato.posizioni[String(id)];
         render(false);
-        modificato();
+        invia({ op: "rimetti", id, posizioni });
     }
 
     function tagliaFilo(a, b) {
-        fissaPosizioni();
+        const posizioni = fissaPosizioni();
         const k = chiaveFilo(a, b);
         stato.fili = stato.fili.filter(f => chiaveFilo(f[0], f[1]) !== k);
         disegnaFili();
-        modificato();
+        invia({ op: "taglia", a, b, posizioni });
     }
 
     function aggiungiFilo(a, b) {
         if (a === b) return;
         const k = chiaveFilo(a, b);
         if (stato.fili.some(f => chiaveFilo(f[0], f[1]) === k)) return;
-        fissaPosizioni();
+        const posizioni = fissaPosizioni();
         stato.fili.push([Math.min(a, b), Math.max(a, b)]);
         filiDaAnimare.add(k);
         disegnaFili();
-        modificato();
+        invia({ op: "collega", a, b, posizioni });
+    }
+
+    // Stato arrivato dal server: i fili nuovi si tendono con l'animazione,
+    // le carte spostate altrove scivolano al loro posto (transizione CSS).
+    function adotta(lav) {
+        const prima = new Set(stato.fili.map(f => chiaveFilo(f[0], f[1])));
+        stato = statoPulito(lav);
+        versione = lav.versione || 0;
+        stato.fili.forEach(f => {
+            const k = chiaveFilo(f[0], f[1]);
+            if (!prima.has(k)) filiDaAnimare.add(k);
+        });
+    }
+
+    // Stato letto dal polling: si adotta solo se più nuovo di quello locale e
+    // se qui non c'è niente in corso. Ritorna true se va ridisegnato.
+    function applicaRemoto(lav) {
+        let cambiato = false;
+        // Cronologia cambiata (nuova run o un'altra riattivata): le versioni
+        // non sono confrontabili, si riparte da quella del server.
+        if ((lav.cronologia ?? null) !== cronologia) {
+            cronologia = lav.cronologia ?? null;
+            versione = -1;
+            stato = { posizioni: {}, rimossi: [], fili: [] };
+            coda.length = 0;
+            cambiato = true;
+        }
+        if ((lav.versione || 0) > versione && inattiva()) {
+            adotta(lav);
+            cambiato = true;
+        }
+        return cambiato;
+    }
+
+    let pollInCorso = false;
+    async function pollLavagna() {
+        if (pollInCorso || fase === "chiusa" || fase === "chiusura") return;
+        pollInCorso = true;
+        try {
+            const resp = await fetch(cfg.endpoint);
+            if (!resp.ok) return;
+            const lav = await resp.json();
+            // La chiusura la decide il polling principale, insieme al cambio scena
+            if (lav.attiva && fase !== "chiusa" && applicaRemoto(lav)) render(false);
+        } catch (e) {
+            console.warn("Polling lavagna:", e);
+        } finally {
+            pollInCorso = false;
+        }
     }
 
     // --- Trascinamento carta (o click → dettaglio) ---
@@ -429,7 +490,6 @@
         if (!t || e.pointerId !== t.pointerId) return;
         if (!t.mosso) {
             if (Math.hypot(e.clientX - t.x0, e.clientY - t.y0) < SOGLIA_TRASCINAMENTO) return;
-            if (!cfg.modificabile) return;
             t.mosso = true;
             t.carta.classList.add("is-trascinata");
             t.carta.style.zIndex = String(++zTop);
@@ -453,9 +513,9 @@
         try { t.carta.releasePointerCapture(t.pointerId); } catch (_) { /* già rilasciato */ }
         t.carta.classList.remove("is-trascinata");
         if (t.mosso && t.pos) {
-            fissaPosizioni();
-            stato.posizioni[String(t.id)] = t.pos.map(v => Math.round(v * 10000) / 10000);
-            modificato();
+            const posizioni = fissaPosizioni();
+            posizioni[String(t.id)] = stato.posizioni[String(t.id)] = arrotonda(t.pos);
+            invia({ op: "sposta", posizioni });
         } else if (!t.mosso && e && e.type === "pointerup") {
             const n = indizi.find(x => x.id === t.id);
             if (n && cfg.onApriDettaglio) cfg.onApriDettaglio(n);
@@ -577,24 +637,7 @@
             nuoviIndizi.some((n, i) => n.id !== indizi[i].id || firmaNodo(n) !== firmaNodo(indizi[i]));
         indizi = nuoviIndizi;
 
-        // Cronologia cambiata (nuova run o un'altra riattivata): le versioni
-        // non sono confrontabili, si riparte da quella del server.
-        if ((lavagna.cronologia ?? null) !== cronologia) {
-            cronologia = lavagna.cronologia ?? null;
-            versione = -1;
-            stato = { posizioni: {}, rimossi: [], fili: [] };
-            clearTimeout(salvataggio.timer);
-            salvataggio.timer = null;
-            salvataggio.sporco = false;
-            cambiato = true;
-        }
-
-        const v = lavagna.versione || 0;
-        if (v > versione && !trascinamento && !collegamento && !inAttesaDiSalvataggio()) {
-            stato = statoPulito(lavagna);
-            versione = v;
-            cambiato = true;
-        }
+        if (applicaRemoto(lavagna)) cambiato = true;
 
         const primaApertura = apri();
         if (cambiato || primaApertura) render(primaApertura);
@@ -618,11 +661,11 @@
                 el.vassoio.classList.toggle("is-aperto");
             });
         }
-        el.radice.classList.toggle("is-modificabile", !!cfg.modificabile);
         if (window.ResizeObserver) new ResizeObserver(() => disegnaFili()).observe(el.telo);
         window.addEventListener("keydown", e => {
             if (e.key === "Escape") annullaInterazioni();
         });
+        pollTimer = setInterval(pollLavagna, POLL_LAVAGNA_MS);
     }
 
     window.IndaginiLavagna = { init, aggiorna };
