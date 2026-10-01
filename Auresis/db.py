@@ -30,6 +30,7 @@ _indici_performance_assicurati = False
 _quest_locations_assicurata = False
 _punto_interesse_assicurato = False
 _lavagna_assicurata = False
+_orologio_assicurato = False
 
 
 class _ConnessioneDalPool:
@@ -2402,6 +2403,117 @@ def set_lavagna_aperta(cronologia_id, aperta):
     cur.close()
     conn.close()
 
+
+
+def assicura_colonne_orologio(force=False):
+    """Aggiunge le colonne dell'orologio di scena sui database creati prima
+    della funzione (sono anche in schema_postgres.sql). Cacheato per processo."""
+    global _orologio_assicurato
+    if (_orologio_assicurato and not force) or is_sqlite():
+        return
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio BOOLEAN NOT NULL DEFAULT FALSE")
+    cur.execute("ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio_soglia INTEGER")
+    cur.execute("ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio_sirena BOOLEAN NOT NULL DEFAULT FALSE")
+    cur.execute("ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS orologio_offset TEXT")
+    conn.commit()
+    cur.close()
+    conn.close()
+    _orologio_assicurato = True
+
+
+def get_orologio_scena(indagine_id, numero_scena):
+    """(abilitato, soglia, sirena) dell'orologio di una sola scena."""
+    assicura_colonne_orologio()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT orologio, orologio_soglia, orologio_sirena FROM scene_indagine
+           WHERE indagine_id = %s AND numero_scena = %s""",
+        (indagine_id, numero_scena),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not row:
+        return False, None, False
+    return bool(row[0]), row[1], bool(row[2])
+
+
+def get_orologi_scene(indagine_id):
+    """{numero_scena: {"soglia", "sirena"}} delle scene con l'orologio, per l'editor."""
+    assicura_colonne_orologio()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT numero_scena, orologio_soglia, orologio_sirena FROM scene_indagine
+           WHERE indagine_id = %s AND orologio = TRUE""",
+        (indagine_id,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {r[0]: {"soglia": r[1], "sirena": bool(r[2])} for r in rows}
+
+
+def set_scena_orologio(indagine_id, numero_scena, abilitato, soglia, sirena):
+    assicura_colonne_orologio()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO scene_indagine (indagine_id, numero_scena, orologio, orologio_soglia, orologio_sirena)
+           VALUES (%s, %s, %s, %s, %s)
+           ON CONFLICT (indagine_id, numero_scena)
+           DO UPDATE SET orologio = EXCLUDED.orologio, orologio_soglia = EXCLUDED.orologio_soglia,
+                         orologio_sirena = EXCLUDED.orologio_sirena""",
+        (indagine_id, numero_scena, bool(abilitato), soglia, bool(sirena)),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_orologio_offset(cronologia, numero_scena):
+    """Correzione manuale del master sulle tacche di una scena (0 se assente)."""
+    raw = (cronologia or {}).get("orologio_offset")
+    try:
+        return int(json.loads(raw).get(str(numero_scena), 0)) if raw else 0
+    except (ValueError, TypeError, AttributeError):
+        return 0
+
+
+def modifica_orologio_offset(cronologia_id, numero_scena, applica):
+    """Applica `applica(offset) -> nuovo_offset` alla correzione manuale di una
+    scena, con la riga bloccata come per le esche."""
+    assicura_colonne_orologio()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT orologio_offset FROM cronologie_indagine WHERE id = %s FOR UPDATE",
+        (cronologia_id,),
+    )
+    row = cur.fetchone()
+    try:
+        offset = json.loads(row[0]) if row and row[0] else {}
+    except ValueError:
+        offset = {}
+    if not isinstance(offset, dict):
+        offset = {}
+    chiave = str(numero_scena)
+    nuovo = int(applica(int(offset.get(chiave, 0))))
+    if nuovo:
+        offset[chiave] = nuovo
+    else:
+        offset.pop(chiave, None)
+    cur.execute(
+        "UPDATE cronologie_indagine SET orologio_offset = %s WHERE id = %s",
+        (json.dumps(offset), cronologia_id),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return nuovo
 
 def modifica_lavagna(cronologia_id, applica):
     """Applica `applica(stato) -> nuovo_stato` alla lavagna della cronologia

@@ -209,7 +209,7 @@
         <!-- Luogo e lavagna di ogni scena: lo sfondo si sceglie nella pagina del luogo -->
         {% if scene_numeri %}
         <div class="panel-section">
-            <p class="panel-title">Scene: luogo, esche e lavagna</p>
+            <p class="panel-title">Scene: luogo, esche, lavagna e orologio</p>
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 {% for s in scene_numeri %}
                 <div>
@@ -229,6 +229,17 @@
                         <label style="font-size: 0.72rem; color: var(--bone-dim); display: flex; gap: 5px; align-items: center;"
                                title="Nella player view si apre la lavagna in cuoio con gli indizi raccolti, da disporre e collegare">
                             <input type="checkbox" name="lavagna" value="1" {% if s in scene_lavagna %}checked{% endif %}> Lavagna indizi
+                        </label>
+                        <label style="font-size: 0.72rem; color: var(--bone-dim); display: flex; gap: 5px; align-items: center;"
+                               title="Nella player view compare l'orologio da taschino: una tacca per ogni cosa esaminata in questa scena (indizi ed esche). La soglia è il segno sul quadrante.">
+                            <input type="checkbox" name="orologio" value="1" {% if s in scene_orologio %}checked{% endif %}> Orologio
+                            <span style="margin-left: 6px;">soglia</span>
+                            <input type="number" name="orologio_soglia" min="1" max="4" value="{{ scene_orologio[s].soglia or '' if s in scene_orologio else '' }}"
+                                   style="width: 3.6em; font-size: 0.72rem; padding: 2px 4px;">
+                        </label>
+                        <label style="font-size: 0.72rem; color: var(--bone-dim); display: flex; gap: 5px; align-items: center; padding-left: 18px;"
+                               title="Quando l'orologio passa la soglia suona da sola la sirena del cambio, nella player view e nella vista live">
+                            <input type="checkbox" name="orologio_sirena" value="1" {% if s in scene_orologio and scene_orologio[s].sirena %}checked{% endif %}> Sirena oltre la soglia
                         </label>
                         {% if scene_gifs.get(s) %}
                         <label style="font-size: 0.72rem; color: var(--bone-dim); display: flex; gap: 5px; align-items: center;">

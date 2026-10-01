@@ -144,6 +144,55 @@ def _punti_interesse_indagine(indagine_id, nodi, stati_sblocco, cronologia, scen
     )
 
 
+def _tacche_orologio(nodi, stati_sblocco, scena, punti_extra, extra_esaminati):
+    """Quante cose sono state esaminate nella scena: indizi scoperti ed esche
+    barrate, contate come le voci della lista "Da esaminare" (più indizi sotto
+    la stessa etichetta sono un solo esame; un indizio senza etichetta conta da sé)."""
+    esaminati = set()
+    etichette_nodi = set()
+    for n in nodi:
+        if n["numero_nodo"] // 10 != scena:
+            continue
+        etichetta = (n.get("punto_interesse") or "").strip().casefold()
+        if etichetta:
+            etichette_nodi.add(etichetta)
+        if stati_sblocco.get(n["id"], {}).get("scoperto"):
+            esaminati.add(("voce", etichetta) if etichetta else ("nodo", n["id"]))
+    for etichetta in punti_extra.get(scena, []):
+        chiave = etichetta.strip().casefold()
+        if chiave not in etichette_nodi and _chiave_punto_extra(scena, etichetta) in extra_esaminati:
+            esaminati.add(("voce", chiave))
+    return len(esaminati)
+
+
+def _orologio(indagine_id, nodi, stati_sblocco, cronologia, scena):
+    """Stato dell'orologio della scena, o None se la scena non lo prevede.
+    {"tacche", "soglia", "base", "sirena"}: base sono le tacche contate dalla
+    cronologia, tacche includono la correzione manuale del master; sirena dice
+    se passata la soglia parte da sola la sirena. Va anche alla player view,
+    ma solo per la scena in corso: quali altre scene abbiano l'orologio
+    anticiperebbe il copione."""
+    abilitato, soglia, sirena = db.get_orologio_scena(indagine_id, scena)
+    if not abilitato:
+        return None
+    esaminati = cronologia.get("punti_extra_esaminati") if cronologia else None
+    base = _tacche_orologio(
+        nodi, stati_sblocco, scena, db.get_punti_extra(indagine_id),
+        set(json.loads(esaminati)) if esaminati else set())
+    tacche = max(0, base + db.get_orologio_offset(cronologia, scena))
+    return {"tacche": tacche, "soglia": soglia, "base": base, "sirena": sirena}
+
+
+def _orologio_player(*args):
+    """Per la giocatrice la sirena compare solo una volta passata la soglia:
+    prima, il sorgente della pagina non deve dire che qualcosa sta per suonare."""
+    stato = _orologio(*args)
+    if not stato:
+        return None
+    oltre = bool(stato["soglia"]) and stato["tacche"] > stato["soglia"]
+    return {"tacche": stato["tacche"], "soglia": stato["soglia"], "sirena": stato["sirena"] and oltre}
+
+
 def _merge_sblocco_in_nodi(nodi, stati_sblocco):
     """Inietta scoperto/sbloccato_manualmente dalla cronologia nei dict nodo."""
     for n in nodi:
@@ -342,6 +391,7 @@ def indagini_editor(indagine_id):
         scene_location=scene_location,
         punti_extra=db.get_punti_extra(indagine_id),
         scene_lavagna=scene_lavagna,
+        scene_orologio=db.get_orologi_scene(indagine_id),
         locations=db.get_all_locations(),
     )
 
@@ -355,6 +405,10 @@ def indagini_salva_scena_gif(indagine_id, numero_scena):
     db.set_scena_location(indagine_id, numero_scena, request.form.get("location_id", type=int))
     # Checkbox: se non è spuntata il browser non manda nulla.
     db.set_scena_lavagna(indagine_id, numero_scena, request.form.get("lavagna") == "1")
+    soglia = request.form.get("orologio_soglia", type=int)
+    db.set_scena_orologio(indagine_id, numero_scena, request.form.get("orologio") == "1",
+                          soglia if soglia and soglia > 0 else None,
+                          request.form.get("orologio_sirena") == "1")
     if request.form.get("rimuovi_immagine") == "1":
         db.upsert_scena_gif(indagine_id, numero_scena, None)
     return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
@@ -483,6 +537,7 @@ def indagini_live(indagine_id):
         "punti_interesse": _punti_interesse_indagine(
             indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val, per_master=True),
         "lista_mostrata": _lista_mostrata(cronologia_attiva, scena_corrente_val),
+        "orologio": _orologio(indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val),
         # Le scene lavagna di solito non hanno indizi: senza questo elenco
         # "Avanza →" non ci arriverebbe mai. Vista solo master.
         "scene_lavagna": sorted(n for n, info in db.get_scene_gifs(indagine_id).items() if info["lavagna"]),
@@ -519,6 +574,7 @@ def indagini_stato_live(indagine_id):
         "punti_interesse": _punti_interesse_indagine(
             indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val, per_master=True),
         "lista_mostrata": _lista_mostrata(cronologia_attiva, scena_corrente_val),
+        "orologio": _orologio(indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val),
     })
 
 
@@ -558,6 +614,7 @@ def indagini_sblocca_nodo(indagine_id, nodo_id):
         "stati": stati,
         "punti_interesse": _punti_interesse_indagine(
             indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val, per_master=True),
+        "orologio": _orologio(indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val),
         "cronologia_nuova": {
             "id": cronologia_nuova["id"],
             "nome": cronologia_nuova["nome"],
@@ -627,6 +684,7 @@ def indagini_avanza_scena(indagine_id):
         "punti_interesse": _punti_interesse_indagine(
             indagine_id, nodi, stati_sblocco, cronologia_attiva, nuova_scena, per_master=True),
         "lista_mostrata": _lista_mostrata(db.get_cronologia_attiva(indagine_id), nuova_scena),
+        "orologio": _orologio(indagine_id, nodi, stati_sblocco, cronologia_attiva, nuova_scena),
         "cronologia_nuova": {
             "id": cronologia_nuova["id"],
             "nome": cronologia_nuova["nome"],
@@ -649,6 +707,7 @@ def indagini_player(indagine_id):
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"]) if cronologia_attiva else {}
     scena_corrente_val = _scena_corrente_effettiva(nodi, cronologia_attiva)
     punti_interesse = _punti_interesse_indagine(indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val)
+    orologio = _orologio_player(indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val)
     nodi = _redigi_nodi_non_scoperti(_merge_sblocco_in_nodi(nodi, stati_sblocco))
     scoperti_ids = [nid for nid, stato in stati_sblocco.items() if stato.get("scoperto")]
     scene_gifs = _scene_gifs_display(indagine_id)
@@ -661,6 +720,7 @@ def indagini_player(indagine_id):
         "sipario_aperto": cronologia_attiva.get("sipario_aperto", False) if cronologia_attiva else False,
         "scene_gifs": scene_gifs_str,
         "punti_interesse": punti_interesse,
+        "orologio": orologio,
         "lavagna": _lavagna_player(cronologia_attiva, scoperti_ids),
     })
     return render_template(
@@ -688,6 +748,7 @@ def indagini_stato_player(indagine_id):
             "sipario_aperto": False,
             "nodi": [],
             "punti_interesse": _punti_interesse_indagine(indagine_id, nodi, {}, None, prima_scena),
+            "orologio": _orologio_player(indagine_id, nodi, {}, None, prima_scena),
             "lavagna": _lavagna_player(None, []),
         })
     stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"])
@@ -708,6 +769,7 @@ def indagini_stato_player(indagine_id):
         "scene_gifs": scene_gifs_str,
         "punti_interesse": _punti_interesse_indagine(
             indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val),
+        "orologio": _orologio_player(indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val),
         "lavagna": _lavagna_player(cronologia_attiva, scoperti_ids),
     })
 
@@ -739,7 +801,38 @@ def indagini_toggle_punto_extra(indagine_id):
     return jsonify({
         "punti_interesse": _punti_interesse_indagine(
             indagine_id, nodi, stati_sblocco, cronologia, scena, per_master=True),
+        "orologio": _orologio(indagine_id, nodi, stati_sblocco, cronologia, scena),
     })
+
+
+@bp.route("/<int:indagine_id>/orologio", methods=["POST"])
+@richiedi_master
+def indagini_orologio(indagine_id):
+    """Correzione a mano dell'orologio della scena corrente, per il tavolo.
+    JSON {"azione": "piu" | "meno" | "reset"}."""
+    azione = (request.get_json(silent=True) or {}).get("azione")
+    if azione not in ("piu", "meno", "reset"):
+        return jsonify({"error": "azione non valida"}), 400
+    cronologia = db.get_cronologia_attiva(indagine_id)
+    if not cronologia:
+        nome = f"Cronologia del {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        cronologia = db.crea_cronologia(indagine_id, nome)
+    nodi = db.get_nodi_indagine(indagine_id)
+    scena = _scena_corrente_effettiva(nodi, cronologia)
+    stati_sblocco = db.get_stato_nodi_cronologia(cronologia["id"])
+    stato = _orologio(indagine_id, nodi, stati_sblocco, cronologia, scena)
+    if not stato:
+        return jsonify({"error": "la scena non ha l'orologio"}), 409
+    base = stato["base"]
+    if azione == "piu":
+        applica = lambda o: max(o, -base) + 1
+    elif azione == "meno":
+        applica = lambda o: max(o - 1, -base)
+    else:
+        applica = lambda o: -base
+    db.modifica_orologio_offset(cronologia["id"], scena, applica)
+    cronologia = db.get_cronologia_attiva(indagine_id)
+    return jsonify({"orologio": _orologio(indagine_id, nodi, stati_sblocco, cronologia, scena)})
 
 
 @bp.route("/<int:indagine_id>/lista-esamina", methods=["POST"])

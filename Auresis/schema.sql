@@ -249,7 +249,8 @@ CREATE TABLE IF NOT EXISTS cronologie_indagine (
     liste_mostrate TEXT,
     lavagna TEXT,
     lavagna_versione INTEGER NOT NULL DEFAULT 0,
-    lavagna_aperta BOOLEAN NOT NULL DEFAULT 0
+    lavagna_aperta BOOLEAN NOT NULL DEFAULT 0,
+    orologio_offset TEXT
 );
 
 CREATE TABLE IF NOT EXISTS stato_nodi_cronologia (
@@ -272,6 +273,9 @@ CREATE TABLE IF NOT EXISTS scene_indagine (
     punti_extra TEXT,
     location_id INTEGER REFERENCES locations(id) ON DELETE SET NULL,
     lavagna BOOLEAN NOT NULL DEFAULT 0,
+    orologio BOOLEAN NOT NULL DEFAULT 0,
+    orologio_soglia INTEGER,
+    orologio_sirena BOOLEAN NOT NULL DEFAULT 0,
     UNIQUE (indagine_id, numero_scena)
 );
 

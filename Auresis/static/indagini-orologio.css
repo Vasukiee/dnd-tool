@@ -1,0 +1,105 @@
+/* --- Orologio di scena: il taschino nella player view --- */
+.orologio-scena {
+    position: absolute;
+    right: 28px;
+    bottom: 22px;
+    z-index: 3;
+    width: 132px;
+    pointer-events: none;
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.55));
+    transform: rotate(-7deg);
+}
+.orologio-scena[hidden] { display: none; }
+.orologio-scena__svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+/* Sulla lavagna l'orologio si mette da parte */
+.lavagna-aperta .orologio-scena { display: none; }
+
+.orologio-scena__lancetta { fill: #1C2333; stroke: #1C2333; stroke-width: 0; }
+.orologio-scena__lancetta .orologio-scena__luna { fill: none; stroke-width: 1.2; }
+
+.orologio-scena__segno {
+    fill: #7A2222;
+    stroke: #3A0E0E;
+    stroke-width: 0.4;
+    transition: fill 0.6s ease;
+}
+.orologio-scena__ombra { opacity: 0; transition: opacity 1.2s ease; }
+.orologio-scena__oltre {
+    stroke: #7A2222;
+    stroke-width: 2.6;
+    opacity: 0;
+    transition: opacity 1.2s ease;
+}
+.orologio-scena__crepa {
+    fill: none;
+    stroke: #FFFFFF;
+    stroke-width: 0.45;
+    stroke-linejoin: bevel;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+/* Oltre la soglia: niente allarmi, solo il quadrante che si guasta */
+.orologio-scena.is-oltre .orologio-scena__segno { fill: #A32B22; }
+.orologio-scena.is-oltre .orologio-scena__ombra { opacity: 0.16; }
+.orologio-scena.is-oltre .orologio-scena__oltre { opacity: 0.55; }
+.orologio-scena.is-oltre .orologio-scena__crepa { opacity: 0.5; }
+
+.orologio-scena.is-entrata { animation: orologioEntra 0.45s ease both; }
+.orologio-scena.is-scatto .orologio-scena__svg { animation: orologioScatto 0.22s ease-out; }
+@keyframes orologioEntra {
+    from { opacity: 0; transform: rotate(-7deg) translateY(6px); }
+    to { opacity: 1; transform: rotate(-7deg); }
+}
+@keyframes orologioScatto {
+    0% { transform: none; }
+    35% { transform: translate(0.6px, 0.8px) rotate(0.6deg); }
+    100% { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .orologio-scena.is-entrata,
+    .orologio-scena.is-scatto .orologio-scena__svg { animation: none; }
+}
+@media (max-width: 800px) {
+    .orologio-scena { width: 92px; right: 14px; bottom: 14px; }
+}
+
+/* --- Vista master: tacche, soglia e correzioni a mano --- */
+.orologio-master {
+    position: absolute;
+    right: 20px;
+    bottom: 20px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: rgba(15, 13, 11, 0.85);
+    border: 1px solid rgba(156, 122, 60, 0.45);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--bone);
+}
+.orologio-master[hidden] { display: none; }
+.orologio-master__titolo {
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--gold);
+    font-size: 0.62rem;
+}
+.orologio-master__conta { font-size: 0.9rem; min-width: 3.2em; text-align: center; }
+.orologio-master.is-soglia .orologio-master__conta { color: var(--gold-bright, #C9A35A); }
+.orologio-master.is-oltre .orologio-master__conta { color: var(--rust-bright); }
+.orologio-master__btn {
+    cursor: pointer;
+    background: none;
+    border: 1px solid var(--ink-line, rgba(156, 122, 60, 0.35));
+    color: var(--bone);
+    font-family: inherit;
+    font-size: 0.7rem;
+    padding: 2px 7px;
+    border-radius: 2px;
+}
+.orologio-master__btn:hover { border-color: var(--gold); }
