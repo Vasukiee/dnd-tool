@@ -726,6 +726,7 @@
         if (siparioCambiato || opts.forceSipario) aggiornaBottoneSipario(data.sipario_aperto);
         aggiornaPuntiInteresse(data.punti_interesse);
         aggiornaListaMostrata(data.lista_mostrata);
+        aggiornaOrologio(data.orologio, nuovaScena);
         if (!scenaCambiata && !statiCambiati) return;
 
         const statiPrecedenti = Object.assign({}, statiCorrente);
@@ -788,6 +789,7 @@
             aggiornaBottoneSipario(data.sipario_aperto);
             aggiornaPuntiInteresse(data.punti_interesse);
             aggiornaListaMostrata(data.lista_mostrata);
+            aggiornaOrologio(data.orologio, data.scena_corrente);
             statiCorrente = {};
             Object.entries(data.stati).forEach(([k, v]) => { statiCorrente[parseInt(k)] = v; });
 
@@ -879,14 +881,60 @@
                 body: JSON.stringify({ etichetta }),
             });
             if (!resp.ok) { console.error("Errore esca"); return; }
-            aggiornaPuntiInteresse((await resp.json()).punti_interesse);
+            const data = await resp.json();
+            aggiornaPuntiInteresse(data.punti_interesse);
+            aggiornaOrologio(data.orologio);
         } catch (e) {
             console.error("Errore fetch esca:", e);
         }
     }
 
+    // ----------------------------------------------------------------
+    // Orologio di scena: tacche usate / soglia, con le correzioni a mano
+    // ----------------------------------------------------------------
+    const orologioBox = document.getElementById("liveOrologio");
+    const orologioConta = document.getElementById("liveOrologioConta");
+
+    let orologioPrima = null; // {scena, tacche} dell'ultimo stato visto
+
+    // nuovaScena: la scena a cui si riferisce lo stato (di default quella corrente).
+    // La sirena parte solo se le tacche passano la soglia restando nella stessa scena.
+    function aggiornaOrologio(stato, nuovaScena) {
+        if (stato === undefined || !orologioBox) return;
+        const scena = nuovaScena ?? scenaCorrente;
+        const prima = orologioPrima;
+        orologioPrima = stato ? { scena, tacche: stato.tacche } : null;
+        orologioBox.hidden = !stato;
+        if (!stato) return;
+        if (stato.sirena && stato.soglia && prima && prima.scena === scena &&
+            prima.tacche <= stato.soglia && stato.tacche > stato.soglia) {
+            riproduciSfx(window.INDAGINI_LIVE_CONFIG.sfx.sirena);
+        }
+        const soglia = stato.soglia;
+        orologioConta.textContent = soglia ? `${stato.tacche} / ${soglia}` : String(stato.tacche);
+        orologioBox.classList.toggle("is-soglia", !!soglia && stato.tacche === soglia);
+        orologioBox.classList.toggle("is-oltre", !!soglia && stato.tacche > soglia);
+    }
+
+    orologioBox.querySelectorAll("[data-azione]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+            try {
+                const resp = await fetch(window.INDAGINI_LIVE_CONFIG.endpoints.orologio, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ azione: btn.dataset.azione }),
+                });
+                if (!resp.ok) { console.error("Errore orologio"); return; }
+                aggiornaOrologio((await resp.json()).orologio);
+            } catch (e) {
+                console.error("Errore fetch orologio:", e);
+            }
+        });
+    });
+
     // Render iniziale
     aggiornaPuntiInteresse(RAW.punti_interesse);
+    aggiornaOrologio(RAW.orologio);
     aggiornaListaMostrata(listaMostrata);
     renderTutti(null, null, null, null, null);
     aggiornaBottoneAvanza();
@@ -970,6 +1018,7 @@
 
             data.nodi.forEach(n => { nodoById[n.id] = n; });
             aggiornaPuntiInteresse(data.punti_interesse);
+            aggiornaOrologio(data.orologio);
             const nuoviStati = data.stati;
 
             const animNew = new Set();

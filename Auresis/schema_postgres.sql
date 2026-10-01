@@ -318,6 +318,17 @@ ALTER TABLE sfondi_location ENABLE ROW LEVEL SECURITY;
 -- Aggiunte anche a runtime da db.assicura_colonne_lavagna.
 ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS lavagna BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna TEXT;
+
+-- Orologio di scena: nelle scene che lo prevedono la player view mostra un
+-- orologio da taschino che avanza di una tacca per ogni cosa esaminata lì
+-- (indizi scoperti ed esche). La soglia è un segno sul quadrante.
+-- Le tacche si contano dalla cronologia; orologio_offset = JSON {"<scena>": n}
+-- con le correzioni manuali del master. Aggiunte anche da db.assicura_colonne_orologio.
+ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio_soglia INTEGER;
+-- La sirena suona da sola quando l'orologio passa la soglia (player e vista live)
+ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio_sirena BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS orologio_offset TEXT;
 ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna_versione INTEGER NOT NULL DEFAULT 0;
 -- Cosa mostra la player view: la lavagna o gli indizi classici. Si accende da
 -- solo entrando in una scena marcata lavagna, e il copione lo commuta ovunque.

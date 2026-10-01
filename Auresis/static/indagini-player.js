@@ -101,6 +101,12 @@
 
     aggiornaPuntiInteresse(RAW.punti_interesse);
 
+    // --- Orologio di scena ---
+    const orologio = window.IndaginiOrologio.crea(document.getElementById("orologioScena"), {
+        suSirena: () => riproduciSfx(window.INDAGINI_PLAYER_CONFIG.sfx.sirena),
+    });
+    orologio.aggiorna(RAW.orologio, RAW.scena_corrente);
+
     const NODE_W = 170;
     const NODE_H = 80;
     const PAD = 40;
@@ -875,6 +881,7 @@
                 SCENE_GIFS = data.scene_gifs;
             }
             aggiornaPuntiInteresse(data.punti_interesse);
+            orologio.aggiorna(data.orologio, data.scena_corrente);
 
             const nuoviScopertiIds = new Set(data.scoperti_ids.map(Number));
             const nuovaScena = data.scena_corrente;

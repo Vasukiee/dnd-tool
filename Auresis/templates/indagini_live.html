@@ -4,6 +4,7 @@
 {{ super() }}
 <script>document.documentElement.classList.add("indagini-live-page");</script>
 <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+<link href="{{ url_for('static', filename='indagini-orologio.css') }}" rel="stylesheet">
 {% endblock %}
 {% block content %}
 
@@ -55,6 +56,13 @@
                 </div>
                 <ul class="player-esplora__lista" id="liveEsploraLista"></ul>
             </aside>
+            <div class="orologio-master" id="liveOrologio" hidden>
+                <span class="orologio-master__titolo">Orologio</span>
+                <button type="button" class="orologio-master__btn" data-azione="meno" title="Una tacca indietro">−1</button>
+                <span class="orologio-master__conta" id="liveOrologioConta"></span>
+                <button type="button" class="orologio-master__btn" data-azione="piu" title="Una tacca avanti">+1</button>
+                <button type="button" class="orologio-master__btn" data-azione="reset" title="Riporta l'orologio a zero">↺</button>
+            </div>
         </div>
         <div class="live-detail" id="liveDetail">
             <button class="live-detail__close" id="liveDetailClose" title="Chiudi (×)">×</button>
@@ -112,11 +120,13 @@
             sbloccaNodo: "/indagini/{{ indagine.id }}/nodi/__NODO_ID__/sblocca",
             puntoExtraEsaminato: "{{ url_for('indagini.indagini_toggle_punto_extra', indagine_id=indagine.id) }}",
             listaEsamina: "{{ url_for('indagini.indagini_lista_esamina', indagine_id=indagine.id) }}",
+            orologio: "{{ url_for('indagini.indagini_orologio', indagine_id=indagine.id) }}",
             cronologiaElimina: "/indagini/{{ indagine.id }}/cronologie/__CRONOLOGIA_ID__/elimina",
             cronologiaRinomina: "/indagini/{{ indagine.id }}/cronologie/__CRONOLOGIA_ID__/rinomina"
         },
         sfx: {
             rivelazione: "{{ url_for('static', filename='audio/sfx/rivelazione.mp3') }}",
+            sirena: "{{ url_for('static', filename='audio/sfx/sirena_cambio_brace.mp3') }}",
             livelloBase: "{{ url_for('static', filename='audio/sfx/livello__LIVELLO__.mp3') }}"
         }
     };
