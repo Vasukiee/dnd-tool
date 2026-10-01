@@ -3,6 +3,8 @@
  *
  * Quando la scena corrente è marcata "lavagna" (editor → Scene), al centro
  * della player view si srotola una bacheca in cuoio con gli indizi scoperti.
+ * Oltre a quando la apre il master (per tutti), la giocatrice può aprirla da
+ * sé col pulsante nell'header: in quel caso si srotola solo sul suo schermo.
  * Master e giocatrice li spostano e li collegano con un filo rosso
  * (trascinando dallo spillo di una carta a un'altra); solo il master può
  * metterli da parte o rimetterli. Ogni modifica è un'operazione singola che
@@ -32,6 +34,9 @@
     let stato = { posizioni: {}, rimossi: [], fili: [] };
     let versione = 0;
     let cronologia = null;
+    let apertaLocale = false;       // aperta col pulsante della player view, solo qui
+    let ultimaLavagna = null;       // ultimo stato dal polling principale
+    let ultimiNodi = [];
     const carte = new Map();        // id → elemento carta
     let zTop = 10;
 
@@ -475,8 +480,8 @@
             const resp = await fetch(cfg.endpoint);
             if (!resp.ok) return;
             const lav = await resp.json();
-            // La chiusura la decide il polling principale, insieme al cambio scena
-            if (lav.attiva && fase !== "chiusa" && applicaRemoto(lav)) render(false);
+            // Apertura e chiusura le decide aggiorna(), col polling principale
+            if (fase !== "chiusa" && fase !== "chiusura" && applicaRemoto(lav)) render(false);
         } catch (e) {
             console.warn("Polling lavagna:", e);
         } finally {
@@ -642,9 +647,30 @@
     // ------------------------------------------------------------------
     // API per indagini-player.js
     // ------------------------------------------------------------------
+    function chiaveLocale() { return `lavagna-locale-${cfg.indagineId}`; }
+
+    function aggiornaBottone() {
+        if (!el.bottone) return;
+        // Quando il master la apre per tutti il pulsante non serve
+        el.bottone.hidden = !!(ultimaLavagna && ultimaLavagna.attiva);
+        el.bottone.textContent = apertaLocale ? "🔍 Indizi" : "🧵 Lavagna";
+        el.bottone.title = apertaLocale ? "Torna agli indizi" : "Apri la lavagna (solo su questo schermo)";
+        el.bottone.setAttribute("aria-pressed", String(apertaLocale));
+    }
+
+    function commutaLocale() {
+        apertaLocale = !apertaLocale;
+        try { sessionStorage.setItem(chiaveLocale(), apertaLocale ? "1" : "0"); } catch (_) { /* storage bloccato */ }
+        if (ultimaLavagna) aggiorna(ultimaLavagna, ultimiNodi);
+        else aggiornaBottone();
+    }
+
     function aggiorna(lavagna, nodiScoperti) {
         if (!cfg) return;
-        if (!lavagna || !lavagna.attiva) {
+        ultimaLavagna = lavagna;
+        ultimiNodi = nodiScoperti;
+        aggiornaBottone();
+        if (!lavagna || !(lavagna.attiva || apertaLocale)) {
             chiudi();
             return;
         }
@@ -662,6 +688,9 @@
 
     function init(config) {
         cfg = config;
+        try { apertaLocale = sessionStorage.getItem(chiaveLocale()) === "1"; } catch (_) { /* storage bloccato */ }
+        el.bottone = document.getElementById("lavagnaBottone");
+        if (el.bottone) el.bottone.addEventListener("click", commutaLocale);
         el.grafo = document.querySelector(".player-graph");
         el.radice = document.getElementById("lavagna");
         el.telo = document.getElementById("lavagnaTelo");
