@@ -297,12 +297,14 @@ def _normalizza_lavagna(raw, ammessi):
 
 
 def _lavagna_player(cronologia_attiva, scoperti_ids):
-    """Stato della lavagna per la player view. Dice solo se è aperta ORA:
-    l'elenco delle scene marcate anticiperebbe il copione."""
+    """Stato della lavagna per la player view. `attiva` dice solo se il master
+    l'ha aperta per tutti ORA (l'elenco delle scene marcate anticiperebbe il
+    copione). Il contenuto parte sempre: la giocatrice può aprirla da sé, solo
+    sul suo schermo, e contiene soltanto indizi già scoperti."""
     db.assicura_colonne_lavagna()
     attiva = bool(cronologia_attiva and cronologia_attiva.get("lavagna_aperta"))
     out = {"attiva": attiva, "versione": 0, "cronologia": None}
-    if attiva and cronologia_attiva:
+    if cronologia_attiva:
         out["cronologia"] = cronologia_attiva["id"]
         out["versione"] = cronologia_attiva.get("lavagna_versione") or 0
         out.update(_normalizza_lavagna(db.get_lavagna(cronologia_attiva), set(scoperti_ids)))
@@ -936,7 +938,7 @@ def _applica_op_lavagna(stato, dati, scoperti):
 @bp.route("/<int:indagine_id>/lavagna", methods=["POST"])
 def indagini_modifica_lavagna(indagine_id):
     """Una modifica alla lavagna: {"op": ..., "posizioni"?: {...}, ...}.
-    Si modifica solo mentre la lavagna è aperta, e solo con
+    Si modifica solo con
     indizi scoperti nella cronologia attiva."""
     dati = request.get_json(silent=True)
     if not isinstance(dati, dict) or dati.get("op") not in LAVAGNA_OP_MASTER:
@@ -947,14 +949,17 @@ def indagini_modifica_lavagna(indagine_id):
     if not indagine or _nascosta_alla_giocatrice(indagine):
         return jsonify({"error": "non trovata"}), 404
     cronologia, scoperti = _lavagna_corrente(indagine_id)
-    if not cronologia or not cronologia.get("lavagna_aperta"):
-        return jsonify({"error": "la lavagna non è aperta"}), 409
+    # Nessun vincolo sulla lavagna aperta per tutti: la giocatrice può
+    # aprirla da sé e riordinarla quando vuole.
+    if not cronologia:
+        return jsonify({"error": "nessuna cronologia attiva"}), 409
     ammessi = set(scoperti)
     versione, stato = db.modifica_lavagna(
         cronologia["id"], lambda s: _applica_op_lavagna(s, dati, ammessi))
     if versione is None:
         return jsonify({"error": "nessuna cronologia attiva"}), 409
-    return jsonify({"attiva": True, "cronologia": cronologia["id"], "versione": versione, **stato})
+    return jsonify({"attiva": bool(cronologia.get("lavagna_aperta")), "cronologia": cronologia["id"],
+                    "versione": versione, **stato})
 
 
 @bp.route("/<int:indagine_id>/lavagna/stato", methods=["POST"])
