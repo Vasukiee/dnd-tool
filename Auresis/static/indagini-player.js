@@ -849,6 +849,7 @@
     // ----------------------------------------------------------------
     const lavagna = window.IndaginiLavagna;
     lavagna.init({
+        indagineId: INDAGINE_ID,
         gestione: window.INDAGINI_PLAYER_CONFIG.lavagnaGestione,
         endpoint: window.INDAGINI_PLAYER_CONFIG.endpoints.lavagna,
         onApriDettaglio: n => (nodoDetailId === n.id ? chiudiDettaglio() : apriDettaglio(n)),
