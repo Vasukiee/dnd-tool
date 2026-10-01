@@ -11,6 +11,23 @@
     opacity: 0;
     pointer-events: none;
 }
+/* Pulsante della giocatrice: apre la lavagna solo sul suo schermo */
+.player-header__lavagna {
+    padding: 4px 11px;
+    border: 1px solid rgba(201, 163, 92, 0.45);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--gold-bright, #d6b06f);
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+.player-header__lavagna:hover,
+.player-header__lavagna[aria-pressed="true"] { background: rgba(201, 163, 92, 0.18); }
+.player-header__lavagna[hidden] { display: none; }
+
 /* Lavagna e indizi classici sono esclusivi: via anche la lista "Da esaminare" */
 .player-graph.lavagna-aperta .player-esplora {
     opacity: 0;
