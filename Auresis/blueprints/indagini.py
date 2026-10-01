@@ -309,6 +309,12 @@ def _lavagna_player(cronologia_attiva, scoperti_ids):
     return out
 
 
+def _nascosta_alla_giocatrice(indagine):
+    """True se l'indagine non va mostrata a chi è in vista giocatrice:
+    come per copioni e personaggi, conta il flag visibile_giocatrice."""
+    return vista_ristretta() and not indagine.get("visibile_giocatrice")
+
+
 @bp.route("/")
 def lista_indagini():
     indagini = db.get_all_indagini(solo_visibili=vista_ristretta())
@@ -320,7 +326,7 @@ def lista_indagini():
 def nuova_indagine():
     if request.method == "POST":
         titolo = request.form["titolo"].strip()
-        descrizione = request.form.get("descrizione", "").strip() or None
+        descrizione = db.testo_o_null(request.form.get("descrizione"))
         attiva = request.form.get("attiva") == "1"
         visibile_giocatrice = request.form.get("visibile_giocatrice") == "1"
         ind_id = db.add_indagine(titolo, descrizione, attiva, visibile_giocatrice)
@@ -338,7 +344,7 @@ def edita_indagine(indagine_id):
         return redirect(url_for(".lista_indagini"))
     if request.method == "POST":
         titolo = request.form["titolo"].strip()
-        descrizione = request.form.get("descrizione", "").strip() or None
+        descrizione = db.testo_o_null(request.form.get("descrizione"))
         attiva = request.form.get("attiva") == "1"
         visibile_giocatrice = request.form.get("visibile_giocatrice") == "1"
         db.update_indagine(indagine_id, titolo=titolo, descrizione=descrizione, attiva=attiva, visibile_giocatrice=visibile_giocatrice)
@@ -431,6 +437,9 @@ def sfondo_location(location_id):
 def indagini_scena_sfondo(indagine_id, numero_scena):
     """Serve l'immagine di sfondo salvata nel DB. Accessibile anche in
     modalità giocatrice: la player view ne ha bisogno."""
+    indagine = db.get_indagine(indagine_id)
+    if not indagine or _nascosta_alla_giocatrice(indagine):
+        abort(404)
     risultato = db.get_scena_gif_file(indagine_id, numero_scena)
     if not risultato:
         abort(404)
@@ -445,11 +454,11 @@ def indagini_scena_sfondo(indagine_id, numero_scena):
 def indagini_nuovo_nodo(indagine_id):
     titolo = request.form["titolo"].strip()
     numero_nodo = int(request.form.get("numero_nodo") or 0)
-    descrizione = request.form.get("descrizione", "").strip() or None
-    immagine_url = request.form.get("immagine_url", "").strip() or None
+    descrizione = db.testo_o_null(request.form.get("descrizione"))
+    immagine_url = db.testo_o_null(request.form.get("immagine_url"))
     regola_sblocco = request.form.get("regola_sblocco", "TUTTI")
-    tipo_speciale = request.form.get("tipo_speciale", "").strip() or None
-    punto_interesse = request.form.get("punto_interesse", "").strip() or None
+    tipo_speciale = db.testo_o_null(request.form.get("tipo_speciale"))
+    punto_interesse = db.testo_o_null(request.form.get("punto_interesse"))
     db.add_nodo(indagine_id, numero_nodo, titolo, descrizione, immagine_url, regola_sblocco, tipo_speciale,
                 punto_interesse)
     return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
@@ -460,10 +469,10 @@ def indagini_nuovo_nodo(indagine_id):
 def indagini_edita_nodo(indagine_id, nodo_id):
     titolo = request.form["titolo"].strip()
     numero_nodo = int(request.form.get("numero_nodo") or 0)
-    descrizione = request.form.get("descrizione", "").strip() or None
-    immagine_url = request.form.get("immagine_url", "").strip() or None
+    descrizione = db.testo_o_null(request.form.get("descrizione"))
+    immagine_url = db.testo_o_null(request.form.get("immagine_url"))
     regola_sblocco = request.form.get("regola_sblocco", "TUTTI")
-    tipo_speciale = request.form.get("tipo_speciale", "").strip() or None
+    tipo_speciale = db.testo_o_null(request.form.get("tipo_speciale"))
     kwargs = dict(
         titolo=titolo,
         numero_nodo=numero_nodo,
@@ -471,7 +480,7 @@ def indagini_edita_nodo(indagine_id, nodo_id):
         immagine_url=immagine_url,
         regola_sblocco=regola_sblocco,
         tipo_speciale=tipo_speciale,
-        punto_interesse=request.form.get("punto_interesse", "").strip() or None,
+        punto_interesse=db.testo_o_null(request.form.get("punto_interesse")),
     )
     livello_sfx_str = request.form.get("livello_sfx", "").strip()
     if livello_sfx_str in ("1", "2", "3"):
@@ -701,6 +710,9 @@ def indagini_player(indagine_id):
     if not indagine:
         flash("Indagine non trovata.")
         return redirect(url_for(".lista_indagini"))
+    if _nascosta_alla_giocatrice(indagine):
+        flash("Questa indagine non è ancora disponibile.")
+        return redirect(url_for(".lista_indagini"))
     nodi = db.get_nodi_indagine(indagine_id)
     collegamenti = db.get_collegamenti(indagine_id)
     cronologia_attiva = db.get_cronologia_attiva(indagine_id)
@@ -736,7 +748,7 @@ def indagini_stato_player(indagine_id):
     """API JSON leggera per il polling della player view.
     Ritorna solo gli ID dei nodi scoperti e la scena corrente."""
     indagine = db.get_indagine(indagine_id)
-    if not indagine:
+    if not indagine or _nascosta_alla_giocatrice(indagine):
         return jsonify({"error": "non trovata"}), 404
     cronologia_attiva = db.get_cronologia_attiva(indagine_id)
     if not cronologia_attiva:
@@ -874,6 +886,9 @@ def _lavagna_corrente(indagine_id):
 def indagini_lavagna(indagine_id):
     """Stato della lavagna, per l'aggiornamento rapido mentre è aperta.
     Pubblico come stato-player: contiene solo indizi già scoperti."""
+    indagine = db.get_indagine(indagine_id)
+    if not indagine or _nascosta_alla_giocatrice(indagine):
+        return jsonify({"error": "non trovata"}), 404
     cronologia, scoperti = _lavagna_corrente(indagine_id)
     return jsonify(_lavagna_player(cronologia, scoperti))
 
@@ -928,6 +943,9 @@ def indagini_modifica_lavagna(indagine_id):
         return jsonify({"error": "operazione non valida"}), 400
     if dati["op"] not in LAVAGNA_OP_GIOCATRICE and not utente_e_master():
         return jsonify({"ok": False, "errore": "Autenticazione master richiesta"}), 403
+    indagine = db.get_indagine(indagine_id)
+    if not indagine or _nascosta_alla_giocatrice(indagine):
+        return jsonify({"error": "non trovata"}), 404
     cronologia, scoperti = _lavagna_corrente(indagine_id)
     if not cronologia or not cronologia.get("lavagna_aperta"):
         return jsonify({"error": "la lavagna non è aperta"}), 409

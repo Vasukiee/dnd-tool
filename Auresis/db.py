@@ -165,6 +165,61 @@ def _valida_nomi_colonna(nomi):
             raise ValueError(f"Nome colonna non valido: {nome!r}")
 
 
+def testo_o_null(valore):
+    """Normalizza un testo in arrivo da un form: vuoto, solo spazi o la stringa
+    'None' (un None finito in un value="{{ ... }}" e rimandato indietro)
+    diventano None, cioè NULL nel DB. Gli altri valori passano invariati."""
+    if valore is None:
+        return None
+    if isinstance(valore, str):
+        valore = valore.strip()
+        if not valore or valore == "None":
+            return None
+    return valore
+
+
+def _normalizza_valori(kwargs):
+    """Rete di sicurezza per le scritture con colonne da **kwargs: la stringa
+    'None' non è mai un valore legittimo e diventa NULL. Il testo vuoto resta
+    com'è qui (alcune colonne sono NOT NULL): lo normalizza il binding dei form."""
+    for chiave, valore in kwargs.items():
+        if isinstance(valore, str) and valore.strip() == "None":
+            kwargs[chiave] = None
+    return kwargs
+
+
+# Colonne testuali facoltative scritte dai form: init_db ripulisce le
+# stringhe 'None' salvate prima della normalizzazione.
+_COLONNE_TESTO_FORM = {
+    "fazioni": ["nome_popolare", "ideologia", "territorio", "stato_attuale", "note"],
+    "locations": ["tipo", "descrizione_breve", "stato_attuale", "note"],
+    "npc": ["ruolo", "relazione_pg", "descrizione_breve", "note_caratteriali", "note"],
+    "quest": ["riassunto", "obiettivo_attuale", "note"],
+    "eventi": ["conseguenze_attive"],
+    "pg_stato": ["nome", "condizione_fisica", "ferite_attive", "equipaggiamento",
+                 "risorse", "abilita_acquisite", "note"],
+    "tracce_audio": ["note"],
+    "indagini": ["descrizione"],
+    "nodi_indagine": ["descrizione", "immagine_url"],
+    "note_master": ["ramo_giocato", "note"],
+}
+
+
+def ripulisci_stringhe_none():
+    """Riporta a NULL i campi testuali che contengono la stringa 'None'."""
+    conn = get_connection()
+    cur = conn.cursor()
+    for tabella, colonne in _COLONNE_TESTO_FORM.items():
+        for colonna in colonne:
+            try:
+                cur.execute(f"UPDATE {tabella} SET {colonna} = NULL WHERE {colonna} = 'None'")
+                conn.commit()
+            except Exception:
+                conn.rollback()  # colonna assente su un DB vecchio: si salta
+    cur.close()
+    conn.close()
+
+
 def _dictify(rows):
     """psycopg2.extras.RealDictRow o sqlite3.Row si comporta già come un dict, ma lo
     convertiamo esplicitamente a dict puro per coerenza."""
@@ -235,6 +290,7 @@ def init_db():
     cur.close()
     conn.close()
     assicura_indici_performance()
+    ripulisci_stringhe_none()
     print(f"Database inizializzato ({'SQLite' if is_sqlite() else 'Postgres'}).")
 
 
@@ -918,6 +974,7 @@ def update_traccia_audio(traccia_id, **campi):
     if not campi:
         return
     _valida_nomi_colonna(campi)
+    _normalizza_valori(campi)
     colonne = ", ".join(f"{k} = %s" for k in campi)
     valori = list(campi.values()) + [traccia_id]
     conn = get_connection()
@@ -1333,6 +1390,7 @@ def get_home_dashboard_data(solo_visibili=False):
 
 def upsert_fazione(nome, **kwargs):
     _valida_nomi_colonna(kwargs)
+    _normalizza_valori(kwargs)
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT id FROM fazioni WHERE nome = %s", (nome,))
@@ -1352,6 +1410,7 @@ def upsert_fazione(nome, **kwargs):
 
 def upsert_location(nome, **kwargs):
     _valida_nomi_colonna(kwargs)
+    _normalizza_valori(kwargs)
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT id FROM locations WHERE nome = %s", (nome,))
@@ -1371,6 +1430,7 @@ def upsert_location(nome, **kwargs):
 
 def upsert_npc(nome, **kwargs):
     _valida_nomi_colonna(kwargs)
+    _normalizza_valori(kwargs)
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT id FROM npc WHERE nome = %s", (nome,))
@@ -1396,6 +1456,7 @@ def upsert_npc(nome, **kwargs):
 
 def update_quest(quest_id, nome, **kwargs):
     _valida_nomi_colonna(kwargs)
+    _normalizza_valori(kwargs)
     conn = get_connection()
     cur = conn.cursor()
     if kwargs:
@@ -1410,6 +1471,7 @@ def update_quest(quest_id, nome, **kwargs):
 
 def upsert_quest(nome, **kwargs):
     _valida_nomi_colonna(kwargs)
+    _normalizza_valori(kwargs)
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT id FROM quest WHERE nome = %s", (nome,))
@@ -1527,6 +1589,7 @@ def add_evento(sessione, riassunto, conseguenze_attive=None, location_id=None):
 
 def set_pg_stato(**kwargs):
     _valida_nomi_colonna(kwargs)
+    _normalizza_valori(kwargs)
     conn = get_connection()
     cur = conn.cursor()
     cur.execute("SELECT id FROM pg_stato WHERE id = 1")
@@ -1775,6 +1838,7 @@ def update_indagine(indagine_id, **kwargs):
     if not kwargs:
         return
     _valida_nomi_colonna(kwargs)
+    _normalizza_valori(kwargs)
     cols = ", ".join(f"{k} = %s" for k in kwargs)
     vals = list(kwargs.values()) + [indagine_id]
     conn = get_connection()
@@ -1977,6 +2041,7 @@ def update_nodo(nodo_id, **kwargs):
     if not kwargs:
         return
     _valida_nomi_colonna(kwargs)
+    _normalizza_valori(kwargs)
     if "punto_interesse" in kwargs:
         assicura_colonne_punti_interesse()
     cols = ", ".join(f"{k} = %s" for k in kwargs)
