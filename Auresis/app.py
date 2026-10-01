@@ -22,6 +22,9 @@ from utils_assets import ottimizza_e_minimizza_assets
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 31536000
+# {{ valore }} con valore None stamperebbe "None": nei form diventerebbe il
+# testo del campo e, al salvataggio, la stringa 'None' nel DB.
+app.jinja_env.finalize = lambda valore: "" if valore is None else valore
 
 # Ottimizza e minimizza automaticamente i file statici all'avvio
 ottimizza_e_minimizza_assets(app)
@@ -155,11 +158,15 @@ def _int_or_none(value):
     return int(value) if value else None
 
 
-def _kwargs_da_form(form, campi):
+def _kwargs_da_form(form, campi, svuota=False):
+    """Campi testuali di un form, normalizzati: vuoto o 'None' diventano NULL.
+    In creazione i campi vuoti si omettono (valgono i default dello schema);
+    con svuota=True (modifica) si passano come None, così un campo svuotato
+    nel form si svuota anche nel DB."""
     kwargs = {}
     for campo in campi:
-        valore = form.get(campo, "").strip()
-        if valore:
+        valore = db.testo_o_null(form.get(campo))
+        if valore is not None or svuota:
             kwargs[campo] = valore
     return kwargs
 
@@ -432,7 +439,7 @@ def edita_npc(npc_id):
     if request.method == "POST":
         kwargs = _kwargs_da_form(request.form, [
             "ruolo", "stato", "relazione_pg", "descrizione_breve", "note_caratteriali", "note"
-        ])
+        ], svuota=True)
         kwargs["fazione_id"] = _int_or_none(request.form.get("fazione_id"))
         kwargs["location_attuale_id"] = _int_or_none(request.form.get("location_attuale_id"))
         kwargs["livello_contaminazione"] = int(request.form.get("livello_contaminazione") or 0)
@@ -500,7 +507,7 @@ def edita_fazione(fazione_id):
         return redirect(url_for("lista_fazioni"))
 
     if request.method == "POST":
-        kwargs = _kwargs_da_form(request.form, ["nome_popolare", "ideologia", "territorio", "stato_attuale", "note"])
+        kwargs = _kwargs_da_form(request.form, ["nome_popolare", "ideologia", "territorio", "stato_attuale", "note"], svuota=True)
         kwargs["relazione_pg"] = request.form.get("relazione_pg", "neutrale")
         kwargs["attiva"] = int(request.form.get("attiva", 1))
         db.upsert_fazione(request.form["nome"], **kwargs)
@@ -564,7 +571,7 @@ def edita_location(location_id):
         return redirect(url_for("lista_locations"))
 
     if request.method == "POST":
-        kwargs = _kwargs_da_form(request.form, ["tipo", "descrizione_breve", "stato_attuale", "note"])
+        kwargs = _kwargs_da_form(request.form, ["tipo", "descrizione_breve", "stato_attuale", "note"], svuota=True)
         kwargs["fazione_controllante_id"] = _int_or_none(request.form.get("fazione_controllante_id"))
         db.upsert_location(request.form["nome"], **kwargs)
         errore_sfondo = _salva_sfondo_location_da_form(location_id)
@@ -689,7 +696,7 @@ def edita_quest(quest_id):
         return redirect(url_for("lista_quest"))
 
     if request.method == "POST":
-        kwargs = _kwargs_da_form(request.form, ["riassunto", "obiettivo_attuale", "note"])
+        kwargs = _kwargs_da_form(request.form, ["riassunto", "obiettivo_attuale", "note"], svuota=True)
         kwargs["tipo"] = request.form.get("tipo", "side")
         kwargs["stato"] = request.form.get("stato", "attiva")
         location_ids = request.form.getlist("location_ids")
@@ -732,7 +739,7 @@ def collega_npc_quest(quest_id):
 
     if request.method == "POST":
         npc_id = int(request.form["npc_id"])
-        ruolo = request.form.get("ruolo_nella_quest", "").strip() or None
+        ruolo = db.testo_o_null(request.form.get("ruolo_nella_quest"))
         db.link_npc_quest(quest_id, npc_id, ruolo_nella_quest=ruolo)
         flash("Personaggio collegato all'incarico.")
         return redirect(url_for("dettaglio_quest", quest_id=quest_id))
@@ -757,7 +764,7 @@ def nuovo_evento():
         db.add_evento(
             sessione=int(request.form["sessione"]),
             riassunto=request.form["riassunto"],
-            conseguenze_attive=request.form.get("conseguenze_attive", "").strip() or None,
+            conseguenze_attive=db.testo_o_null(request.form.get("conseguenze_attive")),
             location_id=location_id,
         )
         flash("Evento registrato nella cronaca.")
@@ -780,7 +787,7 @@ def edita_evento(evento_id):
             evento_id,
             sessione=int(request.form["sessione"]),
             riassunto=request.form["riassunto"],
-            conseguenze_attive=request.form.get("conseguenze_attive", "").strip() or None,
+            conseguenze_attive=db.testo_o_null(request.form.get("conseguenze_attive")),
             location_id=_int_or_none(request.form.get("location_id")),
         )
         flash("Evento aggiornato.")
@@ -821,8 +828,8 @@ def note_master():
             return redirect(url_for("note_master"))
         db.upsert_note_master(
             sessione,
-            ramo_giocato=request.form.get("ramo_giocato", "").strip() or None,
-            note=request.form.get("note", "").strip() or None,
+            ramo_giocato=db.testo_o_null(request.form.get("ramo_giocato")),
+            note=db.testo_o_null(request.form.get("note")),
         )
         flash(f"Note della sessione {sessione} salvate.")
         return redirect(url_for("note_master", _anchor=f"sessione-{sessione}"))
@@ -1021,7 +1028,7 @@ def pg_stato_page():
             return redirect(url_for("pg_stato_page"))
         kwargs = _kwargs_da_form(request.form, [
             "nome", "condizione_fisica", "ferite_attive", "equipaggiamento", "risorse", "abilita_acquisite", "note"
-        ])
+        ], svuota=True)
         kwargs["sessione_corrente"] = int(request.form.get("sessione_corrente") or 0)
         kwargs["location_attuale_id"] = _int_or_none(request.form.get("location_attuale_id"))
         db.set_pg_stato(**kwargs)
@@ -1143,7 +1150,7 @@ def audio_nuova():
                 file_path=file_path,
                 youtube_id=None,
                 timestamp_inizio=0,
-                note=request.form.get("note") or None,
+                note=db.testo_o_null(request.form.get("note")),
                 location_id=request.form.get("location_id") or None,
                 quest_id=request.form.get("quest_id") or None,
             )
@@ -1154,7 +1161,7 @@ def audio_nuova():
                 tipo_sorgente="youtube",
                 youtube_id=request.form["youtube_id"],
                 timestamp_inizio=int(request.form.get("timestamp_inizio") or 0),
-                note=request.form.get("note") or None,
+                note=db.testo_o_null(request.form.get("note")),
                 location_id=request.form.get("location_id") or None,
                 quest_id=request.form.get("quest_id") or None,
             )
@@ -1189,7 +1196,7 @@ def audio_modifica(traccia_id):
         campi = dict(
             nome=request.form["nome"],
             tipo_sorgente=tipo_sorgente,
-            note=request.form.get("note") or None,
+            note=db.testo_o_null(request.form.get("note")),
             location_id=_int_or_none(request.form.get("location_id")),
             quest_id=_int_or_none(request.form.get("quest_id")),
         )
