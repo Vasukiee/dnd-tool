@@ -432,7 +432,9 @@ def sfondo_location(location_id):
     data, mime = risultato
     resp = Response(data, mimetype=mime or "application/octet-stream")
     resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-    return resp
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.add_etag()
+    return resp.make_conditional(request)
 
 
 @bp.route("/<int:indagine_id>/scene/<int:numero_scena>/sfondo")
@@ -448,7 +450,9 @@ def indagini_scena_sfondo(indagine_id, numero_scena):
     data, mime = risultato
     resp = Response(data, mimetype=mime or "application/octet-stream")
     resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-    return resp
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.add_etag()
+    return resp.make_conditional(request)
 
 
 @bp.route("/<int:indagine_id>/nodi/nuovo", methods=["POST"])
@@ -747,6 +751,20 @@ def indagini_player(indagine_id):
 
 @bp.route("/<int:indagine_id>/stato-player")
 def indagini_stato_player(indagine_id):
+    return _json_con_etag(_stato_player(indagine_id))
+
+
+def _json_con_etag(risposta):
+    """Risposta JSON con ETag sul contenuto: se non è cambiato niente il
+    client riceve un 304 senza corpo (e la pagina non ridisegna nulla)."""
+    if isinstance(risposta, tuple):
+        return risposta
+    resp = risposta
+    resp.add_etag()
+    return resp.make_conditional(request)
+
+
+def _stato_player(indagine_id):
     """API JSON leggera per il polling della player view.
     Ritorna solo gli ID dei nodi scoperti e la scena corrente."""
     indagine = db.get_indagine(indagine_id)

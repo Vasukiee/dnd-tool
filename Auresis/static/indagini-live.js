@@ -984,12 +984,16 @@
     };
 
     let livePollingAttivo = true;
+    let ultimoStatoLiveTesto = null;
     async function pollLiveState() {
-        if (!livePollingAttivo) return;
+        if (!livePollingAttivo || document.hidden) return;
         try {
             const resp = await fetch(window.INDAGINI_LIVE_CONFIG.endpoints.statoLive);
             if (!resp.ok) return;
-            applicaStatoRemoto(await resp.json());
+            const testo = await resp.text();
+            if (testo === ultimoStatoLiveTesto) return;
+            ultimoStatoLiveTesto = testo;
+            applicaStatoRemoto(JSON.parse(testo));
         } catch (e) {
             console.warn("Polling live non riuscito:", e);
         }
