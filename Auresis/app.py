@@ -38,6 +38,15 @@ def _db_inizio_richiesta():
 def _db_fine_richiesta(_errore):
     db.richiesta_finisci()
 
+
+# Controlli di schema delle indagini una volta all'avvio di ogni worker, fuori
+# dalle richieste (vedi db.assicura_schema_indagini). Se il database non
+# risponde ora, si rifaranno al primo uso.
+try:
+    db.assicura_schema_indagini()
+except Exception as e:  # noqa: BLE001
+    print(f"ATTENZIONE: controllo schema indagini rimandato ({e})")
+
 # Ottimizza e minimizza automaticamente i file statici all'avvio
 ottimizza_e_minimizza_assets(app)
 

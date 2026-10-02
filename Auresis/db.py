@@ -2131,21 +2131,47 @@ def ricalcola_livello_sfx_singolo(nodo_id):
     conn.close()
 
 
+def _aggiungi_colonne_mancanti(colonne):
+    """Aggiunge le colonne [(tabella, colonna, definizione)] che mancano.
+
+    ALTER TABLE ... ADD COLUMN IF NOT EXISTS prende un lock esclusivo sulla
+    tabella anche quando la colonna c'è già: dentro una richiesta, che tiene
+    i lock di lettura fino alla fine, due processi che lo fanno insieme vanno
+    in deadlock. Quindi prima si guarda information_schema (nessun lock sulle
+    tabelle) e si altera solo ciò che manca davvero. In quel caso la
+    transazione di lettura in corso viene chiusa e ogni ALTER va in una
+    transazione sua: chi aspetta un solo lock non può chiudere un ciclo."""
+    conn = get_connection()
+    cur = conn.cursor()
+    tabelle = sorted({t for t, _, _ in colonne})
+    cur.execute(
+        """SELECT table_name, column_name FROM information_schema.columns
+           WHERE table_schema = current_schema() AND table_name = ANY(%s)""",
+        (tabelle,),
+    )
+    presenti = {(r[0], r[1]) for r in cur.fetchall()}
+    mancanti = [(t, c, d) for t, c, d in colonne if (t, c) not in presenti]
+    if mancanti:
+        conn.commit()
+        for tabella, colonna, definizione in mancanti:
+            cur.execute(f"ALTER TABLE {tabella} ADD COLUMN IF NOT EXISTS {colonna} {definizione}")
+            conn.commit()
+    cur.close()
+    conn.close()
+
+
 def assicura_colonne_punti_interesse(force=False):
     """Aggiunge le colonne della lista "Da esaminare" sui database creati prima
     della funzione (sono anche in schema_postgres.sql). Cacheato per processo."""
     global _punto_interesse_assicurato
     if (_punto_interesse_assicurato and not force) or is_sqlite():
         return
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("ALTER TABLE nodi_indagine ADD COLUMN IF NOT EXISTS punto_interesse TEXT")
-    cur.execute("ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS punti_extra TEXT")
-    cur.execute("ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS punti_extra_esaminati TEXT")
-    cur.execute("ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS liste_mostrate TEXT")
-    conn.commit()
-    cur.close()
-    conn.close()
+    _aggiungi_colonne_mancanti([
+        ("nodi_indagine", "punto_interesse", "TEXT"),
+        ("scene_indagine", "punti_extra", "TEXT"),
+        ("cronologie_indagine", "punti_extra_esaminati", "TEXT"),
+        ("cronologie_indagine", "liste_mostrate", "TEXT"),
+    ])
     _punto_interesse_assicurato = True
 
 
@@ -2155,15 +2181,12 @@ def assicura_colonne_lavagna(force=False):
     global _lavagna_assicurata
     if (_lavagna_assicurata and not force) or is_sqlite():
         return
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS lavagna BOOLEAN NOT NULL DEFAULT FALSE")
-    cur.execute("ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna TEXT")
-    cur.execute("ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna_versione INTEGER NOT NULL DEFAULT 0")
-    cur.execute("ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna_aperta BOOLEAN NOT NULL DEFAULT FALSE")
-    conn.commit()
-    cur.close()
-    conn.close()
+    _aggiungi_colonne_mancanti([
+        ("scene_indagine", "lavagna", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("cronologie_indagine", "lavagna", "TEXT"),
+        ("cronologie_indagine", "lavagna_versione", "INTEGER NOT NULL DEFAULT 0"),
+        ("cronologie_indagine", "lavagna_aperta", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ])
     _lavagna_assicurata = True
 
 
@@ -2674,16 +2697,22 @@ def assicura_colonne_orologio(force=False):
     global _orologio_assicurato
     if (_orologio_assicurato and not force) or is_sqlite():
         return
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio BOOLEAN NOT NULL DEFAULT FALSE")
-    cur.execute("ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio_soglia INTEGER")
-    cur.execute("ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio_sirena BOOLEAN NOT NULL DEFAULT FALSE")
-    cur.execute("ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS orologio_offset TEXT")
-    conn.commit()
-    cur.close()
-    conn.close()
+    _aggiungi_colonne_mancanti([
+        ("scene_indagine", "orologio", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("scene_indagine", "orologio_soglia", "INTEGER"),
+        ("scene_indagine", "orologio_sirena", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("cronologie_indagine", "orologio_offset", "TEXT"),
+    ])
     _orologio_assicurato = True
+
+
+def assicura_schema_indagini():
+    """Controlli di schema delle indagini, da fare all'avvio del processo
+    (fuori dalle richieste): così il primo polling non li paga e non possono
+    incrociarsi con le transazioni delle richieste."""
+    assicura_colonne_punti_interesse()
+    assicura_colonne_lavagna()
+    assicura_colonne_orologio()
 
 
 def get_orologio_scena(indagine_id, numero_scena):
