@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import sqlite3
+import time
 
 import psycopg2
 import psycopg2.extras
@@ -26,6 +27,10 @@ def get_storage_mode():
     return "disk" if is_sqlite() else "db"
 
 _pg_pool = None
+# Quando ogni connessione è tornata al pool: id(conn) -> time.monotonic().
+# Una connessione usata da poco è sicuramente viva e non serve il SELECT 1.
+_ultimo_uso_conn = {}
+_PING_DOPO_INATTIVITA_S = 20
 _indici_performance_assicurati = False
 _quest_locations_assicurata = False
 _punto_interesse_assicurato = False
@@ -48,6 +53,7 @@ class _ConnessioneDalPool:
     def close(self):
         if not self._restituita:
             self._restituita = True
+            _ultimo_uso_conn[id(self._conn)] = time.monotonic()
             self._pool.putconn(self._conn)
 
     def __getattr__(self, name):
@@ -55,18 +61,27 @@ class _ConnessioneDalPool:
 
 
 def _get_pg_connection():
-    """Preleva una connessione dal pool, scartando quelle morte (pre-ping)."""
+    """Preleva una connessione dal pool, scartando quelle morte.
+
+    Il controllo con SELECT 1 costa un viaggio al database a ogni prelievo,
+    quindi si fa solo se la connessione è rimasta ferma più di
+    _PING_DOPO_INATTIVITA_S secondi (il server può averla chiusa per idle)."""
     global _pg_pool
     if _pg_pool is None:
         _pg_pool = psycopg2.pool.ThreadedConnectionPool(1, 5, DATABASE_URL)
     for _ in range(2):
         conn = _pg_pool.getconn()
         try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1")
+            if conn.closed:
+                raise psycopg2.InterfaceError("connessione chiusa")
+            ultimo = _ultimo_uso_conn.get(id(conn))
+            if ultimo is None or time.monotonic() - ultimo > _PING_DOPO_INATTIVITA_S:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
             return _ConnessioneDalPool(conn, _pg_pool)
         except psycopg2.Error:
             # connessione chiusa lato server (idle timeout): la scartiamo e riproviamo
+            _ultimo_uso_conn.pop(id(conn), None)
             _pg_pool.putconn(conn, close=True)
     return _ConnessioneDalPool(_pg_pool.getconn(), _pg_pool)
 
