@@ -78,3 +78,14 @@ python3 aggiorna_sessione.py  # menu per registrare eventi/NPC/quest dopo aver g
 
 - **La dashboard non si apre**: verifica che il terminale mostri `Running on http://127.0.0.1:5000`. Se stai usando Supabase in cloud e ti dà errore di connessione, verifica che la variabile `DATABASE_URL` nel `.env` sia corretta.
 - **Una pagina dà errore**: il messaggio nel terminale di solito indica la riga esatta in cui l'app si è bloccata.
+
+
+## Deploy su Render (free)
+
+Start command (`Auresis/` come root directory), con la durata di ogni richiesta nel log (`%(D)s`, in microsecondi):
+
+```bash
+gunicorn app:app --workers 2 --threads 4 --timeout 60 --access-logformat '%(h)s "%(r)s" %(s)s %(b)s %(D)sus'
+```
+
+Note di performance: la vista giocatrice ridisegna solo quando `stato-player` cambia (ETag + confronto del contenuto), gli sfondi caricati vengono ridimensionati a max 1920px e salvati in WebP (le GIF animate diventano statiche) e le route sfondo servono `Cache-Control` + `ETag`.
