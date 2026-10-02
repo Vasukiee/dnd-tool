@@ -1,6 +1,8 @@
 import json
 import math
 import re
+import threading
+import time
 from datetime import datetime
 
 import db
@@ -9,6 +11,38 @@ from flask import Blueprint, abort, flash, jsonify, redirect, render_template, r
     Response
 
 bp = Blueprint("indagini", __name__, url_prefix="/indagini")
+
+# Cache brevissima (per processo) delle risposte di polling: con più schede
+# aperte sulla stessa indagine, lo stato si calcola una volta al secondo
+# invece che a ogni richiesta. Le scritture (POST) la svuotano per intero.
+_CACHE_POLLING_TTL_S = 1.0
+_cache_polling = {}
+_cache_polling_lock = threading.Lock()
+
+
+def _polling_in_cache(chiave, calcola):
+    """Ritorna una Response JSON fresca di al massimo _CACHE_POLLING_TTL_S.
+    `calcola()` produce la risposta (Response o tupla (Response, status))."""
+    ora = time.monotonic()
+    with _cache_polling_lock:
+        voce = _cache_polling.get(chiave)
+    if voce and ora - voce[0] < _CACHE_POLLING_TTL_S:
+        corpo, status = voce[1], voce[2]
+    else:
+        risposta = calcola()
+        resp, status = risposta if isinstance(risposta, tuple) else (risposta, risposta.status_code)
+        corpo = resp.get_data()
+        with _cache_polling_lock:
+            _cache_polling[chiave] = (ora, corpo, status)
+    return Response(corpo, status=status, mimetype="application/json")
+
+
+@bp.after_request
+def _svuota_cache_polling_dopo_scrittura(resp):
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        with _cache_polling_lock:
+            _cache_polling.clear()
+    return resp
 
 
 def _json_per_script(obj):
@@ -570,6 +604,10 @@ def indagini_live(indagine_id):
 @bp.route("/<int:indagine_id>/stato-live")
 @richiedi_master
 def indagini_stato_live(indagine_id):
+    return _polling_in_cache(("live", indagine_id), lambda: _stato_live(indagine_id))
+
+
+def _stato_live(indagine_id):
     """API JSON per sincronizzare la vista live master con comandi esterni
     come copione, player controls e toggle sipario."""
     indagine = db.get_indagine(indagine_id)
@@ -751,13 +789,17 @@ def indagini_player(indagine_id):
 
 @bp.route("/<int:indagine_id>/stato-player")
 def indagini_stato_player(indagine_id):
-    return _json_con_etag(_stato_player(indagine_id))
+    # La risposta dipende da chi guarda (404 per le indagini nascoste)
+    chiave = ("player", indagine_id, vista_ristretta())
+    return _json_con_etag(_polling_in_cache(chiave, lambda: _stato_player(indagine_id)))
 
 
 def _json_con_etag(risposta):
     """Risposta JSON con ETag sul contenuto: se non è cambiato niente il
     client riceve un 304 senza corpo (e la pagina non ridisegna nulla)."""
     if isinstance(risposta, tuple):
+        return risposta
+    if risposta.status_code != 200:
         return risposta
     resp = risposta
     resp.add_etag()
