@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
 import time
 
 import psycopg2
@@ -38,6 +39,58 @@ _lavagna_assicurata = False
 _orologio_assicurato = False
 
 
+# --- Diagnostica dei tempi (solo con DEBUG_TIMING=1) -------------------------
+# Per ogni richiesta somma il tempo speso a prendere la connessione dal pool
+# e a eseguire le query, per distinguere database da CPU Python.
+TIMING_ATTIVO = os.environ.get("DEBUG_TIMING") == "1"
+_timing = threading.local()
+
+
+def timing_inizia():
+    _timing.query = 0
+    _timing.db_s = 0.0
+    _timing.pool_s = 0.0
+
+
+def timing_totali():
+    return (getattr(_timing, "query", 0), getattr(_timing, "db_s", 0.0),
+            getattr(_timing, "pool_s", 0.0))
+
+
+class _CursoreCronometrato:
+    """Delega al cursore vero e cronometra execute/executemany."""
+
+    def __init__(self, cur):
+        self._cur = cur
+
+    def _cronometra(self, metodo, *args, **kwargs):
+        t0 = time.perf_counter()
+        try:
+            return metodo(*args, **kwargs)
+        finally:
+            _timing.query = getattr(_timing, "query", 0) + 1
+            _timing.db_s = getattr(_timing, "db_s", 0.0) + (time.perf_counter() - t0)
+
+    def execute(self, *args, **kwargs):
+        return self._cronometra(self._cur.execute, *args, **kwargs)
+
+    def executemany(self, *args, **kwargs):
+        return self._cronometra(self._cur.executemany, *args, **kwargs)
+
+    def __enter__(self):
+        self._cur.__enter__()
+        return self
+
+    def __exit__(self, *exc):
+        return self._cur.__exit__(*exc)
+
+    def __iter__(self):
+        return iter(self._cur)
+
+    def __getattr__(self, name):
+        return getattr(self._cur, name)
+
+
 class _ConnessioneDalPool:
     """Proxy di una connessione Postgres: close() la restituisce al pool invece di chiuderla.
 
@@ -55,6 +108,10 @@ class _ConnessioneDalPool:
             self._restituita = True
             _ultimo_uso_conn[id(self._conn)] = time.monotonic()
             self._pool.putconn(self._conn)
+
+    def cursor(self, *args, **kwargs):
+        cur = self._conn.cursor(*args, **kwargs)
+        return _CursoreCronometrato(cur) if TIMING_ATTIVO else cur
 
     def __getattr__(self, name):
         return getattr(self._conn, name)
@@ -89,6 +146,12 @@ def _get_pg_connection():
 def get_connection():
     """Ritorna una connessione Postgres (dal pool) o SQLite a seconda della configurazione."""
     if not is_sqlite():
+        if TIMING_ATTIVO:
+            t0 = time.perf_counter()
+            try:
+                return _get_pg_connection()
+            finally:
+                _timing.pool_s = getattr(_timing, "pool_s", 0.0) + (time.perf_counter() - t0)
         return _get_pg_connection()
     else:
         db_path = os.path.join(os.path.dirname(__file__), "campagna.db")
