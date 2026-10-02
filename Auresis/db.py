@@ -9,6 +9,7 @@ import threading
 import time
 
 import psycopg2
+import psycopg2.extensions
 import psycopg2.extras
 import psycopg2.pool
 from dotenv import load_dotenv
@@ -28,10 +29,13 @@ def get_storage_mode():
     return "disk" if is_sqlite() else "db"
 
 _pg_pool = None
+_pg_pool_lock = threading.Lock()
 # Quando ogni connessione è tornata al pool: id(conn) -> time.monotonic().
 # Una connessione usata da poco è sicuramente viva e non serve il SELECT 1.
 _ultimo_uso_conn = {}
 _PING_DOPO_INATTIVITA_S = 20
+_POOL_MIN = 2
+_POOL_MAX = 5
 _indici_performance_assicurati = False
 _quest_locations_assicurata = False
 _punto_interesse_assicurato = False
@@ -117,15 +121,27 @@ class _ConnessioneDalPool:
         return getattr(self._conn, name)
 
 
-def _get_pg_connection():
-    """Preleva una connessione dal pool, scartando quelle morte.
+def _crea_pool():
+    # Il pool tiene da parte al massimo `minconn` connessioni libere: quelle in
+    # più, restituite, vengono chiuse e la volta dopo se ne apre una nuova
+    # (TCP + TLS + login verso Supabase, centinaia di ms). Con 1 bastava che due
+    # richieste si sovrapponessero per pagare una connessione nuova. 2 per
+    # worker coprono le sovrapposizioni normali senza avvicinarsi al limite di
+    # connessioni del pooler, anche durante un deploy (vecchia + nuova istanza).
+    return psycopg2.pool.ThreadedConnectionPool(_POOL_MIN, _POOL_MAX, DATABASE_URL)
+
+
+def _preleva_dal_pool():
+    """Preleva una connessione viva dal pool (connessione psycopg2 grezza).
 
     Il controllo con SELECT 1 costa un viaggio al database a ogni prelievo,
     quindi si fa solo se la connessione è rimasta ferma più di
     _PING_DOPO_INATTIVITA_S secondi (il server può averla chiusa per idle)."""
     global _pg_pool
     if _pg_pool is None:
-        _pg_pool = psycopg2.pool.ThreadedConnectionPool(1, 5, DATABASE_URL)
+        with _pg_pool_lock:
+            if _pg_pool is None:
+                _pg_pool = _crea_pool()
     for _ in range(2):
         conn = _pg_pool.getconn()
         try:
@@ -135,12 +151,81 @@ def _get_pg_connection():
             if ultimo is None or time.monotonic() - ultimo > _PING_DOPO_INATTIVITA_S:
                 with conn.cursor() as cur:
                     cur.execute("SELECT 1")
-            return _ConnessioneDalPool(conn, _pg_pool)
+            return conn
         except psycopg2.Error:
             # connessione chiusa lato server (idle timeout): la scartiamo e riproviamo
-            _ultimo_uso_conn.pop(id(conn), None)
-            _pg_pool.putconn(conn, close=True)
-    return _ConnessioneDalPool(_pg_pool.getconn(), _pg_pool)
+            _scarta_connessione(conn)
+    return _pg_pool.getconn()
+
+
+def _scarta_connessione(conn):
+    _ultimo_uso_conn.pop(id(conn), None)
+    _pg_pool.putconn(conn, close=True)
+
+
+def _restituisci_al_pool(conn):
+    """Rimette la connessione nel pool; putconn() annulla l'eventuale
+    transazione aperta. Se la connessione è rotta, la scarta."""
+    try:
+        _ultimo_uso_conn[id(conn)] = time.monotonic()
+        _pg_pool.putconn(conn)
+    except psycopg2.Error:
+        try:
+            _scarta_connessione(conn)
+        except Exception:
+            pass
+
+
+# --- Una connessione per richiesta HTTP --------------------------------------
+# Durante una richiesta tutte le funzioni di questo modulo usano la stessa
+# connessione: invece di prenderla e restituirla al pool (con un ROLLBACK, cioè
+# un viaggio al database) a ogni funzione, la si restituisce una volta sola
+# alla fine. app.py chiama richiesta_inizia()/richiesta_finisci(); fuori da una
+# richiesta (script, avvio) ogni funzione prende e restituisce la sua.
+_richiesta = threading.local()
+
+
+def richiesta_inizia():
+    richiesta_finisci()  # per sicurezza, se la richiesta precedente non ha chiuso
+    _richiesta.attiva = True
+
+
+def richiesta_finisci():
+    conn = getattr(_richiesta, "conn", None)
+    _richiesta.attiva = False
+    _richiesta.conn = None
+    if conn is not None:
+        _restituisci_al_pool(conn)
+
+
+class _ConnessioneDellaRichiesta(_ConnessioneDalPool):
+    """Proxy della connessione condivisa dalla richiesta: close() non la
+    restituisce al pool (lo fa richiesta_finisci). Se una query è fallita, la
+    transazione viene annullata, così le funzioni successive partono pulite;
+    commit() e rollback() funzionano come sempre."""
+
+    def __init__(self, conn):
+        super().__init__(conn, None)
+
+    def close(self):
+        if self._conn.closed:
+            return
+        if self._conn.get_transaction_status() == psycopg2.extensions.TRANSACTION_STATUS_INERROR:
+            self._conn.rollback()
+
+
+def _get_pg_connection():
+    if not getattr(_richiesta, "attiva", False):
+        return _ConnessioneDalPool(_preleva_dal_pool(), _pg_pool)
+    conn = _richiesta.conn
+    if conn is not None and conn.closed:
+        _scarta_connessione(conn)
+        conn = _richiesta.conn = None
+    if conn is None:
+        conn = _richiesta.conn = _preleva_dal_pool()
+    elif conn.get_transaction_status() == psycopg2.extensions.TRANSACTION_STATUS_INERROR:
+        conn.rollback()
+    return _ConnessioneDellaRichiesta(conn)
 
 
 def get_connection():
@@ -2214,6 +2299,36 @@ def get_cronologia_attiva(indagine_id):
     return dict(row) if row else None
 
 
+def get_nodi_con_stato(indagine_id, cronologia_id):
+    """(nodi, stati) in una sola query: nodi come get_nodi_indagine, stati
+    come get_stato_nodi_cronologia (solo per i nodi dell'indagine)."""
+    if cronologia_id is None:
+        return get_nodi_indagine(indagine_id), {}
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        """SELECT n.*, s.nodo_id AS stato__nodo_id, s.scoperto AS stato__scoperto,
+                  s.sbloccato_manualmente AS stato__sbloccato_manualmente
+           FROM nodi_indagine n
+           LEFT JOIN stato_nodi_cronologia s ON s.nodo_id = n.id AND s.cronologia_id = %s
+           WHERE n.indagine_id = %s
+           ORDER BY n.numero_nodo""",
+        (cronologia_id, indagine_id),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    nodi, stati = [], {}
+    for row in _dictify(rows):
+        nodo_stato = row.pop("stato__nodo_id")
+        scoperto = row.pop("stato__scoperto")
+        manuale = row.pop("stato__sbloccato_manualmente")
+        if nodo_stato is not None:
+            stati[nodo_stato] = {"scoperto": scoperto, "sbloccato_manualmente": manuale}
+        nodi.append(row)
+    return nodi, stati
+
+
 def get_stato_nodi_cronologia(cronologia_id):
     """Ritorna {nodo_id: {scoperto, sbloccato_manualmente}} per la cronologia."""
     conn = get_connection()
@@ -2345,15 +2460,16 @@ def get_scene_gifs(indagine_id):
     rows = cur.fetchall()
     cur.close()
     conn.close()
+    return {row["numero_scena"]: _info_gif_scena(row) for row in rows}
+
+
+def _info_gif_scena(row):
     return {
-        row["numero_scena"]: {
-            "gif_url": row["gif_url"],
-            "location_id": row["location_id"],
-            "lavagna": bool(row["lavagna"]),
-            "has_file": row["has_file"],
-            "versione": row["versione"],
-        }
-        for row in rows
+        "gif_url": row["gif_url"],
+        "location_id": row["location_id"],
+        "lavagna": bool(row["lavagna"]),
+        "has_file": row["has_file"],
+        "versione": row["versione"],
     }
 
 
@@ -2426,10 +2542,14 @@ def get_punti_extra(indagine_id):
     conn.close()
     out = {}
     for row in rows:
-        voci = [r.strip() for r in row["punti_extra"].splitlines() if r.strip()]
+        voci = _voci_punti_extra(row["punti_extra"])
         if voci:
             out[row["numero_scena"]] = voci
     return out
+
+
+def _voci_punti_extra(testo):
+    return [r.strip() for r in (testo or "").splitlines() if r.strip()]
 
 
 def set_punti_extra_scena(indagine_id, numero_scena, testo):
@@ -2581,7 +2701,11 @@ def get_orologio_scena(indagine_id, numero_scena):
     conn.close()
     if not row:
         return False, None, False
-    return bool(row[0]), row[1], bool(row[2])
+    return _info_orologio(row[0], row[1], row[2])
+
+
+def _info_orologio(abilitato, soglia, sirena):
+    return bool(abilitato), soglia, bool(sirena)
 
 
 def get_orologi_scene(indagine_id):
@@ -2689,15 +2813,11 @@ def modifica_lavagna(cronologia_id, applica):
     return versione, nuovo
 
 
-def get_sfondi_ereditati(indagine_id):
-    """Per ogni scena collegata a un luogo, lo sfondo del luogo più vicino
-    risalendo location_padre_id. {numero_scena: {location_id, location_nome,
-    url, has_file, versione}}. Non considera l'immagine propria della scena:
-    la precedenza la decide il chiamante."""
-    conn = get_connection()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute(
-        f"""WITH RECURSIVE catena AS (
+def _sql_cte_sfondi_ereditati():
+    """CTE (catena, candidati) dello sfondo ereditato dal luogo di ogni scena:
+    candidati con rn = 1 è il luogo più vicino, risalendo location_padre_id,
+    che ha uno sfondo. Usa un parametro: l'id dell'indagine."""
+    return f"""WITH RECURSIVE catena AS (
                SELECT s.numero_scena, l.id AS loc_id, l.location_padre_id, 0 AS prof
                FROM scene_indagine s JOIN locations l ON l.id = s.location_id
                WHERE s.indagine_id = %s
@@ -2715,7 +2835,18 @@ def get_sfondi_ereditati(indagine_id):
                JOIN sfondi_location sl ON sl.location_id = c.loc_id
                JOIN locations l ON l.id = c.loc_id
                WHERE sl.data IS NOT NULL OR sl.url IS NOT NULL
-           )
+           )"""
+
+
+def get_sfondi_ereditati(indagine_id):
+    """Per ogni scena collegata a un luogo, lo sfondo del luogo più vicino
+    risalendo location_padre_id. {numero_scena: {location_id, location_nome,
+    url, has_file, versione}}. Non considera l'immagine propria della scena:
+    la precedenza la decide il chiamante."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        _sql_cte_sfondi_ereditati() + """
            SELECT numero_scena, location_id, location_nome, url, has_file, versione
            FROM candidati WHERE rn = 1 ORDER BY numero_scena""",
         (indagine_id,),
@@ -2725,6 +2856,57 @@ def get_sfondi_ereditati(indagine_id):
     conn.close()
     return {row["numero_scena"]: dict(row) for row in rows}
 
+
+def get_scene_info(indagine_id, con_sfondi=False):
+    """Tutto ciò che serve ai polling sulle scene di un'indagine, in una sola
+    query invece di quattro. Ritorna un dict con le stesse forme delle funzioni
+    singole: "scene_gifs" (get_scene_gifs), "punti_extra" (get_punti_extra),
+    "orologi" ({numero_scena: get_orologio_scena}) e, con con_sfondi,
+    "sfondi_ereditati" (get_sfondi_ereditati)."""
+    assicura_colonne_lavagna()
+    assicura_colonne_punti_interesse()
+    assicura_colonne_orologio()
+    colonne = f"""s.numero_scena, s.gif_url, s.location_id, s.lavagna,
+                  (s.gif_data IS NOT NULL) AS has_file,
+                  {_sql_epoch("s.gif_data_aggiornata")} AS versione,
+                  s.punti_extra, s.orologio, s.orologio_soglia, s.orologio_sirena"""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    if con_sfondi:
+        cur.execute(
+            _sql_cte_sfondi_ereditati() + f"""
+               SELECT {colonne},
+                      c.location_id AS er_location_id, c.location_nome AS er_location_nome,
+                      c.url AS er_url, c.has_file AS er_has_file, c.versione AS er_versione
+               FROM scene_indagine s
+               LEFT JOIN candidati c ON c.numero_scena = s.numero_scena AND c.rn = 1
+               WHERE s.indagine_id = %s""",
+            (indagine_id, indagine_id),
+        )
+    else:
+        cur.execute(f"SELECT {colonne} FROM scene_indagine s WHERE s.indagine_id = %s", (indagine_id,))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    out = {"scene_gifs": {}, "punti_extra": {}, "orologi": {}, "sfondi_ereditati": {}}
+    for row in rows:
+        numero = row["numero_scena"]
+        out["scene_gifs"][numero] = _info_gif_scena(row)
+        voci = _voci_punti_extra(row["punti_extra"])
+        if voci:
+            out["punti_extra"][numero] = voci
+        out["orologi"][numero] = _info_orologio(row["orologio"], row["orologio_soglia"], row["orologio_sirena"])
+        if con_sfondi and row["er_location_id"] is not None:
+            out["sfondi_ereditati"][numero] = {
+                "numero_scena": numero,
+                "location_id": row["er_location_id"],
+                "location_nome": row["er_location_nome"],
+                "url": row["er_url"],
+                "has_file": row["er_has_file"],
+                "versione": row["er_versione"],
+            }
+    out["sfondi_ereditati"] = dict(sorted(out["sfondi_ereditati"].items()))
+    return out
 
 def save_sfondo_location(location_id, url=None, data=None, mime=None):
     """Salva lo sfondo di un luogo: URL esterno oppure byte nel DB, alternativi."""
