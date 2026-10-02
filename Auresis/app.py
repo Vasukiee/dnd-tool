@@ -26,6 +26,18 @@ app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 31536000
 # testo del campo e, al salvataggio, la stringa 'None' nel DB.
 app.jinja_env.finalize = lambda valore: "" if valore is None else valore
 
+
+# Una sola connessione al database per richiesta (vedi db.richiesta_inizia):
+# registrato per primo, così vale anche per gli altri hook.
+@app.before_request
+def _db_inizio_richiesta():
+    db.richiesta_inizia()
+
+
+@app.teardown_request
+def _db_fine_richiesta(_errore):
+    db.richiesta_finisci()
+
 # Ottimizza e minimizza automaticamente i file statici all'avvio
 ottimizza_e_minimizza_assets(app)
 

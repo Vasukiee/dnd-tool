@@ -166,13 +166,15 @@ def _lista_mostrata(cronologia, scena):
     return bool(mostrate) and scena in json.loads(mostrate)
 
 
-def _punti_interesse_indagine(indagine_id, nodi, stati_sblocco, cronologia, scena_corrente, per_master=False):
+def _punti_interesse_indagine(indagine_id, nodi, stati_sblocco, cronologia, scena_corrente, per_master=False,
+                              scene=None):
+    """`scene` (facoltativo) è db.get_scene_info(): evita di rileggere le scene."""
     if not per_master and not _lista_mostrata(cronologia, scena_corrente):
         return []
     esaminati = cronologia.get("punti_extra_esaminati") if cronologia else None
     return _punti_interesse(
         nodi, stati_sblocco, scena_corrente,
-        db.get_punti_extra(indagine_id),
+        scene["punti_extra"] if scene else db.get_punti_extra(indagine_id),
         set(json.loads(esaminati)) if esaminati else set(),
         per_master=per_master,
     )
@@ -199,28 +201,31 @@ def _tacche_orologio(nodi, stati_sblocco, scena, punti_extra, extra_esaminati):
     return len(esaminati)
 
 
-def _orologio(indagine_id, nodi, stati_sblocco, cronologia, scena):
+def _orologio(indagine_id, nodi, stati_sblocco, cronologia, scena, scene=None):
     """Stato dell'orologio della scena, o None se la scena non lo prevede.
     {"tacche", "soglia", "base", "sirena"}: base sono le tacche contate dalla
     cronologia, tacche includono la correzione manuale del master; sirena dice
     se passata la soglia parte da sola la sirena. Va anche alla player view,
     ma solo per la scena in corso: quali altre scene abbiano l'orologio
-    anticiperebbe il copione."""
-    abilitato, soglia, sirena = db.get_orologio_scena(indagine_id, scena)
+    anticiperebbe il copione. `scene` (facoltativo) è db.get_scene_info()."""
+    if scene:
+        abilitato, soglia, sirena = scene["orologi"].get(scena, (False, None, False))
+    else:
+        abilitato, soglia, sirena = db.get_orologio_scena(indagine_id, scena)
     if not abilitato:
         return None
     esaminati = cronologia.get("punti_extra_esaminati") if cronologia else None
     base = _tacche_orologio(
-        nodi, stati_sblocco, scena, db.get_punti_extra(indagine_id),
+        nodi, stati_sblocco, scena, scene["punti_extra"] if scene else db.get_punti_extra(indagine_id),
         set(json.loads(esaminati)) if esaminati else set())
     tacche = max(0, base + db.get_orologio_offset(cronologia, scena))
     return {"tacche": tacche, "soglia": soglia, "base": base, "sirena": sirena}
 
 
-def _orologio_player(*args):
+def _orologio_player(*args, **kwargs):
     """Per la giocatrice la sirena compare solo una volta passata la soglia:
     prima, il sorgente della pagina non deve dire che qualcosa sta per suonare."""
-    stato = _orologio(*args)
+    stato = _orologio(*args, **kwargs)
     if not stato:
         return None
     oltre = bool(stato["soglia"]) and stato["tacche"] > stato["soglia"]
@@ -236,10 +241,12 @@ def _merge_sblocco_in_nodi(nodi, stati_sblocco):
     return nodi
 
 
-def _scene_gifs_dirette(indagine_id):
+def _scene_gifs_dirette(indagine_id, scene_gifs=None):
     """Solo le immagini impostate sulla scena stessa (per i campi dell'editor)."""
     out = {}
-    for numero, info in db.get_scene_gifs(indagine_id).items():
+    if scene_gifs is None:
+        scene_gifs = db.get_scene_gifs(indagine_id)
+    for numero, info in scene_gifs.items():
         if info["has_file"]:
             out[numero] = url_for(
                 ".indagini_scena_sfondo",
@@ -252,11 +259,13 @@ def _scene_gifs_dirette(indagine_id):
     return out
 
 
-def _scene_gifs_ereditate(indagine_id):
+def _scene_gifs_ereditate(indagine_id, sfondi=None):
     """Sfondi ereditati dal luogo della scena (o dal primo antenato che ne ha uno).
     {numero_scena: (url, nome_luogo)}"""
     out = {}
-    for numero, info in db.get_sfondi_ereditati(indagine_id).items():
+    if sfondi is None:
+        sfondi = db.get_sfondi_ereditati(indagine_id)
+    for numero, info in sfondi.items():
         if info["has_file"]:
             url = url_for("indagini.sfondo_location", location_id=info["location_id"], v=info["versione"])
         else:
@@ -265,11 +274,13 @@ def _scene_gifs_ereditate(indagine_id):
     return out
 
 
-def _scene_gifs_display(indagine_id):
+def _scene_gifs_display(indagine_id, scene=None):
     """Sfondo effettivo per scena: immagine propria, altrimenti quella del luogo.
-    Le scene senza nessuno dei due cadono sullo sfondo di default lato client."""
-    out = {n: url for n, (url, _) in _scene_gifs_ereditate(indagine_id).items()}
-    out.update(_scene_gifs_dirette(indagine_id))
+    Le scene senza nessuno dei due cadono sullo sfondo di default lato client.
+    `scene` (facoltativo) è db.get_scene_info(indagine_id, con_sfondi=True)."""
+    ereditate = _scene_gifs_ereditate(indagine_id, scene["sfondi_ereditati"] if scene else None)
+    out = {n: url for n, (url, _) in ereditate.items()}
+    out.update(_scene_gifs_dirette(indagine_id, scene["scene_gifs"] if scene else None))
     return out
 
 
@@ -613,10 +624,11 @@ def _stato_live(indagine_id):
     indagine = db.get_indagine(indagine_id)
     if not indagine:
         return jsonify({"error": "non trovata"}), 404
-    nodi = db.get_nodi_indagine(indagine_id)
-    collegamenti = db.get_collegamenti(indagine_id)
     cronologia_attiva = db.get_cronologia_attiva(indagine_id)
-    stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"]) if cronologia_attiva else {}
+    nodi, stati_sblocco = db.get_nodi_con_stato(
+        indagine_id, cronologia_attiva["id"] if cronologia_attiva else None)
+    collegamenti = db.get_collegamenti(indagine_id)
+    scene = db.get_scene_info(indagine_id)
     scena_corrente_val = _scena_corrente_effettiva(nodi, cronologia_attiva)
     stati = _calcola_stati_nodi(nodi, collegamenti, stati_sblocco, scena_corrente=scena_corrente_val)
     return jsonify({
@@ -625,9 +637,11 @@ def _stato_live(indagine_id):
         "sipario_aperto": cronologia_attiva.get("sipario_aperto", False) if cronologia_attiva else False,
         "stati": stati,
         "punti_interesse": _punti_interesse_indagine(
-            indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val, per_master=True),
+            indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val, per_master=True,
+            scene=scene),
         "lista_mostrata": _lista_mostrata(cronologia_attiva, scena_corrente_val),
-        "orologio": _orologio(indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val),
+        "orologio": _orologio(indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val,
+                              scene=scene),
     })
 
 
@@ -825,14 +839,15 @@ def _stato_player(indagine_id):
             "orologio": _orologio_player(indagine_id, nodi, {}, None, prima_scena),
             "lavagna": _lavagna_player(None, []),
         })
-    stati_sblocco = db.get_stato_nodi_cronologia(cronologia_attiva["id"])
+    nodi, stati_sblocco = db.get_nodi_con_stato(indagine_id, cronologia_attiva["id"])
+    scene = db.get_scene_info(indagine_id, con_sfondi=True)
     scoperti_ids = [nodo_id for nodo_id, stato in stati_sblocco.items() if stato.get("scoperto")]
-    scene_gifs = _scene_gifs_display(indagine_id)
+    scene_gifs = _scene_gifs_display(indagine_id, scene)
     scene_gifs_str = {str(k): v for k, v in scene_gifs.items()}
     # La pagina player riceve al primo caricamento solo stub dei nodi non
     # scoperti: qui alleghiamo i dati completi dei nodi ormai scoperti, così
     # il frontend può renderizzare quelli rivelati durante la sessione.
-    nodi = _merge_sblocco_in_nodi(db.get_nodi_indagine(indagine_id), stati_sblocco)
+    nodi = _merge_sblocco_in_nodi(nodi, stati_sblocco)
     nodi_scoperti = [n for n in nodi if n.get("scoperto")]
     scena_corrente_val = _scena_corrente_effettiva(nodi, cronologia_attiva)
     return jsonify({
@@ -842,8 +857,9 @@ def _stato_player(indagine_id):
         "nodi": nodi_scoperti,
         "scene_gifs": scene_gifs_str,
         "punti_interesse": _punti_interesse_indagine(
-            indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val),
-        "orologio": _orologio_player(indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val),
+            indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val, scene=scene),
+        "orologio": _orologio_player(indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val,
+                                     scene=scene),
         "lavagna": _lavagna_player(cronologia_attiva, scoperti_ids),
     })
 
