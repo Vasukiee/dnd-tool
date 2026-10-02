@@ -630,8 +630,8 @@
 
 <script defer src="{{ url_for('static', filename='site-motion-loader.js') }}"></script>
 
-<!-- heartbeat: keeps Render free-tier instance warm while the tab is visible -->
-<script defer src="{{ url_for('static', filename='heartbeat.js') }}"></script>
+{# heartbeat (keep-alive Render): solo le pagine che lo richiedono, via block heartbeat #}
+{% block heartbeat %}{% endblock %}
 <script defer src="{{ url_for('static', filename='textarea-resize.js') }}"></script>
 <script>
     (function () {

@@ -548,6 +548,11 @@
 </style>
 {% endblock %}
 
+{% block heartbeat %}
+<!-- heartbeat: tiene sveglia l'istanza Render free finché la pagina del copione è visibile -->
+<script defer src="{{ url_for('static', filename='heartbeat.js') }}"></script>
+{% endblock %}
+
 {% block content %}
 
 {% set numeri = sessioni | map(attribute='numero') | list %}
