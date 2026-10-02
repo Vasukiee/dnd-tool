@@ -957,6 +957,42 @@ def get_all_tracce_audio(tag=None):
     return result
 
 
+def _regex_ilike(pattern):
+    """Regex Python equivalente a `ILIKE pattern` di Postgres: % qualsiasi
+    sequenza, _ un carattere, \\ protegge il carattere dopo; senza maiuscole."""
+    parti, i = [], 0
+    while i < len(pattern):
+        c = pattern[i]
+        if c == "\\" and i + 1 < len(pattern):
+            parti.append(re.escape(pattern[i + 1]))
+            i += 2
+            continue
+        parti.append(".*" if c == "%" else "." if c == "_" else re.escape(c))
+        i += 1
+    return re.compile("".join(parti), re.IGNORECASE | re.DOTALL)
+
+
+def get_tracce_audio_by_nomi(nomi):
+    """{nome: traccia o None} per più nomi in una sola query, con la stessa
+    ricerca di get_traccia_audio_by_nome (ILIKE, prima traccia trovata)."""
+    nomi = list(dict.fromkeys(nomi))
+    if not nomi:
+        return {}
+    if is_sqlite():
+        return {n: get_traccia_audio_by_nome(n) for n in nomi}
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM tracce_audio WHERE nome ILIKE ANY(%s) ORDER BY id", (nomi,))
+    righe = _dictify(cur.fetchall())
+    cur.close()
+    conn.close()
+    out = {}
+    for nome in nomi:
+        rx = _regex_ilike(nome)
+        out[nome] = next((r for r in righe if rx.fullmatch(r["nome"] or "")), None)
+    return out
+
+
 def get_traccia_audio_by_nome(nome):
     """Cerca una traccia audio per nome (case-insensitive) per l'integrazione nei copioni."""
     conn = get_connection()
@@ -1823,6 +1859,18 @@ def set_sessione_completata(numero_sessione, completata):
     conn.commit()
     cur.close()
     conn.close()
+
+
+def get_sessioni_testi_db():
+    """{numero_sessione: testo_md} di tutte le sessioni salvate nel DB, in una
+    sola query (prima: una per l'elenco più una per ogni sessione)."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT numero_sessione, testo_md FROM sessioni_copioni WHERE testo_md IS NOT NULL")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {r[0]: r[1] for r in rows}
 
 
 def get_sessione_testo(numero_sessione):

@@ -48,9 +48,7 @@ def elenca_sessioni():
 
     # 1. Carica le sessioni dal database (se in modalità db)
     if db.get_storage_mode() == "db":
-        sessioni_db = db.get_all_sessioni_db()
-        for numero in sessioni_db:
-            testo_db = db.get_sessione_testo(numero)
+        for numero, testo_db in db.get_sessioni_testi_db().items():
             titolo_db = _estrai_titolo(testo_db) if testo_db else None
             sessioni[numero] = {"titolo": titolo_db, "files": [], "in_db": True}
 
@@ -152,12 +150,14 @@ def _processa_audio_tags(testo_md):
     """Cerca tag testuali tipo @audio: Nome Traccia e li sostituisce
     con pulsanti interattivi. Pesca i dati interrogando il db audio."""
     pattern = re.compile(r"@audio:\s*([^\n]+)")
-    
+    # Tutte le tracce del copione con una sola query, non una per tag
+    tracce = db.get_tracce_audio_by_nomi([m.group(1).strip() for m in pattern.finditer(testo_md)])
+
     def sostituisci(m):
         # escaping come in _processa_immagini: nome e campi della traccia
         # finiscono dentro attributi/testo HTML e non devono poterli rompere
         nome_traccia = escape(m.group(1).strip())
-        traccia = db.get_traccia_audio_by_nome(m.group(1).strip())
+        traccia = tracce.get(m.group(1).strip())
         if traccia:
             traccia_id = traccia['id']
             tipo = escape(traccia['tipo_sorgente'])
@@ -315,7 +315,7 @@ def _proteggi_blocchi_master_e_personaggi(testo_md):
     return pattern.sub(sostituisci, testo_md)
 
 
-def renderizza_sessione(numero_sessione):
+def renderizza_sessione(numero_sessione, sessioni=None):
     """Legge e concatena tutti i file di una sessione, applica il
     riconoscimento Master/personaggio, converte in HTML, ed estrae la
     lista degli heading H2 (per l'indice di navigazione laterale).
@@ -331,8 +331,11 @@ def renderizza_sessione(numero_sessione):
     quando mescola HTML raw con il parsing dei titoli. Per questo motivo
     estraiamo gli heading H2 parsando direttamente l'HTML già generato con
     BeautifulSoup, invece di fidarci di toc_tokens.
+
+    `sessioni` (facoltativo) è elenca_sessioni() già calcolato dal chiamante.
     """
-    sessioni = elenca_sessioni()
+    if sessioni is None:
+        sessioni = elenca_sessioni()
     info = next((s for s in sessioni if s["numero"] == numero_sessione), None)
     if info is None:
         return None, None, None
