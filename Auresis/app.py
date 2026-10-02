@@ -335,12 +335,12 @@ def copioni_dettaglio(numero_sessione):
         flash("Questa sessione non è ancora disponibile.")
         return redirect(url_for("copioni_indice"))
 
-    titolo, html, heading_list = copioni.renderizza_sessione(numero_sessione)
+    sessioni = copioni.elenca_sessioni()
+    titolo, html, heading_list = copioni.renderizza_sessione(numero_sessione, sessioni)
     if html is None:
         flash(f"Nessun copione trovato per la sessione {numero_sessione}.")
         return redirect(url_for("copioni_indice"))
 
-    sessioni = copioni.elenca_sessioni()
     return render_template(
         "copioni_dettaglio.html",
         active="copioni",
