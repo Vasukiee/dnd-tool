@@ -860,13 +860,19 @@
     // POLLING: aggiornamento automatico ogni 2 secondi
     // ----------------------------------------------------------------
     let pollingAttivo = true;
+    let ultimoStatoTesto = null;
 
     async function poll() {
-        if (!pollingAttivo) return;
+        if (!pollingAttivo || document.hidden) return;
         try {
             const resp = await fetch(window.INDAGINI_PLAYER_CONFIG.endpoints.statoPlayer);
             if (!resp.ok) return;
-            const data = await resp.json();
+            // Risposta identica alla precedente (anche un 304 servito dalla
+            // cache del browser): niente da ridisegnare.
+            const testo = await resp.text();
+            if (testo === ultimoStatoTesto) return;
+            ultimoStatoTesto = testo;
+            const data = JSON.parse(testo);
 
             // Il caricamento iniziale contiene solo stub dei nodi non scoperti
             // (il server non manda titoli/descrizioni non rivelati): i dati

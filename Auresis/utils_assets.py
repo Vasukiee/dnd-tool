@@ -61,3 +61,30 @@ def ottimizza_e_minimizza_assets(app):
                 f.write(minimized_content)
 
             print(f"[ASSETS] Minimizzato: {filename} -> {min_filename}")
+
+
+SFONDO_LATO_MAX = 1920
+
+
+def ottimizza_sfondo(data, mime, lato_max=SFONDO_LATO_MAX):
+    """Ridimensiona uno sfondo a `lato_max` px e lo restituisce come WebP
+    (o JPEG/WebP originale se già entro il limite). Le GIF animate diventano
+    immagini statiche (primo fotogramma). Ritorna (data, mime); se Pillow manca
+    o il file non è decodificabile, lascia i byte invariati."""
+    try:
+        import io
+        from PIL import Image
+        img = Image.open(io.BytesIO(data))
+        formato = (img.format or "").upper()
+        animata = getattr(img, "is_animated", False)
+        if formato in ("JPEG", "WEBP") and not animata and max(img.size) <= lato_max:
+            return data, mime
+        img.seek(0)
+        img = img.convert("RGBA" if "A" in img.getbands() or img.mode == "P" else "RGB")
+        img.thumbnail((lato_max, lato_max), Image.LANCZOS)
+        out = io.BytesIO()
+        img.save(out, "WEBP", quality=82, method=4)
+        return out.getvalue(), "image/webp"
+    except Exception as e:  # noqa: BLE001 - mai bloccare un upload per l'ottimizzazione
+        print(f"[ASSETS] Sfondo non ottimizzato: {e}")
+        return data, mime

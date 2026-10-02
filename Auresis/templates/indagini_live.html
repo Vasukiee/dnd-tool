@@ -112,7 +112,7 @@
 <script>
     window.INDAGINI_LIVE_CONFIG = {
         indagineId: {{ indagine.id }},
-        pollMs: 2000,
+        pollMs: 4000,
         endpoints: {
             avanzaScena: "{{ url_for('indagini.indagini_avanza_scena', indagine_id=indagine.id) }}",
             sipario: "{{ url_for('indagini.indagini_sipario', indagine_id=indagine.id) }}",

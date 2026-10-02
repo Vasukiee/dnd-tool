@@ -17,7 +17,7 @@ import copioni
 import db
 from auth import richiedi_master, utente_e_master, vista_ristretta
 from blueprints.indagini import bp as indagini_bp
-from utils_assets import ottimizza_e_minimizza_assets
+from utils_assets import ottimizza_e_minimizza_assets, ottimizza_sfondo
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
@@ -608,6 +608,8 @@ def _salva_sfondo_location_da_form(location_id):
         data = file.read()
         if len(data) > _MAX_SFONDO_BYTES:
             return "immagine troppo grande (max 8 MB)."
+        data, mime = ottimizza_sfondo(data, mime)
+        ext = ".webp" if mime == "image/webp" else ext
         if db.get_storage_mode() == "disk":
             cartella = os.path.join(app.root_path, "static", "sfondi_luoghi")
             os.makedirs(cartella, exist_ok=True)
@@ -903,6 +905,7 @@ def sfondo_default():
             if len(data) > _MAX_SFONDO_BYTES:
                 flash("Immagine troppo grande (max 8 MB).")
                 return redirect(url_for('indagini.lista_indagini'))
+            data, mime = ottimizza_sfondo(data, mime)
             db.set_impostazione_bytea("sfondo_default", data, mime)
             flash("Sfondo di default aggiornato con successo.")
         return redirect(url_for('indagini.lista_indagini'))
@@ -920,8 +923,9 @@ def sfondo_default():
             response.headers.set("Content-Type", mime)
             response.headers.set("X-Content-Type-Options", "nosniff")
             # Cache headers
-            response.headers.set("Cache-Control", "public, max-age=31536000")
-            return response
+            response.headers.set("Cache-Control", "public, max-age=86400, must-revalidate")
+            response.add_etag()
+            return response.make_conditional(request)
         else:
             return redirect(url_for('static', filename='sfondo_default.jpg'))
 
