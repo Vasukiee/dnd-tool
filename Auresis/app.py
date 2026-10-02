@@ -104,6 +104,26 @@ def _csrf_protezione():
             abort(400, description="Token CSRF mancante o non valido.")
 
 
+if db.TIMING_ATTIVO:
+    @app.before_request
+    def _timing_inizio():
+        request._t0 = time.perf_counter()
+        request._cpu0 = time.thread_time()
+        db.timing_inizia()
+
+    @app.after_request
+    def _timing_fine(response):
+        if request.endpoint in ("static", None) or request.path == "/ping" or not hasattr(request, "_t0"):
+            return response
+        query, db_s, pool_s = db.timing_totali()
+        totale = time.perf_counter() - request._t0
+        cpu = time.thread_time() - request._cpu0
+        print(f"TIMING {request.method} {request.path} {response.status_code} "
+              f"totale={totale * 1000:.0f}ms cpu={cpu * 1000:.0f}ms "
+              f"query={db_s * 1000:.0f}ms/{query} pool={pool_s * 1000:.0f}ms", flush=True)
+        return response
+
+
 @app.context_processor
 def _inietta_csrf_token():
     return {"csrf_token": session.get("_csrf_token", "")}
