@@ -122,6 +122,16 @@ def _redigi_nodi_non_scoperti(nodi):
 _ARTICOLO_INIZIALE = re.compile(r"^(?:(?:il|lo|la|i|gli|le|un|uno|una)\s+|l'|un')", re.IGNORECASE)
 
 
+def _etichetta_lista(nodo):
+    """Voce del nodo nella lista "Da esaminare": il punto d'interesse se c'è,
+    altrimenti il titolo, così in lista c'è ogni indizio elencato al tavolo.
+    Le rivelazioni senza punto d'interesse restano fuori: il titolo le anticiperebbe."""
+    etichetta = (nodo.get("punto_interesse") or "").strip()
+    if etichetta or nodo.get("tipo_speciale") == "rivelazione":
+        return etichetta
+    return (nodo.get("titolo") or "").strip()
+
+
 def _chiave_punto_extra(scena, etichetta):
     return f"{scena}|{etichetta.strip().casefold()}"
 
@@ -129,9 +139,9 @@ def _chiave_punto_extra(scena, etichetta):
 def _punti_interesse(nodi, stati_sblocco, scena_corrente, punti_extra, extra_esaminati, per_master=False):
     """Cosa si può esaminare nella scena corrente, per la lista "Da esaminare".
 
-    Le voci vengono dall'etichetta player-safe dei nodi (punto_interesse) e dalle
+    Le voci vengono dai nodi della scena (_etichetta_lista) e dalle
     esche della scena (cose da guardare che non nascondono indizi). Solo la scena
-    in corso, mai titoli o descrizioni. Più indizi con la stessa etichetta sono
+    in corso, mai descrizioni. Più indizi con la stessa etichetta sono
     una voce sola, esaminata appena uno è scoperto: la lista non tradisce quanti
     indizi nasconde un oggetto. L'ordine è alfabetico, così le esche non si
     riconoscono dalla posizione. Il flag "esca" va solo al master."""
@@ -141,7 +151,7 @@ def _punti_interesse(nodi, stati_sblocco, scena_corrente, punti_extra, extra_esa
         return voci.setdefault(etichetta.casefold(), {"etichetta": etichetta, "esaminato": False, "nodi": 0})
 
     for n in nodi:
-        etichetta = (n.get("punto_interesse") or "").strip()
+        etichetta = _etichetta_lista(n)
         if not etichetta or n["numero_nodo"] // 10 != scena_corrente:
             continue
         v = voce(etichetta)
@@ -189,7 +199,7 @@ def _tacche_orologio(nodi, stati_sblocco, scena, punti_extra, extra_esaminati):
     for n in nodi:
         if n["numero_nodo"] // 10 != scena:
             continue
-        etichetta = (n.get("punto_interesse") or "").strip().casefold()
+        etichetta = _etichetta_lista(n).casefold()
         if etichetta:
             etichette_nodi.add(etichetta)
         if stati_sblocco.get(n["id"], {}).get("scoperto"):
