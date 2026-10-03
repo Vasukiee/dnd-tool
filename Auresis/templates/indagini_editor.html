@@ -241,6 +241,10 @@
                                title="Quando l'orologio passa la soglia suona da sola la sirena del cambio, nella player view e nella vista live">
                             <input type="checkbox" name="orologio_sirena" value="1" {% if s in scene_orologio and scene_orologio[s].sirena %}checked{% endif %}> Sirena oltre la soglia
                         </label>
+                        <label style="font-size: 0.72rem; color: var(--bone-dim); display: flex; gap: 5px; align-items: center; padding-left: 18px;"
+                               title="Tempo manuale: le tacche le metti tu (bottone @tempo del copione, +1/−1/↺ della vista live). Niente taschino in player view: a ogni tacca cambia la luce della scena (e suona la sirena, se spuntata). In ritardo da soglia tacche in su.">
+                            <input type="checkbox" name="orologio_manuale" value="1" {% if s in scene_orologio and scene_orologio[s].manuale %}checked{% endif %}> Manuale (@tempo): luce invece del taschino
+                        </label>
                         {% if scene_gifs.get(s) %}
                         <label style="font-size: 0.72rem; color: var(--bone-dim); display: flex; gap: 5px; align-items: center;">
                             <input type="checkbox" name="rimuovi_immagine" value="1"> Rimuovi l'immagine della scena (usa quella del luogo)

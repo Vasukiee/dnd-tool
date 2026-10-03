@@ -103,3 +103,46 @@
     border-radius: 2px;
 }
 .orologio-master__btn:hover { border-color: var(--gold); }
+
+/* --- Tempo manuale: la luce della scena (player view) ---
+   --luce va da 0 (alba fredda) a 1 (sole alto). Nessun numero, nessuna
+   barra: cambia lo sfondo, lentamente, come cambia la luce vera.
+   Due veli separati (ognuno col suo blend sullo sfondo): il freddo
+   dell'alba che si ritira e il chiarore del sole che scende dall'alto. */
+.player-graph { --luce: 0; }
+
+.graph-scene-luce,
+.graph-scene-sole {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 7s ease;
+}
+.graph-scene-luce {
+    background: #3E6296;
+    mix-blend-mode: color;
+}
+.graph-scene-sole {
+    background: radial-gradient(ellipse 110% 80% at 50% -18%,
+        rgba(255, 220, 160, 0.95), rgba(255, 176, 96, 0.35) 45%, transparent 78%);
+    mix-blend-mode: screen;
+}
+.player-graph.tempo-attivo .graph-scene-luce { opacity: calc((1 - var(--luce)) * 0.75); }
+.player-graph.tempo-attivo .graph-scene-sole { opacity: calc(var(--luce) * 0.6); }
+
+.player-graph.tempo-attivo .graph-scene-bg {
+    filter: brightness(calc(0.3 + 0.45 * var(--luce))) saturate(calc(0.45 + 0.85 * var(--luce)));
+    transition: opacity 0.6s ease, filter 7s ease;
+}
+
+.player-graph.tempo-senza-transizione .graph-scene-bg,
+.player-graph.tempo-senza-transizione .graph-scene-luce,
+.player-graph.tempo-senza-transizione .graph-scene-sole { transition: none; }
+
+@media (prefers-reduced-motion: reduce) {
+    .player-graph.tempo-attivo .graph-scene-bg,
+    .graph-scene-luce,
+    .graph-scene-sole { transition-duration: 0.6s; }
+}

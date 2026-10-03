@@ -1776,12 +1776,13 @@ details[open] .filtri-section__toggle::before {
 .btn-inline-sipario span,
 .btn-inline-sipario,
 .btn-inline-esamina span,
-.btn-inline-esamina {
+.btn-inline-esamina,
+.btn-inline-tempo {
     position: relative;
     z-index: 1;
 }
 
-.btn-inline-indizio, .btn-inline-scena, .btn-inline-sipario, .btn-inline-esamina {
+.btn-inline-indizio, .btn-inline-scena, .btn-inline-sipario, .btn-inline-esamina, .btn-inline-tempo {
     position: relative;
     display: inline-flex;
     align-items: center;
@@ -1831,7 +1832,8 @@ details[open] .filtri-section__toggle::before {
 }
 
 .btn-inline-sipario::after,
-.btn-inline-esamina::after {
+.btn-inline-esamina::after,
+.btn-inline-tempo::after {
     content: '🎭';
     order: -1;
     flex-shrink: 0;
@@ -1845,15 +1847,16 @@ details[open] .filtri-section__toggle::before {
 }
 
 .btn-inline-esamina::after { content: '📋'; }
+.btn-inline-tempo::after { content: '⏳'; }
 
-.btn-inline-indizio:hover, .btn-inline-scena:hover, .btn-inline-sipario:hover, .btn-inline-esamina:hover {
+.btn-inline-indizio:hover, .btn-inline-scena:hover, .btn-inline-sipario:hover, .btn-inline-esamina:hover, .btn-inline-tempo:hover {
     border-color: var(--gold);
     color: var(--bone-bright);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(156, 122, 60, 0.08);
 }
 
-.btn-inline-indizio:hover::after, .btn-inline-scena:hover::after, .btn-inline-sipario:hover::after, .btn-inline-esamina:hover::after {
+.btn-inline-indizio:hover::after, .btn-inline-scena:hover::after, .btn-inline-sipario:hover::after, .btn-inline-esamina:hover::after, .btn-inline-tempo:hover::after {
     color: var(--gold-bright);
     text-shadow: 0 0 8px rgba(201, 163, 92, 0.4);
 }
@@ -6721,4 +6724,32 @@ html.indagini-player-page.has-react-motion .main > * {
 
 .copione-varianti__pannello[hidden] {
     display: none;
+}
+
+/* ============================================================
+   Sezione: Tempo manuale di una scena (@tempo, solo master)
+   ============================================================ */
+
+.copione-tempo__stato {
+    display: inline-block;
+    margin-left: 12px;
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    color: var(--bone-dim);
+    vertical-align: middle;
+}
+
+.copione-tempo__stato:empty { display: none; }
+.copione-tempo__stato.is-ritardo { color: var(--rust-bright); }
+.copione-tempo__stato.is-errore { color: var(--rust-bright); font-style: italic; }
+
+.copione-varianti__scheda--suggerita {
+    border-style: dashed dashed none dashed;
+    border-color: var(--gold);
+}
+
+.copione-varianti__scheda--suggerita::after {
+    content: ' ⏳';
+    color: var(--gold);
 }

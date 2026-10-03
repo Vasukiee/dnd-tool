@@ -213,31 +213,50 @@ def _tacche_orologio(nodi, stati_sblocco, scena, punti_extra, extra_esaminati):
 
 def _orologio(indagine_id, nodi, stati_sblocco, cronologia, scena, scene=None):
     """Stato dell'orologio della scena, o None se la scena non lo prevede.
-    {"tacche", "soglia", "base", "sirena"}: base sono le tacche contate dalla
-    cronologia, tacche includono la correzione manuale del master; sirena dice
+    {"tacche", "soglia", "base", "sirena", "manuale"}: base sono le tacche contate
+    dalla cronologia, tacche includono la correzione manuale del master; sirena dice
     se passata la soglia parte da sola la sirena. Va anche alla player view,
     ma solo per la scena in corso: quali altre scene abbiano l'orologio
-    anticiperebbe il copione. `scene` (facoltativo) è db.get_scene_info()."""
+    anticiperebbe il copione. `scene` (facoltativo) è db.get_scene_info().
+
+    Con il tempo manuale (bottone @tempo del copione) le tacche sono solo quelle
+    messe dal master: base è 0 e "in_ritardo" vale da soglia tacche in su."""
     if scene:
-        abilitato, soglia, sirena = scene["orologi"].get(scena, (False, None, False))
+        abilitato, soglia, sirena, manuale = scene["orologi"].get(scena, (False, None, False, False))
     else:
-        abilitato, soglia, sirena = db.get_orologio_scena(indagine_id, scena)
+        abilitato, soglia, sirena, manuale = db.get_orologio_scena(indagine_id, scena)
     if not abilitato:
         return None
+    if manuale:
+        tacche = max(0, db.get_orologio_offset(cronologia, scena))
+        return {"tacche": tacche, "soglia": soglia, "base": 0, "sirena": sirena, "manuale": True,
+                "in_ritardo": bool(soglia) and tacche >= soglia}
     esaminati = cronologia.get("punti_extra_esaminati") if cronologia else None
     base = _tacche_orologio(
         nodi, stati_sblocco, scena, scene["punti_extra"] if scene else db.get_punti_extra(indagine_id),
         set(json.loads(esaminati)) if esaminati else set())
     tacche = max(0, base + db.get_orologio_offset(cronologia, scena))
-    return {"tacche": tacche, "soglia": soglia, "base": base, "sirena": sirena}
+    return {"tacche": tacche, "soglia": soglia, "base": base, "sirena": sirena, "manuale": False}
+
+
+def _luce_tempo(tacche, soglia):
+    """Quanto è salito il sole, da 0 (alba fredda) a 1 (sole alto). Alla soglia
+    è già giorno fatto; una tacca oltre è pieno mezzogiorno."""
+    passi = (soglia + 1) if soglia else 3
+    return round(min(1.0, tacche / passi), 3)
 
 
 def _orologio_player(*args, **kwargs):
     """Per la giocatrice la sirena compare solo una volta passata la soglia:
-    prima, il sorgente della pagina non deve dire che qualcosa sta per suonare."""
+    prima, il sorgente della pagina non deve dire che qualcosa sta per suonare.
+    Col tempo manuale niente taschino e niente soglia: solo la luce della scena
+    e un contatore di passi, che serve al suono a ogni tacca."""
     stato = _orologio(*args, **kwargs)
     if not stato:
         return None
+    if stato["manuale"]:
+        return {"manuale": True, "luce": _luce_tempo(stato["tacche"], stato["soglia"]),
+                "passi": stato["tacche"], "sirena": stato["sirena"]}
     oltre = bool(stato["soglia"]) and stato["tacche"] > stato["soglia"]
     return {"tacche": stato["tacche"], "soglia": stato["soglia"], "sirena": stato["sirena"] and oltre}
 
@@ -471,7 +490,8 @@ def indagini_salva_scena_gif(indagine_id, numero_scena):
     soglia = request.form.get("orologio_soglia", type=int)
     db.set_scena_orologio(indagine_id, numero_scena, request.form.get("orologio") == "1",
                           soglia if soglia and soglia > 0 else None,
-                          request.form.get("orologio_sirena") == "1")
+                          request.form.get("orologio_sirena") == "1",
+                          request.form.get("orologio_manuale") == "1")
     if request.form.get("rimuovi_immagine") == "1":
         db.upsert_scena_gif(indagine_id, numero_scena, None)
     return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
@@ -933,6 +953,47 @@ def indagini_orologio(indagine_id):
     db.modifica_orologio_offset(cronologia["id"], scena, applica)
     cronologia = db.get_cronologia_attiva(indagine_id)
     return jsonify({"orologio": _orologio(indagine_id, nodi, stati_sblocco, cronologia, scena)})
+
+
+@bp.route("/<int:indagine_id>/tempo", methods=["GET", "POST"])
+@richiedi_master
+def indagini_tempo(indagine_id):
+    """Tempo manuale di una scena qualunque, non solo di quella in corso: il
+    bottone @tempo del copione la nomina, e la scena dopo ne legge l'esito.
+    GET ?scena=n → stato. POST JSON {"scena": n, "azione": "piu" | "meno" | "reset"}.
+    Risponde {"scena", "orologio"}; 409 se la scena non ha il tempo manuale."""
+    if request.method == "GET":
+        scena = request.args.get("scena", type=int)
+        azione = None
+    else:
+        dati = request.get_json(silent=True) or {}
+        try:
+            scena = int(dati.get("scena"))
+        except (TypeError, ValueError):
+            scena = None
+        azione = dati.get("azione")
+        if azione not in ("piu", "meno", "reset"):
+            return jsonify({"error": "azione non valida"}), 400
+    if scena is None:
+        return jsonify({"error": "scena mancante"}), 400
+    abilitato, _, _, manuale = db.get_orologio_scena(indagine_id, scena)
+    if not (abilitato and manuale):
+        return jsonify({"error": f"la scena {scena} non ha il tempo manuale (editor: Orologio + Manuale)"}), 409
+    cronologia = db.get_cronologia_attiva(indagine_id)
+    if azione:
+        if not cronologia:
+            nome = f"Cronologia del {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+            cronologia = db.crea_cronologia(indagine_id, nome)
+        if azione == "piu":
+            applica = lambda o: max(o, 0) + 1
+        elif azione == "meno":
+            applica = lambda o: max(o - 1, 0)
+        else:
+            applica = lambda o: 0
+        db.modifica_orologio_offset(cronologia["id"], scena, applica)
+        cronologia = db.get_cronologia_attiva(indagine_id)
+    # Il tempo manuale non guarda nodi né esami: bastano cronologia e scena
+    return jsonify({"scena": scena, "orologio": _orologio(indagine_id, [], {}, cronologia, scena)})
 
 
 @bp.route("/<int:indagine_id>/lista-esamina", methods=["POST"])

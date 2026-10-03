@@ -328,6 +328,10 @@ ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio BOOLEAN NOT NULL DE
 ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio_soglia INTEGER;
 -- La sirena suona da sola quando l'orologio passa la soglia (player e vista live)
 ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio_sirena BOOLEAN NOT NULL DEFAULT FALSE;
+-- Tempo manuale: le tacche le mette solo il master (bottone @tempo del copione,
+-- +1/−1/↺ della vista live), niente conteggio dagli esami. In player view non
+-- c'è il taschino: cambia la luce dello sfondo. "In ritardo" da soglia tacche in su.
+ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio_manuale BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS orologio_offset TEXT;
 ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna_versione INTEGER NOT NULL DEFAULT 0;
 -- Cosa mostra la player view: la lavagna o gli indizi classici. Si accende da
