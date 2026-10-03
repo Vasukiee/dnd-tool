@@ -30,6 +30,7 @@
     <button type="button" class="editor-btn" onclick="apriScenaSelector()" title="Cambia scena">🎬</button>
     <button type="button" class="editor-btn" onclick="apriEsaminaSelector()" title="Mostra la lista da esaminare">📋</button>
     <button type="button" class="editor-btn" onclick="inserisciRigaIntera('\n@sipario: toggle\n')" title="Sipario">🎭</button>
+    <button type="button" class="editor-btn" onclick="inserisciVarianti()" title="Versioni alternative della scena (schede)">⑂</button>
     <input type="file" id="img-file-input" accept="image/*" style="display:none"
            onchange="inserisciImmagineFile(this.files[0]); this.value='';">
     <span class="editor-toolbar__spacer"></span>
@@ -216,6 +217,7 @@
 }
 </style>
 
+<script src="{{ url_for('static', filename='copioni-varianti.js') }}"></script>
 <script>
 /* ── Gestione immagini ─────────────────────────────────────────────
    Le immagini base64 vengono "collassate" in token corti #b64_N
@@ -390,8 +392,69 @@ async function inserisciImmagineFile(file) {
     aggiornaPrev();
 }
 
-/* ── Minimal markdown renderer per l'anteprima ── */
+/* ── Versioni alternative (@varianti … @versione … @fine-varianti) ──
+   Stessa sintassi di copioni.py: ogni blocco diventa un segnaposto, le
+   versioni si renderizzano a parte e prendono il suo posto come schede. */
+const RE_VARIANTI_INIZIO = /^\s*@varianti\s*(?::\s*(.*))?$/i;
+const RE_VERSIONE = /^\s*@versione\s*:\s*(.*)$/i;
+const RE_VARIANTI_FINE = /^\s*@fine-varianti\s*$/i;
+
+function escapeHtml(t) {
+    return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 function renderMd(src) {
+    // Pezzi in ordine di sorgente: stringhe di testo normale e blocchi di
+    // versioni. L'ordine conta: l'indice delle immagini nell'anteprima deve
+    // seguire quello nel sorgente (vedi updateImgToken).
+    const pezzi = [];
+    let righe = [];
+    let blocco = null;
+    for (const riga of src.split('\n')) {
+        if (!blocco) {
+            const m = riga.match(RE_VARIANTI_INIZIO);
+            if (m) {
+                pezzi.push(righe.join('\n')); righe = [];
+                blocco = { titolo: (m[1] || '').trim(), versioni: [] };
+                continue;
+            }
+            righe.push(riga);
+            continue;
+        }
+        const mv = riga.match(RE_VERSIONE);
+        if (mv) blocco.versioni.push([mv[1].trim(), []]);
+        else if (RE_VARIANTI_FINE.test(riga)) { pezzi.push(blocco); blocco = null; }
+        else if (blocco.versioni.length) blocco.versioni[blocco.versioni.length - 1][1].push(riga);
+    }
+    if (blocco) pezzi.push(blocco);
+    pezzi.push(righe.join('\n'));
+
+    const contatoreImg = { n: 0 };
+    let nBlocco = 0;
+    return pezzi.map(pz => {
+        if (typeof pz === 'string') return renderMdBase(pz, contatoreImg);
+        let h = '<div class="copione-varianti" data-varianti="' + (nBlocco++) + '">';
+        if (pz.titolo) h += '<div class="copione-varianti__titolo">' + escapeHtml(pz.titolo) + '</div>';
+        h += '<div class="copione-varianti__schede" role="tablist">';
+        pz.versioni.forEach(([etichetta], j) => {
+            h += '<button type="button" class="copione-varianti__scheda" role="tab" aria-selected="' + (j === 0) +
+                 '" data-versione="' + j + '">' + escapeHtml(etichetta || 'Versione ' + (j + 1)) + '</button>';
+        });
+        h += '</div>';
+        pz.versioni.forEach(([, testo], j) => {
+            h += '<div class="copione-varianti__pannello" role="tabpanel" data-versione="' + j + '"' +
+                 (j === 0 ? '' : ' hidden') + '>' + renderMdBase(testo.join('\n'), contatoreImg) + '</div>';
+        });
+        return h + '</div>';
+    }).join('\n');
+}
+
+function inserisciVarianti() {
+    inserisciRigaIntera('@varianti: Cosa è successo?\n@versione: Prima versione\n**(Master)** ...\n@versione: Seconda versione\n**(Master)** ...\n@fine-varianti');
+}
+
+/* ── Minimal markdown renderer per l'anteprima ── */
+function renderMdBase(src, contatoreImg) {
     let s = src
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -418,7 +481,6 @@ function renderMd(src) {
     const lines = s.split('\n');
     const out = [];
     let inUl = false, inPara = false;
-    let imgIdx = 0;
     const RE_IMG_LINE = /^!\[([^\]|]*)((?:\|[^\]|]+)*)\]\(([^)]+)\)\s*$/;
 
     function chiudi() {
@@ -431,7 +493,7 @@ function renderMd(src) {
         const mImg = t.match(RE_IMG_LINE);
         if (mImg) {
             chiudi();
-            out.push(renderImage(mImg[1], mImg[2], mImg[3], imgIdx++));
+            out.push(renderImage(mImg[1], mImg[2], mImg[3], contatoreImg.n++));
             continue;
         }
         const mH = t.match(/^(#{1,6})\s(.*)/);
@@ -466,6 +528,7 @@ function aggiornaPrev() {
     const prev = document.getElementById('editor-preview');
     const currentScroll = prev.scrollTop;
     prev.innerHTML = renderMd(src);
+    if (window.copioniVarianti) copioniVarianti.ripristina(prev);
     prev.scrollTop = currentScroll;
 }
 

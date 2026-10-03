@@ -315,6 +315,94 @@ def _proteggi_blocchi_master_e_personaggi(testo_md):
     return pattern.sub(sostituisci, testo_md)
 
 
+_RE_VARIANTI_INIZIO = re.compile(r"^\s*@varianti\s*(?::\s*(.*))?$", re.IGNORECASE)
+_RE_VERSIONE = re.compile(r"^\s*@versione\s*:\s*(.*)$", re.IGNORECASE)
+_RE_VARIANTI_FINE = re.compile(r"^\s*@fine-varianti\s*$", re.IGNORECASE)
+
+
+def _estrai_varianti(testo_md):
+    """Toglie dal testo i blocchi di versioni alternative di una scena:
+
+        @varianti: Ha preso la chiave?        (titolo facoltativo)
+        @versione: Sì, l'ha presa
+        ...testo di questa versione...
+        @versione: No
+        ...testo dell'altra versione...
+        @fine-varianti
+
+    Ogni blocco è sostituito da un segnaposto su una riga a sé.
+    Ritorna (testo_con_segnaposto, blocchi) dove blocchi è una lista di
+    {"titolo": str, "versioni": [(etichetta, testo_md), ...]}.
+    Un blocco senza @fine-varianti si chiude a fine testo; il testo tra
+    @varianti e la prima @versione è ignorato.
+    """
+    righe_out = []
+    blocchi = []
+    blocco = None
+    for riga in testo_md.split("\n"):
+        if blocco is None:
+            m = _RE_VARIANTI_INIZIO.match(riga)
+            if m:
+                blocco = {"titolo": (m.group(1) or "").strip(), "versioni": []}
+                continue
+            righe_out.append(riga)
+            continue
+        m = _RE_VERSIONE.match(riga)
+        if m:
+            blocco["versioni"].append([m.group(1).strip(), []])
+        elif _RE_VARIANTI_FINE.match(riga):
+            righe_out += ["", _segnaposto_varianti(len(blocchi)), ""]
+            blocchi.append(blocco)
+            blocco = None
+        elif blocco["versioni"]:
+            blocco["versioni"][-1][1].append(riga)
+    if blocco is not None:
+        righe_out += ["", _segnaposto_varianti(len(blocchi)), ""]
+        blocchi.append(blocco)
+
+    for b in blocchi:
+        b["versioni"] = [(etichetta or f"Versione {i + 1}", "\n".join(righe))
+                         for i, (etichetta, righe) in enumerate(b["versioni"])]
+    return "\n".join(righe_out), blocchi
+
+
+def _segnaposto_varianti(indice):
+    return f"@@varianti-{indice}@@"
+
+
+def _html_varianti(blocco, indice, renderizza):
+    """HTML a schede di un blocco di varianti. `renderizza` converte il
+    markdown di una versione in HTML. Lo scambio di scheda è gestito via JS
+    (delegato su document, vedi copioni_dettaglio.html)."""
+    parti = [f'<div class="copione-varianti" data-varianti="{indice}">']
+    if blocco["titolo"]:
+        parti.append(f'<div class="copione-varianti__titolo">{escape(blocco["titolo"])}</div>')
+    parti.append('<div class="copione-varianti__schede" role="tablist">')
+    for i, (etichetta, _) in enumerate(blocco["versioni"]):
+        attiva = "true" if i == 0 else "false"
+        parti.append(f'<button type="button" class="copione-varianti__scheda" role="tab" '
+                     f'aria-selected="{attiva}" data-versione="{i}">{escape(etichetta)}</button>')
+    parti.append('</div>')
+    for i, (_, testo) in enumerate(blocco["versioni"]):
+        nascosto = "" if i == 0 else " hidden"
+        parti.append(f'<div class="copione-varianti__pannello" role="tabpanel" '
+                     f'data-versione="{i}"{nascosto}>{renderizza(testo)}</div>')
+    parti.append('</div>')
+    return "".join(parti)
+
+
+def _preprocessa(testo_md):
+    """Immagini, Master/personaggi e tag @ prima della conversione markdown."""
+    testo = _processa_immagini(testo_md)
+    testo = _proteggi_blocchi_master_e_personaggi(testo)
+    testo = _processa_audio_tags(testo)
+    testo = _processa_indizi_tags(testo)
+    testo = _processa_scene_tags(testo)
+    testo = _processa_esamina_tags(testo)
+    testo = _processa_sipario_tags(testo)
+    return testo
+
+
 def renderizza_sessione(numero_sessione, sessioni=None):
     """Legge e concatena tutti i file di una sessione, applica il
     riconoscimento Master/personaggio, converte in HTML, ed estrae la
@@ -344,18 +432,22 @@ def renderizza_sessione(numero_sessione, sessioni=None):
     if not testo_unito.strip():
         return None, None, None
 
-    testo_protetto = _processa_immagini(testo_unito)
-    testo_protetto = _proteggi_blocchi_master_e_personaggi(testo_protetto)
-    testo_protetto = _processa_audio_tags(testo_protetto)
-    testo_protetto = _processa_indizi_tags(testo_protetto)
-    testo_protetto = _processa_scene_tags(testo_protetto)
-    testo_protetto = _processa_esamina_tags(testo_protetto)
-    testo_protetto = _processa_sipario_tags(testo_protetto)
+    testo_unito, blocchi_varianti = _estrai_varianti(testo_unito)
+    testo_protetto = _preprocessa(testo_unito)
 
     # toc ci serve solo per assegnare id univoci agli heading (gestisce da
     # sola le collisioni, es. titoli duplicati -> id_1, id_2...), anche se
     # non possiamo fidarci della sua lista toc_tokens per il motivo sopra.
     html = md_lib.markdown(testo_protetto, extensions=["nl2br", "toc"])
+
+    # Le versioni alternative si renderizzano a parte e prendono il posto
+    # del loro segnaposto (che markdown ha chiuso in un <p>)
+    def renderizza_versione(testo):
+        return md_lib.markdown(_preprocessa(testo), extensions=["nl2br"])
+
+    for i, blocco in enumerate(blocchi_varianti):
+        html = html.replace(f"<p>{_segnaposto_varianti(i)}</p>",
+                            _html_varianti(blocco, i, renderizza_versione), 1)
 
     heading_list = _estrai_h2_da_html(html)
 
@@ -372,6 +464,9 @@ def _estrai_h2_da_html(html):
     for h2 in soup.find_all("h2"):
         # Se contiene tag di formattazione, lo ignoriamo
         if h2.find(['strong', 'em', 'span']):
+            continue
+        # Gli H2 dentro una versione alternativa non sono scene
+        if h2.find_parent(class_="copione-varianti"):
             continue
         risultato.append({
             "id": h2.get("id", ""),
