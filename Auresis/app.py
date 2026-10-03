@@ -336,7 +336,8 @@ def copioni_dettaglio(numero_sessione):
         return redirect(url_for("copioni_indice"))
 
     sessioni = copioni.elenca_sessioni()
-    titolo, html, heading_list = copioni.renderizza_sessione(numero_sessione, sessioni)
+    titolo, html, heading_list = copioni.renderizza_sessione(numero_sessione, sessioni,
+                                                             per_master=not vista_ristretta())
     if html is None:
         flash(f"Nessun copione trovato per la sessione {numero_sessione}.")
         return redirect(url_for("copioni_indice"))

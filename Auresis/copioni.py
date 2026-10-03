@@ -245,6 +245,32 @@ def _processa_esamina_tags(testo_md):
     return pattern.sub(sostituisci, testo_md)
 
 
+_RE_TEMPO = re.compile(r"^[ \t]*@tempo:\s*(\d+)-(\d+)\s*\|\s*([^\n]+?)[ \t]*$", re.MULTILINE)
+
+
+def _processa_tempo_tags(testo_md, per_master=True):
+    """@tempo: indagine-scena | etichetta → bottone del master che fa passare
+    una tacca del tempo manuale di quella scena. Mai nel copione pubblico:
+    fuori dalla vista master la riga sparisce del tutto."""
+    def sostituisci(m):
+        if not per_master:
+            return ""
+        indagine_id = escape(m.group(1))
+        scena_id = escape(m.group(2))
+        nome = escape(m.group(3).strip())
+
+        return (f'<span class="audio-recommendation-wrapper copione-tempo">'
+                f'<span class="audio-recommendation-label" style="color:var(--gold);">Tempo:</span> '
+                f'<button class="btn-inline-tempo btn-audio-large" '
+                f'data-indagine-id="{indagine_id}" '
+                f'data-scena-id="{scena_id}" '
+                f'title="Una tacca in più sul tempo della scena {scena_id}">{nome}</button>'
+                f'<span class="copione-tempo__stato" data-tempo-stato="{indagine_id}-{scena_id}"></span>'
+                f'</span>')
+
+    return _RE_TEMPO.sub(sostituisci, testo_md)
+
+
 def _processa_sipario_tags(testo_md):
     pattern = re.compile(r"@sipario:\s*toggle", re.IGNORECASE)
     
@@ -318,6 +344,7 @@ def _proteggi_blocchi_master_e_personaggi(testo_md):
 _RE_VARIANTI_INIZIO = re.compile(r"^\s*@varianti\s*(?::\s*(.*))?$", re.IGNORECASE)
 _RE_VERSIONE = re.compile(r"^\s*@versione\s*:\s*(.*)$", re.IGNORECASE)
 _RE_VARIANTI_FINE = re.compile(r"^\s*@fine-varianti\s*$", re.IGNORECASE)
+_RE_SEGUE_TEMPO = re.compile(r"^\s*@segue-tempo\s*:\s*(\d+)-(\d+)\s*$", re.IGNORECASE)
 
 
 def _estrai_varianti(testo_md):
@@ -330,9 +357,14 @@ def _estrai_varianti(testo_md):
         ...testo dell'altra versione...
         @fine-varianti
 
+    Tra @varianti e la prima @versione può stare `@segue-tempo: 4-11`: nella
+    vista master la scheda suggerita dal tempo manuale di quella scena si
+    evidenzia (la prima se in tempo, la seconda se in ritardo), senza
+    selezionarla.
+
     Ogni blocco è sostituito da un segnaposto su una riga a sé.
     Ritorna (testo_con_segnaposto, blocchi) dove blocchi è una lista di
-    {"titolo": str, "versioni": [(etichetta, testo_md), ...]}.
+    {"titolo": str, "versioni": [(etichetta, testo_md), ...], "tempo": (indagine, scena) | None}.
     Un blocco senza @fine-varianti si chiude a fine testo; il testo tra
     @varianti e la prima @versione è ignorato.
     """
@@ -343,12 +375,15 @@ def _estrai_varianti(testo_md):
         if blocco is None:
             m = _RE_VARIANTI_INIZIO.match(riga)
             if m:
-                blocco = {"titolo": (m.group(1) or "").strip(), "versioni": []}
+                blocco = {"titolo": (m.group(1) or "").strip(), "versioni": [], "tempo": None}
                 continue
             righe_out.append(riga)
             continue
         m = _RE_VERSIONE.match(riga)
-        if m:
+        mt = _RE_SEGUE_TEMPO.match(riga) if not blocco["versioni"] else None
+        if mt:
+            blocco["tempo"] = (int(mt.group(1)), int(mt.group(2)))
+        elif m:
             blocco["versioni"].append([m.group(1).strip(), []])
         elif _RE_VARIANTI_FINE.match(riga):
             righe_out += ["", _segnaposto_varianti(len(blocchi)), ""]
@@ -370,11 +405,14 @@ def _segnaposto_varianti(indice):
     return f"@@varianti-{indice}@@"
 
 
-def _html_varianti(blocco, indice, renderizza):
+def _html_varianti(blocco, indice, renderizza, per_master=True):
     """HTML a schede di un blocco di varianti. `renderizza` converte il
     markdown di una versione in HTML. Lo scambio di scheda è gestito via JS
     (delegato su document, vedi copioni_dettaglio.html)."""
-    parti = [f'<div class="copione-varianti" data-varianti="{indice}">']
+    tempo = ""
+    if per_master and blocco.get("tempo"):
+        tempo = f' data-segue-tempo="{blocco["tempo"][0]}-{blocco["tempo"][1]}"'
+    parti = [f'<div class="copione-varianti" data-varianti="{indice}"{tempo}>']
     if blocco["titolo"]:
         parti.append(f'<div class="copione-varianti__titolo">{escape(blocco["titolo"])}</div>')
     parti.append('<div class="copione-varianti__schede" role="tablist">')
@@ -391,9 +429,10 @@ def _html_varianti(blocco, indice, renderizza):
     return "".join(parti)
 
 
-def _preprocessa(testo_md):
+def _preprocessa(testo_md, per_master=True):
     """Immagini, Master/personaggi e tag @ prima della conversione markdown."""
-    testo = _processa_immagini(testo_md)
+    testo = _processa_tempo_tags(testo_md, per_master)
+    testo = _processa_immagini(testo)
     testo = _proteggi_blocchi_master_e_personaggi(testo)
     testo = _processa_audio_tags(testo)
     testo = _processa_indizi_tags(testo)
@@ -403,7 +442,7 @@ def _preprocessa(testo_md):
     return testo
 
 
-def renderizza_sessione(numero_sessione, sessioni=None):
+def renderizza_sessione(numero_sessione, sessioni=None, per_master=True):
     """Legge e concatena tutti i file di una sessione, applica il
     riconoscimento Master/personaggio, converte in HTML, ed estrae la
     lista degli heading H2 (per l'indice di navigazione laterale).
@@ -421,6 +460,8 @@ def renderizza_sessione(numero_sessione, sessioni=None):
     BeautifulSoup, invece di fidarci di toc_tokens.
 
     `sessioni` (facoltativo) è elenca_sessioni() già calcolato dal chiamante.
+    Con per_master=False (copione pubblico) spariscono i comandi riservati
+    al master, come i bottoni @tempo.
     """
     if sessioni is None:
         sessioni = elenca_sessioni()
@@ -433,7 +474,7 @@ def renderizza_sessione(numero_sessione, sessioni=None):
         return None, None, None
 
     testo_unito, blocchi_varianti = _estrai_varianti(testo_unito)
-    testo_protetto = _preprocessa(testo_unito)
+    testo_protetto = _preprocessa(testo_unito, per_master)
 
     # toc ci serve solo per assegnare id univoci agli heading (gestisce da
     # sola le collisioni, es. titoli duplicati -> id_1, id_2...), anche se
@@ -443,11 +484,11 @@ def renderizza_sessione(numero_sessione, sessioni=None):
     # Le versioni alternative si renderizzano a parte e prendono il posto
     # del loro segnaposto (che markdown ha chiuso in un <p>)
     def renderizza_versione(testo):
-        return md_lib.markdown(_preprocessa(testo), extensions=["nl2br"])
+        return md_lib.markdown(_preprocessa(testo, per_master), extensions=["nl2br"])
 
     for i, blocco in enumerate(blocchi_varianti):
         html = html.replace(f"<p>{_segnaposto_varianti(i)}</p>",
-                            _html_varianti(blocco, i, renderizza_versione), 1)
+                            _html_varianti(blocco, i, renderizza_versione, per_master), 1)
 
     heading_list = _estrai_h2_da_html(html)
 

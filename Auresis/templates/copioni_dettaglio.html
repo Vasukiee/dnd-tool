@@ -1519,6 +1519,92 @@
             }
         });
 
+        // Tempo manuale (@tempo): ogni click è una tacca in più sulla scena del
+        // bottone. Accanto, solo per il master, tacche / soglia ed esito; nei
+        // blocchi @varianti con @segue-tempo si evidenzia la scheda suggerita
+        // (prima = in tempo, seconda = in ritardo), senza mai selezionarla.
+        {% if not modalita_giocatrice %}
+        (function () {
+            const stati = {}; // "indagine-scena" -> orologio | {errore}
+
+            function chiavi() {
+                const set = new Set();
+                document.querySelectorAll('[data-tempo-stato]').forEach(el => set.add(el.dataset.tempoStato));
+                document.querySelectorAll('[data-segue-tempo]').forEach(el => set.add(el.dataset.segueTempo));
+                return [...set];
+            }
+
+            function disegna() {
+                document.querySelectorAll('[data-tempo-stato]').forEach(el => {
+                    const st = stati[el.dataset.tempoStato];
+                    el.classList.toggle('is-errore', !!(st && st.errore));
+                    el.classList.toggle('is-ritardo', !!(st && st.in_ritardo));
+                    if (!st) { el.textContent = ''; return; }
+                    if (st.errore) { el.textContent = st.errore; return; }
+                    const conta = st.soglia ? `${st.tacche} / ${st.soglia}` : String(st.tacche);
+                    el.textContent = st.soglia ? `${conta} · ${st.in_ritardo ? 'in ritardo' : 'in tempo'}` : conta;
+                });
+                document.querySelectorAll('[data-segue-tempo]').forEach(blocco => {
+                    const st = stati[blocco.dataset.segueTempo];
+                    const suggerita = st && !st.errore && st.soglia ? (st.in_ritardo ? '1' : '0') : null;
+                    blocco.querySelectorAll(':scope > .copione-varianti__schede > .copione-varianti__scheda').forEach(s => {
+                        const si = s.dataset.versione === suggerita;
+                        s.classList.toggle('copione-varianti__scheda--suggerita', si);
+                        if (si) s.title = st.in_ritardo ? 'Suggerita dal tempo: in ritardo' : 'Suggerita dal tempo: in tempo';
+                        else s.removeAttribute('title');
+                    });
+                });
+            }
+
+            function registra(chiave, resp, data) {
+                if (resp.ok) stati[chiave] = data.orologio;
+                else if (resp.status === 409) stati[chiave] = { errore: data.error || 'scena senza tempo manuale' };
+            }
+
+            async function leggi() {
+                if (document.hidden) return;
+                await Promise.all(chiavi().map(async chiave => {
+                    const [indagineId, scena] = chiave.split('-');
+                    try {
+                        const resp = await fetch(`/indagini/${indagineId}/tempo?scena=${scena}`);
+                        registra(chiave, resp, await resp.json());
+                    } catch (err) { /* rete assente: resta l'ultimo stato noto */ }
+                }));
+                disegna();
+            }
+
+            document.body.addEventListener('click', async function (e) {
+                const btn = e.target.closest('.btn-inline-tempo');
+                if (!btn || btn.disabled) return;
+                const chiave = `${btn.dataset.indagineId}-${btn.dataset.scenaId}`;
+                btn.disabled = true;
+                try {
+                    const resp = await fetch(`/indagini/${btn.dataset.indagineId}/tempo`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ scena: parseInt(btn.dataset.scenaId, 10), azione: 'piu' })
+                    });
+                    const data = await resp.json();
+                    registra(chiave, resp, data);
+                    if (!resp.ok) alert(data.error || 'Errore nel far passare il tempo.');
+                    disegna();
+                } catch (err) {
+                    console.error('Errore:', err);
+                    alert('Errore di rete nel far passare il tempo.');
+                } finally {
+                    // Breve pausa contro il doppio click: ogni pressione è una tacca
+                    setTimeout(() => { btn.disabled = false; }, 800);
+                }
+            });
+
+            if (chiavi().length) {
+                leggi();
+                // Si riallinea con la vista live (+1 / −1 / reset fatti lì)
+                setInterval(leggi, 10000);
+            }
+        })();
+        {% endif %}
+
         // Gestione bottoni sipario inline
         document.body.addEventListener('click', async function(e) {
             const btn = e.target.closest('.btn-inline-sipario');

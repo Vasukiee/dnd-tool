@@ -894,11 +894,13 @@
     // ----------------------------------------------------------------
     const orologioBox = document.getElementById("liveOrologio");
     const orologioConta = document.getElementById("liveOrologioConta");
+    const orologioTitolo = document.getElementById("liveOrologioTitolo");
 
     let orologioPrima = null; // {scena, tacche} dell'ultimo stato visto
 
     // nuovaScena: la scena a cui si riferisce lo stato (di default quella corrente).
-    // La sirena parte solo se le tacche passano la soglia restando nella stessa scena.
+    // La sirena parte solo se le tacche passano la soglia restando nella stessa scena;
+    // col tempo manuale suona a ogni tacca in più.
     function aggiornaOrologio(stato, nuovaScena) {
         if (stato === undefined || !orologioBox) return;
         const scena = nuovaScena ?? scenaCorrente;
@@ -906,11 +908,27 @@
         orologioPrima = stato ? { scena, tacche: stato.tacche } : null;
         orologioBox.hidden = !stato;
         if (!stato) return;
-        if (stato.sirena && stato.soglia && prima && prima.scena === scena &&
-            prima.tacche <= stato.soglia && stato.tacche > stato.soglia) {
+        const stessaScena = prima && prima.scena === scena;
+        const soglia = stato.soglia;
+        if (stato.manuale) {
+            if (stato.sirena && stessaScena && stato.tacche > prima.tacche) {
+                riproduciSfx(window.INDAGINI_LIVE_CONFIG.sfx.sirena);
+            }
+            orologioTitolo.textContent = "Tempo";
+            orologioConta.textContent = soglia
+                ? `${stato.tacche} / ${soglia} · ${stato.in_ritardo ? "in ritardo" : "in tempo"}`
+                : String(stato.tacche);
+            orologioBox.classList.toggle("is-manuale", true);
+            orologioBox.classList.remove("is-soglia");
+            orologioBox.classList.toggle("is-oltre", !!stato.in_ritardo);
+            return;
+        }
+        orologioTitolo.textContent = "Orologio";
+        orologioBox.classList.remove("is-manuale");
+        if (stato.sirena && soglia && stessaScena &&
+            prima.tacche <= soglia && stato.tacche > soglia) {
             riproduciSfx(window.INDAGINI_LIVE_CONFIG.sfx.sirena);
         }
-        const soglia = stato.soglia;
         orologioConta.textContent = soglia ? `${stato.tacche} / ${soglia}` : String(stato.tacche);
         orologioBox.classList.toggle("is-soglia", !!soglia && stato.tacche === soglia);
         orologioBox.classList.toggle("is-oltre", !!soglia && stato.tacche > soglia);

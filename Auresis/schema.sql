@@ -276,6 +276,7 @@ CREATE TABLE IF NOT EXISTS scene_indagine (
     orologio BOOLEAN NOT NULL DEFAULT 0,
     orologio_soglia INTEGER,
     orologio_sirena BOOLEAN NOT NULL DEFAULT 0,
+    orologio_manuale BOOLEAN NOT NULL DEFAULT 0,
     UNIQUE (indagine_id, numero_scena)
 );
 

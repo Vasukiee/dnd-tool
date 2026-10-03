@@ -105,7 +105,17 @@
     const orologio = window.IndaginiOrologio.crea(document.getElementById("orologioScena"), {
         suSirena: () => riproduciSfx(window.INDAGINI_PLAYER_CONFIG.sfx.sirena),
     });
-    orologio.aggiorna(RAW.orologio, RAW.scena_corrente);
+    const luceTempo = window.IndaginiOrologio.creaLuce(document.querySelector(".player-graph"), {
+        suPasso: () => riproduciSfx(window.INDAGINI_PLAYER_CONFIG.sfx.sirena),
+    });
+
+    // Tempo manuale: niente taschino, cambia la luce della scena
+    function aggiornaTempo(stato, scena) {
+        const manuale = !!(stato && stato.manuale);
+        orologio.aggiorna(manuale ? null : stato, scena);
+        luceTempo.aggiorna(manuale ? stato : null, scena);
+    }
+    aggiornaTempo(RAW.orologio, RAW.scena_corrente);
 
     const NODE_W = 170;
     const NODE_H = 80;
@@ -888,7 +898,7 @@
                 SCENE_GIFS = data.scene_gifs;
             }
             aggiornaPuntiInteresse(data.punti_interesse);
-            orologio.aggiorna(data.orologio, data.scena_corrente);
+            aggiornaTempo(data.orologio, data.scena_corrente);
 
             const nuoviScopertiIds = new Set(data.scoperti_ids.map(Number));
             const nuovaScena = data.scena_corrente;
