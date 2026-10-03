@@ -328,10 +328,20 @@ ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio BOOLEAN NOT NULL DE
 ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio_soglia INTEGER;
 -- La sirena suona da sola quando l'orologio passa la soglia (player e vista live)
 ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio_sirena BOOLEAN NOT NULL DEFAULT FALSE;
--- Tempo manuale: le tacche le mette solo il master (bottone @tempo del copione,
--- +1/−1/↺ della vista live), niente conteggio dagli esami. In player view non
--- c'è il taschino: cambia la luce dello sfondo. "In ritardo" da soglia tacche in su.
+-- Vecchio "orologio manuale" di scena: sostituito dall'alba qui sotto (le
+-- scene che lo avevano sono migrate da db._migra_orologi_manuali).
 ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS orologio_manuale BOOLEAN NOT NULL DEFAULT FALSE;
+-- Alba: il tempo della partita, non di una scena. Parte entrando nella scena
+-- marcata alba_inizio (che ne tiene soglia e sirena), avanza solo a mano
+-- (bottone @tempo del copione, +1/−1 della vista live) e si spegne con
+-- @tempo-reset. Vive nella cronologia e può coesistere con l'orologio di
+-- scena. In player view è la luce dello sfondo, dall'alba fredda al sole alto.
+-- In ritardo da soglia tacche in su. Aggiunte anche da db.assicura_colonne_orologio.
+ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS alba_inizio BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS alba_soglia INTEGER;
+ALTER TABLE scene_indagine ADD COLUMN IF NOT EXISTS alba_sirena BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS alba_attiva BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS alba_tacche INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS orologio_offset TEXT;
 ALTER TABLE cronologie_indagine ADD COLUMN IF NOT EXISTS lavagna_versione INTEGER NOT NULL DEFAULT 0;
 -- Cosa mostra la player view: la lavagna o gli indizi classici. Si accende da

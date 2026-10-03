@@ -56,12 +56,21 @@
                 </div>
                 <ul class="player-esplora__lista" id="liveEsploraLista"></ul>
             </aside>
-            <div class="orologio-master" id="liveOrologio" hidden>
-                <span class="orologio-master__titolo" id="liveOrologioTitolo">Orologio</span>
-                <button type="button" class="orologio-master__btn" data-azione="meno" title="Una tacca indietro">−1</button>
-                <span class="orologio-master__conta" id="liveOrologioConta"></span>
-                <button type="button" class="orologio-master__btn" data-azione="piu" title="Una tacca avanti">+1</button>
-                <button type="button" class="orologio-master__btn" data-azione="reset" title="Riporta l'orologio a zero">↺</button>
+            <div class="orologio-master-pila">
+                <div class="orologio-master orologio-master--alba" id="liveAlba" hidden>
+                    <span class="orologio-master__titolo">Alba</span>
+                    <button type="button" class="orologio-master__btn" data-azione="meno" title="Una tacca indietro">−1</button>
+                    <span class="orologio-master__conta" id="liveAlbaConta"></span>
+                    <button type="button" class="orologio-master__btn" data-azione="piu" title="Una tacca avanti">+1</button>
+                    <button type="button" class="orologio-master__btn" data-azione="reset" title="Azzera e spegne l'alba">↺</button>
+                </div>
+                <div class="orologio-master" id="liveOrologio" hidden>
+                    <span class="orologio-master__titolo">Orologio</span>
+                    <button type="button" class="orologio-master__btn" data-azione="meno" title="Una tacca indietro">−1</button>
+                    <span class="orologio-master__conta" id="liveOrologioConta"></span>
+                    <button type="button" class="orologio-master__btn" data-azione="piu" title="Una tacca avanti">+1</button>
+                    <button type="button" class="orologio-master__btn" data-azione="reset" title="Riporta l'orologio a zero">↺</button>
+                </div>
             </div>
         </div>
         <div class="live-detail" id="liveDetail">
@@ -121,6 +130,7 @@
             puntoExtraEsaminato: "{{ url_for('indagini.indagini_toggle_punto_extra', indagine_id=indagine.id) }}",
             listaEsamina: "{{ url_for('indagini.indagini_lista_esamina', indagine_id=indagine.id) }}",
             orologio: "{{ url_for('indagini.indagini_orologio', indagine_id=indagine.id) }}",
+            alba: "{{ url_for('indagini.indagini_tempo', indagine_id=indagine.id) }}",
             cronologiaElimina: "/indagini/{{ indagine.id }}/cronologie/__CRONOLOGIA_ID__/elimina",
             cronologiaRinomina: "/indagini/{{ indagine.id }}/cronologie/__CRONOLOGIA_ID__/rinomina"
         },

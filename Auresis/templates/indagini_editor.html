@@ -209,7 +209,7 @@
         <!-- Luogo e lavagna di ogni scena: lo sfondo si sceglie nella pagina del luogo -->
         {% if scene_numeri %}
         <div class="panel-section">
-            <p class="panel-title">Scene: luogo, esche, lavagna e orologio</p>
+            <p class="panel-title">Scene: luogo, esche, lavagna, orologio e alba</p>
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 {% for s in scene_numeri %}
                 <div>
@@ -241,9 +241,16 @@
                                title="Quando l'orologio passa la soglia suona da sola la sirena del cambio, nella player view e nella vista live">
                             <input type="checkbox" name="orologio_sirena" value="1" {% if s in scene_orologio and scene_orologio[s].sirena %}checked{% endif %}> Sirena oltre la soglia
                         </label>
+                        <label style="font-size: 0.72rem; color: var(--bone-dim); display: flex; gap: 5px; align-items: center;"
+                               title="L'alba è il tempo della partita, non di una scena: si accende entrando qui e resta accesa nelle scene dopo, anche insieme all'orologio. Avanza solo a mano (@tempo nel copione, +1/−1 nella vista live), si spegne con @tempo-reset. In player view è la luce dello sfondo, dall'alba fredda al sole alto. In ritardo da soglia tacche in su.">
+                            <input type="checkbox" name="alba_inizio" value="1" {% if s in scene_alba %}checked{% endif %}> L'alba parte qui
+                            <span style="margin-left: 6px;">soglia</span>
+                            <input type="number" name="alba_soglia" min="1" max="6" value="{{ scene_alba[s].soglia or '' if s in scene_alba else '' }}"
+                                   style="width: 3.6em; font-size: 0.72rem; padding: 2px 4px;">
+                        </label>
                         <label style="font-size: 0.72rem; color: var(--bone-dim); display: flex; gap: 5px; align-items: center; padding-left: 18px;"
-                               title="Tempo manuale: le tacche le metti tu (bottone @tempo del copione, +1/−1/↺ della vista live). Niente taschino in player view: a ogni tacca cambia la luce della scena (e suona la sirena, se spuntata). In ritardo da soglia tacche in su.">
-                            <input type="checkbox" name="orologio_manuale" value="1" {% if s in scene_orologio and scene_orologio[s].manuale %}checked{% endif %}> Manuale (@tempo): luce invece del taschino
+                               title="A ogni tacca dell'alba suona la sirena del cambio, nella player view e nella vista live">
+                            <input type="checkbox" name="alba_sirena" value="1" {% if s in scene_alba and scene_alba[s].sirena %}checked{% endif %}> Sirena a ogni tacca dell'alba
                         </label>
                         {% if scene_gifs.get(s) %}
                         <label style="font-size: 0.72rem; color: var(--bone-dim); display: flex; gap: 5px; align-items: center;">

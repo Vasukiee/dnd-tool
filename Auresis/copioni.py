@@ -245,34 +245,32 @@ def _processa_esamina_tags(testo_md):
     return pattern.sub(sostituisci, testo_md)
 
 
-_RE_TEMPO = re.compile(r"^[ \t]*@tempo(-reset)?:\s*(\d+)-(\d+)\s*\|\s*([^\n]+?)[ \t]*$", re.MULTILINE)
+_RE_TEMPO = re.compile(r"^[ \t]*@tempo(-reset)?:\s*(\d+)(?:-(\d+))?\s*\|\s*([^\n]+?)[ \t]*$", re.MULTILINE)
 
 
 def _processa_tempo_tags(testo_md, per_master=True):
     """@tempo: indagine-scena | etichetta → bottone del master che fa passare
-    una tacca del tempo manuale di quella scena. @tempo-reset: con la stessa
-    forma lo riporta a zero (in player view la luce torna all'alba).
+    una tacca dell'alba dell'indagine (e la accende, se è spenta).
+    @tempo-reset: con la stessa forma la azzera e la spegne. L'alba è della
+    partita, non di una scena: il numero di scena è facoltativo e ignorato.
     Mai nel copione pubblico: fuori dalla vista master la riga sparisce."""
     def sostituisci(m):
         if not per_master:
             return ""
         reset = bool(m.group(1))
         indagine_id = escape(m.group(2))
-        scena_id = escape(m.group(3))
         nome = escape(m.group(4).strip())
         classe = "btn-inline-tempo btn-inline-tempo--reset" if reset else "btn-inline-tempo"
         azione = "reset" if reset else "piu"
-        titolo = (f"Riporta a zero il tempo della scena {scena_id}" if reset
-                  else f"Una tacca in più sul tempo della scena {scena_id}")
+        titolo = "Azzera e spegne l'alba" if reset else "Una tacca in più sull'alba"
 
         return (f'<span class="audio-recommendation-wrapper copione-tempo">'
-                f'<span class="audio-recommendation-label" style="color:var(--gold);">Tempo:</span> '
+                f'<span class="audio-recommendation-label" style="color:var(--gold);">Alba:</span> '
                 f'<button class="{classe} btn-audio-large" '
                 f'data-indagine-id="{indagine_id}" '
-                f'data-scena-id="{scena_id}" '
                 f'data-azione="{azione}" '
                 f'title="{titolo}">{nome}</button>'
-                f'<span class="copione-tempo__stato" data-tempo-stato="{indagine_id}-{scena_id}"></span>'
+                f'<span class="copione-tempo__stato" data-tempo-stato="{indagine_id}"></span>'
                 f'</span>')
 
     return _RE_TEMPO.sub(sostituisci, testo_md)
@@ -351,7 +349,7 @@ def _proteggi_blocchi_master_e_personaggi(testo_md):
 _RE_VARIANTI_INIZIO = re.compile(r"^\s*@varianti\s*(?::\s*(.*))?$", re.IGNORECASE)
 _RE_VERSIONE = re.compile(r"^\s*@versione\s*:\s*(.*)$", re.IGNORECASE)
 _RE_VARIANTI_FINE = re.compile(r"^\s*@fine-varianti\s*$", re.IGNORECASE)
-_RE_SEGUE_TEMPO = re.compile(r"^\s*@segue-tempo\s*:\s*(\d+)-(\d+)\s*$", re.IGNORECASE)
+_RE_SEGUE_TEMPO = re.compile(r"^\s*@segue-tempo\s*:\s*(\d+)(?:-\d+)?\s*$", re.IGNORECASE)
 
 
 def _estrai_varianti(testo_md):
@@ -364,14 +362,14 @@ def _estrai_varianti(testo_md):
         ...testo dell'altra versione...
         @fine-varianti
 
-    Tra @varianti e la prima @versione può stare `@segue-tempo: 4-11`: nella
-    vista master la scheda suggerita dal tempo manuale di quella scena si
-    evidenzia (la prima se in tempo, la seconda se in ritardo), senza
-    selezionarla.
+    Tra @varianti e la prima @versione può stare `@segue-tempo: 4-11` (o
+    solo `4`): nella vista master la scheda suggerita dall'alba
+    dell'indagine si evidenzia (la prima se in tempo, la seconda se in
+    ritardo), senza selezionarla.
 
     Ogni blocco è sostituito da un segnaposto su una riga a sé.
     Ritorna (testo_con_segnaposto, blocchi) dove blocchi è una lista di
-    {"titolo": str, "versioni": [(etichetta, testo_md), ...], "tempo": (indagine, scena) | None}.
+    {"titolo": str, "versioni": [(etichetta, testo_md), ...], "tempo": indagine | None}.
     Un blocco senza @fine-varianti si chiude a fine testo; il testo tra
     @varianti e la prima @versione è ignorato.
     """
@@ -389,7 +387,7 @@ def _estrai_varianti(testo_md):
         m = _RE_VERSIONE.match(riga)
         mt = _RE_SEGUE_TEMPO.match(riga) if not blocco["versioni"] else None
         if mt:
-            blocco["tempo"] = (int(mt.group(1)), int(mt.group(2)))
+            blocco["tempo"] = int(mt.group(1))
         elif m:
             blocco["versioni"].append([m.group(1).strip(), []])
         elif _RE_VARIANTI_FINE.match(riga):
@@ -418,7 +416,7 @@ def _html_varianti(blocco, indice, renderizza, per_master=True):
     (delegato su document, vedi copioni_dettaglio.html)."""
     tempo = ""
     if per_master and blocco.get("tempo"):
-        tempo = f' data-segue-tempo="{blocco["tempo"][0]}-{blocco["tempo"][1]}"'
+        tempo = f' data-segue-tempo="{blocco["tempo"]}"'
     parti = [f'<div class="copione-varianti" data-varianti="{indice}"{tempo}>']
     if blocco["titolo"]:
         parti.append(f'<div class="copione-varianti__titolo">{escape(blocco["titolo"])}</div>')

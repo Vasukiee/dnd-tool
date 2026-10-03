@@ -83,6 +83,18 @@
     color: var(--bone);
 }
 .orologio-master[hidden] { display: none; }
+/* Orologio di scena e alba possono esserci insieme: impilati in basso a destra */
+.orologio-master-pila {
+    position: absolute;
+    right: 20px;
+    bottom: 20px;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+.orologio-master-pila .orologio-master { position: static; }
 .orologio-master__titolo {
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -104,7 +116,7 @@
 }
 .orologio-master__btn:hover { border-color: var(--gold); }
 
-/* --- Tempo manuale: la luce della scena (player view) ---
+/* --- Alba: la luce della scena (player view) ---
    --luce va da 0 (alba fredda) a 1 (sole alto). Nessun numero, nessuna
    barra: cambia lo sfondo, lentamente, come cambia la luce vera.
    Due veli separati (ognuno col suo blend sullo sfondo): il freddo

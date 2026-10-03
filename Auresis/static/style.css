@@ -6743,7 +6743,6 @@ html.indagini-player-page.has-react-motion .main > * {
 
 .copione-tempo__stato:empty { display: none; }
 .copione-tempo__stato.is-ritardo { color: var(--rust-bright); }
-.copione-tempo__stato.is-errore { color: var(--rust-bright); font-style: italic; }
 
 .copione-varianti__scheda--suggerita {
     border-style: dashed dashed none dashed;

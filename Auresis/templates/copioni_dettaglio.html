@@ -1519,13 +1519,14 @@
             }
         });
 
-        // Tempo manuale (@tempo): ogni click è una tacca in più sulla scena del
-        // bottone; @tempo-reset la riporta a zero. Accanto, solo per il master, tacche / soglia ed esito; nei
+        // Alba (@tempo / @tempo-reset): il tempo della partita, uno per indagine.
+        // @tempo è una tacca in più (e la accende), @tempo-reset la azzera e la
+        // spegne. Accanto, solo per il master, tacche / soglia ed esito; nei
         // blocchi @varianti con @segue-tempo si evidenzia la scheda suggerita
         // (prima = in tempo, seconda = in ritardo), senza mai selezionarla.
         {% if not modalita_giocatrice %}
         (function () {
-            const stati = {}; // "indagine-scena" -> orologio | {errore}
+            const stati = {}; // indagine -> alba | null
 
             function chiavi() {
                 const set = new Set();
@@ -1537,37 +1538,31 @@
             function disegna() {
                 document.querySelectorAll('[data-tempo-stato]').forEach(el => {
                     const st = stati[el.dataset.tempoStato];
-                    el.classList.toggle('is-errore', !!(st && st.errore));
-                    el.classList.toggle('is-ritardo', !!(st && st.in_ritardo));
-                    if (!st) { el.textContent = ''; return; }
-                    if (st.errore) { el.textContent = st.errore; return; }
+                    const accesa = !!(st && st.attiva);
+                    el.classList.toggle('is-ritardo', accesa && !!st.in_ritardo);
+                    if (st === undefined) { el.textContent = ''; return; }
+                    if (!accesa) { el.textContent = 'alba spenta'; return; }
                     const conta = st.soglia ? `${st.tacche} / ${st.soglia}` : String(st.tacche);
                     el.textContent = st.soglia ? `${conta} · ${st.in_ritardo ? 'in ritardo' : 'in tempo'}` : conta;
                 });
                 document.querySelectorAll('[data-segue-tempo]').forEach(blocco => {
                     const st = stati[blocco.dataset.segueTempo];
-                    const suggerita = st && !st.errore && st.soglia ? (st.in_ritardo ? '1' : '0') : null;
+                    const suggerita = st && st.soglia ? (st.in_ritardo ? '1' : '0') : null;
                     blocco.querySelectorAll(':scope > .copione-varianti__schede > .copione-varianti__scheda').forEach(s => {
                         const si = s.dataset.versione === suggerita;
                         s.classList.toggle('copione-varianti__scheda--suggerita', si);
-                        if (si) s.title = st.in_ritardo ? 'Suggerita dal tempo: in ritardo' : 'Suggerita dal tempo: in tempo';
+                        if (si) s.title = st.in_ritardo ? "Suggerita dall'alba: in ritardo" : "Suggerita dall'alba: in tempo";
                         else s.removeAttribute('title');
                     });
                 });
             }
 
-            function registra(chiave, resp, data) {
-                if (resp.ok) stati[chiave] = data.orologio;
-                else if (resp.status === 409) stati[chiave] = { errore: data.error || 'scena senza tempo manuale' };
-            }
-
             async function leggi() {
                 if (document.hidden) return;
-                await Promise.all(chiavi().map(async chiave => {
-                    const [indagineId, scena] = chiave.split('-');
+                await Promise.all(chiavi().map(async indagineId => {
                     try {
-                        const resp = await fetch(`/indagini/${indagineId}/tempo?scena=${scena}`);
-                        registra(chiave, resp, await resp.json());
+                        const resp = await fetch(`/indagini/${indagineId}/tempo`);
+                        if (resp.ok) stati[indagineId] = (await resp.json()).alba;
                     } catch (err) { /* rete assente: resta l'ultimo stato noto */ }
                 }));
                 disegna();
@@ -1576,17 +1571,17 @@
             document.body.addEventListener('click', async function (e) {
                 const btn = e.target.closest('.btn-inline-tempo');
                 if (!btn || btn.disabled) return;
-                const chiave = `${btn.dataset.indagineId}-${btn.dataset.scenaId}`;
+                const indagineId = btn.dataset.indagineId;
                 btn.disabled = true;
                 try {
-                    const resp = await fetch(`/indagini/${btn.dataset.indagineId}/tempo`, {
+                    const resp = await fetch(`/indagini/${indagineId}/tempo`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ scena: parseInt(btn.dataset.scenaId, 10), azione: btn.dataset.azione || 'piu' })
+                        body: JSON.stringify({ azione: btn.dataset.azione || 'piu' })
                     });
                     const data = await resp.json();
-                    registra(chiave, resp, data);
-                    if (!resp.ok) alert(data.error || 'Errore nel far passare il tempo.');
+                    if (resp.ok) stati[indagineId] = data.alba;
+                    else alert(data.error || "Errore nel far passare il tempo.");
                     disegna();
                 } catch (err) {
                     console.error('Errore:', err);
@@ -1599,7 +1594,7 @@
 
             if (chiavi().length) {
                 leggi();
-                // Si riallinea con la vista live (+1 / −1 / reset fatti lì)
+                // Si riallinea con la vista live (+1 / −1 / ↺ fatti lì)
                 setInterval(leggi, 10000);
             }
         })();

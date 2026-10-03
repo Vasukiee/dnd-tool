@@ -259,29 +259,28 @@
         };
     }
 
-    // Tempo manuale: nessun oggetto in scena, solo la luce dello sfondo che
-    // sale dall'alba fredda al sole alto (--luce da 0 a 1 sul contenitore).
-    // opzioni.suPasso(): chiamata a ogni tacca in più restando nella scena,
-    // se il server dice che lì suona la sirena.
+    // Alba: il tempo della partita. Nessun oggetto in scena, solo la luce
+    // dello sfondo che sale dall'alba fredda al sole alto (--luce da 0 a 1 sul
+    // contenitore). Non dipende dalla scena: cambiando scena la luce resta.
+    // opzioni.suPasso(): chiamata a ogni tacca in più, se il server dice che
+    // suona la sirena.
     function creaLuce(contenitore, opzioni) {
         opzioni = opzioni || {};
-        let scena = null;
-        let passi = null;
+        let passi = null; // null: alba spenta
 
         return {
-            aggiorna(stato, nuovaScena) {
+            aggiorna(stato) {
+                if (stato === undefined) return;
                 if (!stato) {
                     contenitore.classList.remove("tempo-attivo");
-                    scena = null;
                     passi = null;
                     return;
                 }
-                const entrata = passi === null || nuovaScena !== scena;
                 const nuoviPassi = Math.max(0, stato.passi | 0);
                 const luce = Math.min(1, Math.max(0, Number(stato.luce) || 0));
-                if (entrata) {
-                    // Entrando nella scena (o ricaricando la pagina) la luce è già
-                    // quella giusta: niente lunga alba da rivedere
+                if (passi === null) {
+                    // Accesa ora (o pagina appena caricata): la luce è già
+                    // quella giusta, niente lunga alba da rivedere
                     contenitore.classList.add("tempo-senza-transizione");
                     contenitore.style.setProperty("--luce", luce);
                     contenitore.classList.add("tempo-attivo");
@@ -291,7 +290,6 @@
                     contenitore.style.setProperty("--luce", luce);
                     if (nuoviPassi > passi && stato.sirena && opzioni.suPasso) opzioni.suPasso();
                 }
-                scena = nuovaScena;
                 passi = nuoviPassi;
             },
         };

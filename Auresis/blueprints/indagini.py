@@ -213,52 +213,68 @@ def _tacche_orologio(nodi, stati_sblocco, scena, punti_extra, extra_esaminati):
 
 def _orologio(indagine_id, nodi, stati_sblocco, cronologia, scena, scene=None):
     """Stato dell'orologio della scena, o None se la scena non lo prevede.
-    {"tacche", "soglia", "base", "sirena", "manuale"}: base sono le tacche contate
-    dalla cronologia, tacche includono la correzione manuale del master; sirena dice
+    {"tacche", "soglia", "base", "sirena"}: base sono le tacche contate dalla
+    cronologia, tacche includono la correzione manuale del master; sirena dice
     se passata la soglia parte da sola la sirena. Va anche alla player view,
     ma solo per la scena in corso: quali altre scene abbiano l'orologio
-    anticiperebbe il copione. `scene` (facoltativo) è db.get_scene_info().
-
-    Con il tempo manuale (bottone @tempo del copione) le tacche sono solo quelle
-    messe dal master: base è 0 e "in_ritardo" vale da soglia tacche in su."""
+    anticiperebbe il copione. `scene` (facoltativo) è db.get_scene_info()."""
     if scene:
-        abilitato, soglia, sirena, manuale = scene["orologi"].get(scena, (False, None, False, False))
+        abilitato, soglia, sirena = scene["orologi"].get(scena, (False, None, False))
     else:
-        abilitato, soglia, sirena, manuale = db.get_orologio_scena(indagine_id, scena)
+        abilitato, soglia, sirena = db.get_orologio_scena(indagine_id, scena)
     if not abilitato:
         return None
-    if manuale:
-        tacche = max(0, db.get_orologio_offset(cronologia, scena))
-        return {"tacche": tacche, "soglia": soglia, "base": 0, "sirena": sirena, "manuale": True,
-                "in_ritardo": bool(soglia) and tacche >= soglia}
     esaminati = cronologia.get("punti_extra_esaminati") if cronologia else None
     base = _tacche_orologio(
         nodi, stati_sblocco, scena, scene["punti_extra"] if scene else db.get_punti_extra(indagine_id),
         set(json.loads(esaminati)) if esaminati else set())
     tacche = max(0, base + db.get_orologio_offset(cronologia, scena))
-    return {"tacche": tacche, "soglia": soglia, "base": base, "sirena": sirena, "manuale": False}
+    return {"tacche": tacche, "soglia": soglia, "base": base, "sirena": sirena}
 
 
-def _luce_tempo(tacche, soglia):
+def _orologio_player(*args, **kwargs):
+    """Per la giocatrice la sirena compare solo una volta passata la soglia:
+    prima, il sorgente della pagina non deve dire che qualcosa sta per suonare."""
+    stato = _orologio(*args, **kwargs)
+    if not stato:
+        return None
+    oltre = bool(stato["soglia"]) and stato["tacche"] > stato["soglia"]
+    return {"tacche": stato["tacche"], "soglia": stato["soglia"], "sirena": stato["sirena"] and oltre}
+
+
+def _alba(indagine_id, cronologia, scene=None):
+    """Stato dell'alba, il tempo della partita: vive nella cronologia, non in
+    una scena, e convive con l'orologio di scena. {"attiva", "tacche",
+    "soglia", "sirena", "in_ritardo"}; None se l'indagine non la prevede e non
+    è accesa. In ritardo da soglia tacche in su. `scene`: db.get_scene_info()."""
+    if scene is not None:
+        config = scene["alba"][:2] if scene["alba"] else None
+    else:
+        config = db.get_alba_config(indagine_id)
+    attiva = bool(cronologia and cronologia.get("alba_attiva"))
+    if not config and not attiva:
+        return None
+    soglia, sirena = config or (None, False)
+    tacche = int(cronologia.get("alba_tacche") or 0) if attiva else 0
+    return {"attiva": attiva, "tacche": tacche, "soglia": soglia, "sirena": sirena,
+            "in_ritardo": bool(soglia) and tacche >= soglia}
+
+
+def _luce_alba(tacche, soglia):
     """Quanto è salito il sole, da 0 (alba fredda) a 1 (sole alto). Alla soglia
     è già giorno fatto; una tacca oltre è pieno mezzogiorno."""
     passi = (soglia + 1) if soglia else 3
     return round(min(1.0, tacche / passi), 3)
 
 
-def _orologio_player(*args, **kwargs):
-    """Per la giocatrice la sirena compare solo una volta passata la soglia:
-    prima, il sorgente della pagina non deve dire che qualcosa sta per suonare.
-    Col tempo manuale niente taschino e niente soglia: solo la luce della scena
-    e un contatore di passi, che serve al suono a ogni tacca."""
-    stato = _orologio(*args, **kwargs)
-    if not stato:
+def _alba_player(*args, **kwargs):
+    """Alla giocatrice solo la luce e un contatore di passi (serve al suono a
+    ogni tacca): né soglia né esito. None se l'alba è spenta."""
+    stato = _alba(*args, **kwargs)
+    if not stato or not stato["attiva"]:
         return None
-    if stato["manuale"]:
-        return {"manuale": True, "luce": _luce_tempo(stato["tacche"], stato["soglia"]),
-                "passi": stato["tacche"], "sirena": stato["sirena"]}
-    oltre = bool(stato["soglia"]) and stato["tacche"] > stato["soglia"]
-    return {"tacche": stato["tacche"], "soglia": stato["soglia"], "sirena": stato["sirena"] and oltre}
+    return {"luce": _luce_alba(stato["tacche"], stato["soglia"]), "passi": stato["tacche"],
+            "sirena": stato["sirena"]}
 
 
 def _merge_sblocco_in_nodi(nodi, stati_sblocco):
@@ -474,6 +490,7 @@ def indagini_editor(indagine_id):
         punti_extra=db.get_punti_extra(indagine_id),
         scene_lavagna=scene_lavagna,
         scene_orologio=db.get_orologi_scene(indagine_id),
+        scene_alba=db.get_scene_alba(indagine_id),
         locations=db.get_all_locations(),
     )
 
@@ -490,8 +507,11 @@ def indagini_salva_scena_gif(indagine_id, numero_scena):
     soglia = request.form.get("orologio_soglia", type=int)
     db.set_scena_orologio(indagine_id, numero_scena, request.form.get("orologio") == "1",
                           soglia if soglia and soglia > 0 else None,
-                          request.form.get("orologio_sirena") == "1",
-                          request.form.get("orologio_manuale") == "1")
+                          request.form.get("orologio_sirena") == "1")
+    soglia_alba = request.form.get("alba_soglia", type=int)
+    db.set_scena_alba(indagine_id, numero_scena, request.form.get("alba_inizio") == "1",
+                      soglia_alba if soglia_alba and soglia_alba > 0 else None,
+                      request.form.get("alba_sirena") == "1")
     if request.form.get("rimuovi_immagine") == "1":
         db.upsert_scena_gif(indagine_id, numero_scena, None)
     return redirect(url_for(".indagini_editor", indagine_id=indagine_id))
@@ -628,6 +648,7 @@ def indagini_live(indagine_id):
             indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val, per_master=True),
         "lista_mostrata": _lista_mostrata(cronologia_attiva, scena_corrente_val),
         "orologio": _orologio(indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val),
+        "alba": _alba(indagine_id, cronologia_attiva),
         # Le scene lavagna di solito non hanno indizi: senza questo elenco
         # "Avanza →" non ci arriverebbe mai. Vista solo master.
         "scene_lavagna": sorted(n for n, info in db.get_scene_gifs(indagine_id).items() if info["lavagna"]),
@@ -672,6 +693,7 @@ def _stato_live(indagine_id):
         "lista_mostrata": _lista_mostrata(cronologia_attiva, scena_corrente_val),
         "orologio": _orologio(indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val,
                               scene=scene),
+        "alba": _alba(indagine_id, cronologia_attiva, scene=scene),
     })
 
 
@@ -763,6 +785,10 @@ def indagini_avanza_scena(indagine_id):
     # può poi commutarla a mano (indagini_stato_lavagna).
     lavagna_aperta = db.scena_e_lavagna(indagine_id, nuova_scena)
     db.set_lavagna_aperta(cronologia_attiva["id"], lavagna_aperta)
+    # Entrando nella scena dove parte l'alba, se è spenta si accende a zero
+    # (accesa resta com'è: tornare indietro di scena non la azzera)
+    if nuova_scena in db.get_scene_alba(indagine_id):
+        db.modifica_alba(cronologia_attiva["id"], lambda attiva, tacche: (True, tacche if attiva else 0))
     if nuova_scena == 0:
         db.set_sipario_aperto(cronologia_attiva["id"], True)
         sipario_aperto = True
@@ -782,6 +808,7 @@ def indagini_avanza_scena(indagine_id):
             indagine_id, nodi, stati_sblocco, cronologia_attiva, nuova_scena, per_master=True),
         "lista_mostrata": _lista_mostrata(db.get_cronologia_attiva(indagine_id), nuova_scena),
         "orologio": _orologio(indagine_id, nodi, stati_sblocco, cronologia_attiva, nuova_scena),
+        "alba": _alba(indagine_id, db.get_cronologia_attiva(indagine_id)),
         "cronologia_nuova": {
             "id": cronologia_nuova["id"],
             "nome": cronologia_nuova["nome"],
@@ -808,6 +835,7 @@ def indagini_player(indagine_id):
     scena_corrente_val = _scena_corrente_effettiva(nodi, cronologia_attiva)
     punti_interesse = _punti_interesse_indagine(indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val)
     orologio = _orologio_player(indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val)
+    alba = _alba_player(indagine_id, cronologia_attiva)
     nodi = _redigi_nodi_non_scoperti(_merge_sblocco_in_nodi(nodi, stati_sblocco))
     scoperti_ids = [nid for nid, stato in stati_sblocco.items() if stato.get("scoperto")]
     scene_gifs = _scene_gifs_display(indagine_id)
@@ -821,6 +849,7 @@ def indagini_player(indagine_id):
         "scene_gifs": scene_gifs_str,
         "punti_interesse": punti_interesse,
         "orologio": orologio,
+        "alba": alba,
         "lavagna": _lavagna_player(cronologia_attiva, scoperti_ids),
     })
     return render_template(
@@ -867,6 +896,7 @@ def _stato_player(indagine_id):
             "nodi": [],
             "punti_interesse": _punti_interesse_indagine(indagine_id, nodi, {}, None, prima_scena),
             "orologio": _orologio_player(indagine_id, nodi, {}, None, prima_scena),
+            "alba": None,
             "lavagna": _lavagna_player(None, []),
         })
     nodi, stati_sblocco = db.get_nodi_con_stato(indagine_id, cronologia_attiva["id"])
@@ -890,6 +920,7 @@ def _stato_player(indagine_id):
             indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val, scene=scene),
         "orologio": _orologio_player(indagine_id, nodi, stati_sblocco, cronologia_attiva, scena_corrente_val,
                                      scene=scene),
+        "alba": _alba_player(indagine_id, cronologia_attiva, scene=scene),
         "lavagna": _lavagna_player(cronologia_attiva, scoperti_ids),
     })
 
@@ -958,42 +989,28 @@ def indagini_orologio(indagine_id):
 @bp.route("/<int:indagine_id>/tempo", methods=["GET", "POST"])
 @richiedi_master
 def indagini_tempo(indagine_id):
-    """Tempo manuale di una scena qualunque, non solo di quella in corso: il
-    bottone @tempo del copione la nomina, e la scena dopo ne legge l'esito.
-    GET ?scena=n → stato. POST JSON {"scena": n, "azione": "piu" | "meno" | "reset"}.
-    Risponde {"scena", "orologio"}; 409 se la scena non ha il tempo manuale."""
-    if request.method == "GET":
-        scena = request.args.get("scena", type=int)
-        azione = None
-    else:
-        dati = request.get_json(silent=True) or {}
-        try:
-            scena = int(dati.get("scena"))
-        except (TypeError, ValueError):
-            scena = None
-        azione = dati.get("azione")
+    """L'alba dell'indagine, il tempo della partita (bottoni @tempo e
+    @tempo-reset del copione, riquadro Alba della vista live).
+    GET → stato. POST JSON {"azione": "piu" | "meno" | "reset"}: "piu" la
+    accende se è spenta, "reset" la azzera e la spegne (in player view la luce
+    sparisce). Un eventuale "scena" nel JSON è ignorato: l'alba non è di una
+    scena. Risponde {"alba": stato | null}."""
+    if request.method == "POST":
+        azione = (request.get_json(silent=True) or {}).get("azione")
         if azione not in ("piu", "meno", "reset"):
             return jsonify({"error": "azione non valida"}), 400
-    if scena is None:
-        return jsonify({"error": "scena mancante"}), 400
-    abilitato, _, _, manuale = db.get_orologio_scena(indagine_id, scena)
-    if not (abilitato and manuale):
-        return jsonify({"error": f"la scena {scena} non ha il tempo manuale (editor: Orologio + Manuale)"}), 409
-    cronologia = db.get_cronologia_attiva(indagine_id)
-    if azione:
+        cronologia = db.get_cronologia_attiva(indagine_id)
         if not cronologia:
             nome = f"Cronologia del {datetime.now().strftime('%d/%m/%Y %H:%M')}"
             cronologia = db.crea_cronologia(indagine_id, nome)
         if azione == "piu":
-            applica = lambda o: max(o, 0) + 1
+            applica = lambda attiva, tacche: (True, (tacche if attiva else 0) + 1)
         elif azione == "meno":
-            applica = lambda o: max(o - 1, 0)
+            applica = lambda attiva, tacche: (attiva, tacche - 1)
         else:
-            applica = lambda o: 0
-        db.modifica_orologio_offset(cronologia["id"], scena, applica)
-        cronologia = db.get_cronologia_attiva(indagine_id)
-    # Il tempo manuale non guarda nodi né esami: bastano cronologia e scena
-    return jsonify({"scena": scena, "orologio": _orologio(indagine_id, [], {}, cronologia, scena)})
+            applica = lambda attiva, tacche: (False, 0)
+        db.modifica_alba(cronologia["id"], applica)
+    return jsonify({"alba": _alba(indagine_id, db.get_cronologia_attiva(indagine_id))})
 
 
 @bp.route("/<int:indagine_id>/lista-esamina", methods=["POST"])

@@ -727,6 +727,7 @@
         aggiornaPuntiInteresse(data.punti_interesse);
         aggiornaListaMostrata(data.lista_mostrata);
         aggiornaOrologio(data.orologio, nuovaScena);
+        aggiornaAlba(data.alba);
         if (!scenaCambiata && !statiCambiati) return;
 
         const statiPrecedenti = Object.assign({}, statiCorrente);
@@ -790,6 +791,7 @@
             aggiornaPuntiInteresse(data.punti_interesse);
             aggiornaListaMostrata(data.lista_mostrata);
             aggiornaOrologio(data.orologio, data.scena_corrente);
+            aggiornaAlba(data.alba);
             statiCorrente = {};
             Object.entries(data.stati).forEach(([k, v]) => { statiCorrente[parseInt(k)] = v; });
 
@@ -894,13 +896,11 @@
     // ----------------------------------------------------------------
     const orologioBox = document.getElementById("liveOrologio");
     const orologioConta = document.getElementById("liveOrologioConta");
-    const orologioTitolo = document.getElementById("liveOrologioTitolo");
 
     let orologioPrima = null; // {scena, tacche} dell'ultimo stato visto
 
     // nuovaScena: la scena a cui si riferisce lo stato (di default quella corrente).
-    // La sirena parte solo se le tacche passano la soglia restando nella stessa scena;
-    // col tempo manuale suona a ogni tacca in più.
+    // La sirena parte solo se le tacche passano la soglia restando nella stessa scena.
     function aggiornaOrologio(stato, nuovaScena) {
         if (stato === undefined || !orologioBox) return;
         const scena = nuovaScena ?? scenaCorrente;
@@ -908,27 +908,11 @@
         orologioPrima = stato ? { scena, tacche: stato.tacche } : null;
         orologioBox.hidden = !stato;
         if (!stato) return;
-        const stessaScena = prima && prima.scena === scena;
-        const soglia = stato.soglia;
-        if (stato.manuale) {
-            if (stato.sirena && stessaScena && stato.tacche > prima.tacche) {
-                riproduciSfx(window.INDAGINI_LIVE_CONFIG.sfx.sirena);
-            }
-            orologioTitolo.textContent = "Tempo";
-            orologioConta.textContent = soglia
-                ? `${stato.tacche} / ${soglia} · ${stato.in_ritardo ? "in ritardo" : "in tempo"}`
-                : String(stato.tacche);
-            orologioBox.classList.toggle("is-manuale", true);
-            orologioBox.classList.remove("is-soglia");
-            orologioBox.classList.toggle("is-oltre", !!stato.in_ritardo);
-            return;
-        }
-        orologioTitolo.textContent = "Orologio";
-        orologioBox.classList.remove("is-manuale");
-        if (stato.sirena && soglia && stessaScena &&
-            prima.tacche <= soglia && stato.tacche > soglia) {
+        if (stato.sirena && stato.soglia && prima && prima.scena === scena &&
+            prima.tacche <= stato.soglia && stato.tacche > stato.soglia) {
             riproduciSfx(window.INDAGINI_LIVE_CONFIG.sfx.sirena);
         }
+        const soglia = stato.soglia;
         orologioConta.textContent = soglia ? `${stato.tacche} / ${soglia}` : String(stato.tacche);
         orologioBox.classList.toggle("is-soglia", !!soglia && stato.tacche === soglia);
         orologioBox.classList.toggle("is-oltre", !!soglia && stato.tacche > soglia);
@@ -950,9 +934,50 @@
         });
     });
 
+    // ----------------------------------------------------------------
+    // Alba: il tempo della partita, a fianco dell'orologio di scena
+    // ----------------------------------------------------------------
+    const albaBox = document.getElementById("liveAlba");
+    const albaConta = document.getElementById("liveAlbaConta");
+    let albaPrima = null; // tacche dell'ultimo stato visto, null se spenta
+
+    // Il riquadro c'è quando l'alba è accesa; a ogni tacca in più suona la
+    // sirena, se l'editor la prevede.
+    function aggiornaAlba(stato) {
+        if (stato === undefined || !albaBox) return;
+        const accesa = !!(stato && stato.attiva);
+        if (accesa && stato.sirena && albaPrima !== null && stato.tacche > albaPrima) {
+            riproduciSfx(window.INDAGINI_LIVE_CONFIG.sfx.sirena);
+        }
+        albaPrima = accesa ? stato.tacche : null;
+        albaBox.hidden = !accesa;
+        if (!accesa) return;
+        albaConta.textContent = stato.soglia
+            ? `${stato.tacche} / ${stato.soglia} · ${stato.in_ritardo ? "in ritardo" : "in tempo"}`
+            : String(stato.tacche);
+        albaBox.classList.toggle("is-oltre", !!stato.in_ritardo);
+    }
+
+    albaBox.querySelectorAll("[data-azione]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+            try {
+                const resp = await fetch(window.INDAGINI_LIVE_CONFIG.endpoints.alba, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ azione: btn.dataset.azione }),
+                });
+                if (!resp.ok) { console.error("Errore alba"); return; }
+                aggiornaAlba((await resp.json()).alba);
+            } catch (e) {
+                console.error("Errore fetch alba:", e);
+            }
+        });
+    });
+
     // Render iniziale
     aggiornaPuntiInteresse(RAW.punti_interesse);
     aggiornaOrologio(RAW.orologio);
+    aggiornaAlba(RAW.alba);
     aggiornaListaMostrata(listaMostrata);
     renderTutti(null, null, null, null, null);
     aggiornaBottoneAvanza();

@@ -2751,8 +2751,32 @@ def assicura_colonne_orologio(force=False):
         ("scene_indagine", "orologio_sirena", "BOOLEAN NOT NULL DEFAULT FALSE"),
         ("scene_indagine", "orologio_manuale", "BOOLEAN NOT NULL DEFAULT FALSE"),
         ("cronologie_indagine", "orologio_offset", "TEXT"),
+        ("scene_indagine", "alba_inizio", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("scene_indagine", "alba_soglia", "INTEGER"),
+        ("scene_indagine", "alba_sirena", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("cronologie_indagine", "alba_attiva", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("cronologie_indagine", "alba_tacche", "INTEGER NOT NULL DEFAULT 0"),
     ])
+    _migra_orologi_manuali()
     _orologio_assicurato = True
+
+
+def _migra_orologi_manuali():
+    """Le scene configurate con il vecchio "orologio manuale" (un orologio per
+    scena con la luce al posto del taschino) diventano la scena dove parte
+    l'alba, che ora è per cronologia: stessa soglia e stessa sirena, e il
+    taschino della scena si spegne. Dopo la prima volta non tocca più nulla."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """UPDATE scene_indagine
+           SET alba_inizio = TRUE, alba_soglia = orologio_soglia, alba_sirena = orologio_sirena,
+               orologio = FALSE, orologio_manuale = FALSE
+           WHERE orologio_manuale = TRUE"""
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
 
 
 def assicura_schema_indagini():
@@ -2765,12 +2789,12 @@ def assicura_schema_indagini():
 
 
 def get_orologio_scena(indagine_id, numero_scena):
-    """(abilitato, soglia, sirena, manuale) dell'orologio di una sola scena."""
+    """(abilitato, soglia, sirena) dell'orologio di una sola scena."""
     assicura_colonne_orologio()
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        """SELECT orologio, orologio_soglia, orologio_sirena, orologio_manuale FROM scene_indagine
+        """SELECT orologio, orologio_soglia, orologio_sirena FROM scene_indagine
            WHERE indagine_id = %s AND numero_scena = %s""",
         (indagine_id, numero_scena),
     )
@@ -2778,47 +2802,111 @@ def get_orologio_scena(indagine_id, numero_scena):
     cur.close()
     conn.close()
     if not row:
-        return False, None, False, False
-    return _info_orologio(row[0], row[1], row[2], row[3])
+        return False, None, False
+    return _info_orologio(row[0], row[1], row[2])
 
 
-def _info_orologio(abilitato, soglia, sirena, manuale):
-    return bool(abilitato), soglia, bool(sirena), bool(manuale)
+def _info_orologio(abilitato, soglia, sirena):
+    return bool(abilitato), soglia, bool(sirena)
 
 
 def get_orologi_scene(indagine_id):
-    """{numero_scena: {"soglia", "sirena", "manuale"}} delle scene con l'orologio, per l'editor."""
+    """{numero_scena: {"soglia", "sirena"}} delle scene con l'orologio, per l'editor."""
     assicura_colonne_orologio()
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        """SELECT numero_scena, orologio_soglia, orologio_sirena, orologio_manuale FROM scene_indagine
+        """SELECT numero_scena, orologio_soglia, orologio_sirena FROM scene_indagine
            WHERE indagine_id = %s AND orologio = TRUE""",
         (indagine_id,),
     )
     rows = cur.fetchall()
     cur.close()
     conn.close()
-    return {r[0]: {"soglia": r[1], "sirena": bool(r[2]), "manuale": bool(r[3])} for r in rows}
+    return {r[0]: {"soglia": r[1], "sirena": bool(r[2])} for r in rows}
 
 
-def set_scena_orologio(indagine_id, numero_scena, abilitato, soglia, sirena, manuale=False):
+def set_scena_orologio(indagine_id, numero_scena, abilitato, soglia, sirena):
     assicura_colonne_orologio()
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        """INSERT INTO scene_indagine (indagine_id, numero_scena, orologio, orologio_soglia,
-                                       orologio_sirena, orologio_manuale)
-           VALUES (%s, %s, %s, %s, %s, %s)
+        """INSERT INTO scene_indagine (indagine_id, numero_scena, orologio, orologio_soglia, orologio_sirena)
+           VALUES (%s, %s, %s, %s, %s)
            ON CONFLICT (indagine_id, numero_scena)
            DO UPDATE SET orologio = EXCLUDED.orologio, orologio_soglia = EXCLUDED.orologio_soglia,
-                         orologio_sirena = EXCLUDED.orologio_sirena,
-                         orologio_manuale = EXCLUDED.orologio_manuale""",
-        (indagine_id, numero_scena, bool(abilitato), soglia, bool(sirena), bool(manuale)),
+                         orologio_sirena = EXCLUDED.orologio_sirena""",
+        (indagine_id, numero_scena, bool(abilitato), soglia, bool(sirena)),
     )
     conn.commit()
     cur.close()
     conn.close()
+
+
+def get_scene_alba(indagine_id):
+    """{numero_scena: {"soglia", "sirena"}} delle scene dove parte l'alba, per l'editor."""
+    assicura_colonne_orologio()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT numero_scena, alba_soglia, alba_sirena FROM scene_indagine
+           WHERE indagine_id = %s AND alba_inizio = TRUE""",
+        (indagine_id,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return {r[0]: {"soglia": r[1], "sirena": bool(r[2])} for r in rows}
+
+
+def get_alba_config(indagine_id):
+    """(soglia, sirena) dell'alba dell'indagine, dalla prima scena dove parte;
+    None se nessuna scena la prevede."""
+    scene = get_scene_alba(indagine_id)
+    if not scene:
+        return None
+    prima = scene[min(scene)]
+    return prima["soglia"], prima["sirena"]
+
+
+def set_scena_alba(indagine_id, numero_scena, inizio, soglia, sirena):
+    assicura_colonne_orologio()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """INSERT INTO scene_indagine (indagine_id, numero_scena, alba_inizio, alba_soglia, alba_sirena)
+           VALUES (%s, %s, %s, %s, %s)
+           ON CONFLICT (indagine_id, numero_scena)
+           DO UPDATE SET alba_inizio = EXCLUDED.alba_inizio, alba_soglia = EXCLUDED.alba_soglia,
+                         alba_sirena = EXCLUDED.alba_sirena""",
+        (indagine_id, numero_scena, bool(inizio), soglia, bool(sirena)),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def modifica_alba(cronologia_id, applica):
+    """Applica `applica(attiva, tacche) -> (attiva, tacche)` all'alba della
+    cronologia, con la riga bloccata. Ritorna il nuovo (attiva, tacche)."""
+    assicura_colonne_orologio()
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT alba_attiva, alba_tacche FROM cronologie_indagine WHERE id = %s FOR UPDATE",
+        (cronologia_id,),
+    )
+    row = cur.fetchone()
+    attiva, tacche = applica(bool(row[0]) if row else False, int(row[1] or 0) if row else 0)
+    tacche = max(0, int(tacche))
+    cur.execute(
+        "UPDATE cronologie_indagine SET alba_attiva = %s, alba_tacche = %s WHERE id = %s",
+        (bool(attiva), tacche, cronologia_id),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return bool(attiva), tacche
 
 
 def get_orologio_offset(cronologia, numero_scena):
@@ -2941,7 +3029,8 @@ def get_scene_info(indagine_id, con_sfondi=False):
     """Tutto ciò che serve ai polling sulle scene di un'indagine, in una sola
     query invece di quattro. Ritorna un dict con le stesse forme delle funzioni
     singole: "scene_gifs" (get_scene_gifs), "punti_extra" (get_punti_extra),
-    "orologi" ({numero_scena: get_orologio_scena}) e, con con_sfondi,
+    "orologi" ({numero_scena: get_orologio_scena}), "alba" ((soglia, sirena,
+    scena) della prima scena dove parte, o None) e, con con_sfondi,
     "sfondi_ereditati" (get_sfondi_ereditati)."""
     assicura_colonne_lavagna()
     assicura_colonne_punti_interesse()
@@ -2950,7 +3039,7 @@ def get_scene_info(indagine_id, con_sfondi=False):
                   (s.gif_data IS NOT NULL) AS has_file,
                   {_sql_epoch("s.gif_data_aggiornata")} AS versione,
                   s.punti_extra, s.orologio, s.orologio_soglia, s.orologio_sirena,
-                  s.orologio_manuale"""
+                  s.alba_inizio, s.alba_soglia, s.alba_sirena"""
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     if con_sfondi:
@@ -2969,15 +3058,16 @@ def get_scene_info(indagine_id, con_sfondi=False):
     rows = cur.fetchall()
     cur.close()
     conn.close()
-    out = {"scene_gifs": {}, "punti_extra": {}, "orologi": {}, "sfondi_ereditati": {}}
+    out = {"scene_gifs": {}, "punti_extra": {}, "orologi": {}, "sfondi_ereditati": {}, "alba": None}
     for row in rows:
         numero = row["numero_scena"]
         out["scene_gifs"][numero] = _info_gif_scena(row)
         voci = _voci_punti_extra(row["punti_extra"])
         if voci:
             out["punti_extra"][numero] = voci
-        out["orologi"][numero] = _info_orologio(row["orologio"], row["orologio_soglia"], row["orologio_sirena"],
-                                                row["orologio_manuale"])
+        out["orologi"][numero] = _info_orologio(row["orologio"], row["orologio_soglia"], row["orologio_sirena"])
+        if row["alba_inizio"] and (out["alba"] is None or numero < out["alba"][2]):
+            out["alba"] = (row["alba_soglia"], bool(row["alba_sirena"]), numero)
         if con_sfondi and row["er_location_id"] is not None:
             out["sfondi_ereditati"][numero] = {
                 "numero_scena": numero,
