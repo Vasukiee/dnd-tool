@@ -1520,7 +1520,7 @@
         });
 
         // Tempo manuale (@tempo): ogni click è una tacca in più sulla scena del
-        // bottone. Accanto, solo per il master, tacche / soglia ed esito; nei
+        // bottone; @tempo-reset la riporta a zero. Accanto, solo per il master, tacche / soglia ed esito; nei
         // blocchi @varianti con @segue-tempo si evidenzia la scheda suggerita
         // (prima = in tempo, seconda = in ritardo), senza mai selezionarla.
         {% if not modalita_giocatrice %}
@@ -1582,7 +1582,7 @@
                     const resp = await fetch(`/indagini/${btn.dataset.indagineId}/tempo`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ scena: parseInt(btn.dataset.scenaId, 10), azione: 'piu' })
+                        body: JSON.stringify({ scena: parseInt(btn.dataset.scenaId, 10), azione: btn.dataset.azione || 'piu' })
                     });
                     const data = await resp.json();
                     registra(chiave, resp, data);

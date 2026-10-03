@@ -245,26 +245,33 @@ def _processa_esamina_tags(testo_md):
     return pattern.sub(sostituisci, testo_md)
 
 
-_RE_TEMPO = re.compile(r"^[ \t]*@tempo:\s*(\d+)-(\d+)\s*\|\s*([^\n]+?)[ \t]*$", re.MULTILINE)
+_RE_TEMPO = re.compile(r"^[ \t]*@tempo(-reset)?:\s*(\d+)-(\d+)\s*\|\s*([^\n]+?)[ \t]*$", re.MULTILINE)
 
 
 def _processa_tempo_tags(testo_md, per_master=True):
     """@tempo: indagine-scena | etichetta → bottone del master che fa passare
-    una tacca del tempo manuale di quella scena. Mai nel copione pubblico:
-    fuori dalla vista master la riga sparisce del tutto."""
+    una tacca del tempo manuale di quella scena. @tempo-reset: con la stessa
+    forma lo riporta a zero (in player view la luce torna all'alba).
+    Mai nel copione pubblico: fuori dalla vista master la riga sparisce."""
     def sostituisci(m):
         if not per_master:
             return ""
-        indagine_id = escape(m.group(1))
-        scena_id = escape(m.group(2))
-        nome = escape(m.group(3).strip())
+        reset = bool(m.group(1))
+        indagine_id = escape(m.group(2))
+        scena_id = escape(m.group(3))
+        nome = escape(m.group(4).strip())
+        classe = "btn-inline-tempo btn-inline-tempo--reset" if reset else "btn-inline-tempo"
+        azione = "reset" if reset else "piu"
+        titolo = (f"Riporta a zero il tempo della scena {scena_id}" if reset
+                  else f"Una tacca in più sul tempo della scena {scena_id}")
 
         return (f'<span class="audio-recommendation-wrapper copione-tempo">'
                 f'<span class="audio-recommendation-label" style="color:var(--gold);">Tempo:</span> '
-                f'<button class="btn-inline-tempo btn-audio-large" '
+                f'<button class="{classe} btn-audio-large" '
                 f'data-indagine-id="{indagine_id}" '
                 f'data-scena-id="{scena_id}" '
-                f'title="Una tacca in più sul tempo della scena {scena_id}">{nome}</button>'
+                f'data-azione="{azione}" '
+                f'title="{titolo}">{nome}</button>'
                 f'<span class="copione-tempo__stato" data-tempo-stato="{indagine_id}-{scena_id}"></span>'
                 f'</span>')
 

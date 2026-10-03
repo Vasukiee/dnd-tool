@@ -1848,6 +1848,7 @@ details[open] .filtri-section__toggle::before {
 
 .btn-inline-esamina::after { content: '📋'; }
 .btn-inline-tempo::after { content: '⏳'; }
+.btn-inline-tempo--reset::after { content: '↺'; }
 
 .btn-inline-indizio:hover, .btn-inline-scena:hover, .btn-inline-sipario:hover, .btn-inline-esamina:hover, .btn-inline-tempo:hover {
     border-color: var(--gold);
