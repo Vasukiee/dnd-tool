@@ -10,7 +10,10 @@
         escapeHtml: escHtml,
         stellaPunti,
         nodoHaFigliScoperti: sharedNodoHaFigliScoperti,
-        nodoRichiamato: sharedNodoRichiamato
+        nodoRichiamato: sharedNodoRichiamato,
+        calcolaLayoutGrafo,
+        riquadroScena,
+        rettNodo
     } = window.IndaginiShared;
     let SCENE_GIFS = RAW.scene_gifs || {};
 
@@ -121,6 +124,12 @@
     const ARROW_AMB_LEN = 80;
     const RIV_R = Math.round(NODE_H * 1.8);
     const RIV_r = Math.round(RIV_R * 0.42);
+    const BOX_PAD = 22;
+    const BOX_TITLE_H = 18;
+    const DIM_LAYOUT = {
+        nodeW: NODE_W, nodeH: NODE_H, pad: PAD, rivR: RIV_R,
+        ghostGap: GHOST_GAP, ghostR: GHOST_R, boxPad: BOX_PAD, boxTitleH: BOX_TITLE_H,
+    };
 
     // --- Stato corrente (ricostruito dal server) ---
     let scopertiIds = new Set(RAW.scoperti_ids.map(Number));
@@ -200,92 +209,7 @@
     let g = null;
 
     function calcolaLayout() {
-        const visibili = NODI.filter(nodoDovrebbeEssereVisibile);
-        const visIds = new Set(visibili.map(n => n.id));
-        const coll = COLL.filter(c => visIds.has(c.nodo_genitore_id) && visIds.has(c.nodo_figlio_id));
-        const scene = [...new Set(visibili.map(scenaNodo))].sort((a, b) => a - b);
-
-        const gl = new dagre.graphlib.Graph();
-        gl.setGraph({ rankdir: "LR", nodesep: 28, ranksep: 160, marginx: PAD, marginy: PAD });
-        gl.setDefaultEdgeLabel(() => ({}));
-        visibili.forEach(n => gl.setNode(String(n.id), { width: NODE_W, height: NODE_H }));
-        coll.forEach(c => gl.setEdge(String(c.nodo_genitore_id), String(c.nodo_figlio_id)));
-
-        // Virtual roots per scena: tengono le scene in colonna da sinistra a destra
-        const figliIds = new Set(coll.map(c => c.nodo_figlio_id));
-        const radiciPerScena = {};
-        visibili.forEach(n => {
-            if (!figliIds.has(n.id)) {
-                (radiciPerScena[scenaNodo(n)] = radiciPerScena[scenaNodo(n)] || []).push(n.id);
-            }
-        });
-        const genitoriDiId = {};
-        coll.forEach(c => {
-            (genitoriDiId[c.nodo_figlio_id] = genitoriDiId[c.nodo_figlio_id] || []).push(c.nodo_genitore_id);
-        });
-        let prevScenaVId = null;
-        scene.forEach(scena => {
-            const vId = `__scena_${scena}__`;
-            gl.setNode(vId, { width: 0, height: 0 });
-            if (prevScenaVId) gl.setEdge(prevScenaVId, vId);
-            if (radiciPerScena[scena]) {
-                radiciPerScena[scena].forEach(id => gl.setEdge(vId, String(id)));
-            } else {
-                visibili.forEach(n => {
-                    if (scenaNodo(n) !== scena) return;
-                    const parents = genitoriDiId[n.id] || [];
-                    if (parents.some(pid => nodoById[pid] && scenaNodo(nodoById[pid]) !== scena))
-                        gl.setEdge(vId, String(n.id));
-                });
-            }
-            prevScenaVId = vId;
-        });
-        scene.forEach((scena, i) => {
-            if (radiciPerScena[scena] || i === scene.length - 1) return;
-            const nextVId = `__scena_${scene[i + 1]}__`;
-            visibili.forEach(n => {
-                if (scenaNodo(n) !== scena) return;
-                const hasChildInSameScene = coll.some(c =>
-                    c.nodo_genitore_id === n.id &&
-                    nodoById[c.nodo_figlio_id] &&
-                    scenaNodo(nodoById[c.nodo_figlio_id]) === scena
-                );
-                if (!hasChildInSameScene) gl.setEdge(String(n.id), nextVId);
-            });
-        });
-
-        dagre.layout(gl);
-
-        // Post-processing: redistribuzione nodi per eliminare gap verticali
-        const STEP_Y = NODE_H + 28;
-        scene.forEach(scena => {
-            const byRank = {};
-            visibili.forEach(n => {
-                if (scenaNodo(n) !== scena) return;
-                const pos = gl.node(String(n.id));
-                if (!pos) return;
-                const rk = Math.round(pos.x);
-                (byRank[rk] = byRank[rk] || []).push({ id: String(n.id), pos });
-            });
-            Object.values(byRank).forEach(group => {
-                if (group.length < 2) return;
-                group.sort((a, b) => a.pos.y - b.pos.y);
-                const baseY = group[0].pos.y;
-                group.forEach((item, i) => {
-                    const newY = baseY + i * STEP_Y;
-                    const dy = newY - item.pos.y;
-                    if (Math.abs(dy) < 0.5) return;
-                    item.pos.y = newY;
-                    (gl.nodeEdges(item.id) || []).forEach(e => {
-                        const edge = gl.edge(e);
-                        if (!edge || !edge.points || !edge.points.length) return;
-                        if (e.v === item.id) edge.points[0].y += dy;
-                        else edge.points[edge.points.length - 1].y += dy;
-                    });
-                });
-            });
-        });
-        return gl;
+        return calcolaLayoutGrafo(NODI.filter(nodoDovrebbeEssereVisibile), COLL, DIM_LAYOUT);
     }
 
     // ----------------------------------------------------------------
@@ -621,36 +545,24 @@
     // ----------------------------------------------------------------
     // Macroriquadri di scena
     // ----------------------------------------------------------------
-    const BOX_PAD = 22;
-    const BOX_TITLE_H = 18;
-
     const sceneEls = {}; // scena -> {rect, label}: riusati perché il riquadro si allarghi/stringa con transizione
 
     function disegnaScene() {
         const disegnate = new Set();
         tutteLeScene.forEach(scena => {
-            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            NODI.forEach(n => {
-                if (scenaNodo(n) !== scena) return;
-                if (!nodoDovrebbeEssereVisibile(n)) return;
-                const pos = g.node(String(n.id));
-                if (!pos) return;
-                minX = Math.min(minX, pos.x - NODE_W / 2);
-                minY = Math.min(minY, pos.y - NODE_H / 2);
-                maxX = Math.max(maxX, pos.x + NODE_W / 2);
-                maxY = Math.max(maxY, pos.y + NODE_H / 2);
-            });
+            const membri = NODI
+                .filter(n => scenaNodo(n) === scena && nodoDovrebbeEssereVisibile(n))
+                .map(n => g.node(String(n.id)))
+                .filter(Boolean);
             // Player: mostra il riquadro scena SOLO se ci sono nodi scoperti dentro
-            if (minX === Infinity) return;
+            const box = riquadroScena(membri, DIM_LAYOUT);
+            if (!box) return;
             disegnate.add(scena);
 
             const isCorrente = scena === scenaCorrente;
             const isChiusa = scena < scenaCorrente;
 
-            const bx = minX - BOX_PAD;
-            const by = minY - BOX_PAD - BOX_TITLE_H;
-            const bw = maxX - minX + BOX_PAD * 2;
-            const bh = maxY - minY + BOX_PAD * 2 + BOX_TITLE_H;
+            const bx = box.x, by = box.y, bw = box.w, bh = box.h;
 
             let els = sceneEls[scena];
             if (!els) {
@@ -693,55 +605,46 @@
     // ----------------------------------------------------------------
     // Dimensioni SVG
     // ----------------------------------------------------------------
-    function calcolaWidthSVG() {
-        let maxX = 0;
-        let rivScoperta = false;
+    // Ingombro di tutto ciò che si vede: carte, stelle col fantasma, frecce
+    // ambigue e riquadri di scena, più il margine PAD.
+    function ingombroContenuto() {
+        let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+        const allarga = r => {
+            x1 = Math.min(x1, r.x1); y1 = Math.min(y1, r.y1);
+            x2 = Math.max(x2, r.x2); y2 = Math.max(y2, r.y2);
+        };
+        const perScena = {};
         NODI.forEach(n => {
             if (!nodoDovrebbeEssereVisibile(n)) return;
             const pos = g.node(String(n.id));
             if (!pos) return;
-            if (n.tipo_speciale === "rivelazione" && statiCorrente[n.id] === "SCOPERTO") {
-                rivScoperta = true;
-                maxX = Math.max(maxX, pos.x + RIV_R);
-            } else {
-                maxX = Math.max(maxX, pos.x + NODE_W / 2);
-                if (statiCorrente[n.id] === "SCOPERTO" && !nodoHaFigliScoperti(n.id)) {
-                    maxX = Math.max(maxX, pos.x + NODE_W / 2 + ARROW_AMB_LEN);
-                }
-            }
+            const r = rettNodo(pos);
+            if (statiCorrente[n.id] === "SCOPERTO" && n.tipo_speciale !== "rivelazione" && !nodoHaFigliScoperti(n.id))
+                r.x2 = Math.max(r.x2, pos.x + NODE_W / 2 + ARROW_AMB_LEN);
+            allarga(r);
+            (perScena[scenaNodo(n)] = perScena[scenaNodo(n)] || []).push(pos);
         });
-        const rivExt = rivScoperta ? GHOST_GAP + GHOST_R * 2 + 20 : 0;
-        return Math.max(maxX, 200) + PAD + rivExt;
-    }
-
-    function calcolaAltezzaSVG() {
-        let minY = Infinity, maxY = -Infinity;
-        NODI.forEach(n => {
-            if (!nodoDovrebbeEssereVisibile(n)) return;
-            const pos = g.node(String(n.id));
-            if (!pos) return;
-            const ry = n.tipo_speciale === "rivelazione" && statiCorrente[n.id] === "SCOPERTO" ? RIV_R : NODE_H / 2;
-            minY = Math.min(minY, pos.y - ry);
-            maxY = Math.max(maxY, pos.y + ry);
+        Object.values(perScena).forEach(membri => {
+            const b = riquadroScena(membri, DIM_LAYOUT);
+            allarga({ x1: b.x, y1: b.y, x2: b.x + b.w, y2: b.y + b.h });
         });
-        if (minY === Infinity) return 300 + PAD * 2;
-        return (maxY - minY) + PAD * 4;
+        if (x1 === Infinity) return { x: 0, y: 0, w: 200 + PAD, h: 300 + PAD * 2 };
+        return { x: x1 - PAD, y: y1 - PAD, w: x2 - x1 + PAD * 2, h: y2 - y1 + PAD * 2 };
     }
 
     function aggiornaSVG(forceRefit) {
         if (pzInit && (!forceRefit || pzManuale)) return;
         const animato = pzInit;
         const svgRect = svg.getBoundingClientRect();
-        const cw = calcolaWidthSVG();
-        const ch = calcolaAltezzaSVG();
+        const c = ingombroContenuto();
         const scale = Math.min(
-            svgRect.width  > 0 ? svgRect.width  / cw : 1,
-            svgRect.height > 0 ? svgRect.height / ch : 1,
+            svgRect.width  > 0 ? svgRect.width  / c.w : 1,
+            svgRect.height > 0 ? svgRect.height / c.h : 1,
             1
         );
         pz.s  = scale;
-        pz.tx = (svgRect.width  - cw * scale) / 2;
-        pz.ty = Math.max(0, (svgRect.height - ch * scale) / 2);
+        pz.tx = (svgRect.width  - c.w * scale) / 2 - c.x * scale;
+        pz.ty = Math.max(0, (svgRect.height - c.h * scale) / 2) - c.y * scale;
         applyPZ(animato);
         // Un fit fatto su un grafo vuoto (es. pagina aperta sulla scena
         // lavagna) non vale: si rifà quando compare il primo nodo.
