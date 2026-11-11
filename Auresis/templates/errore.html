@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ titolo }} — Il Registro{% endblock %}
+{% block content %}
+
+<div class="page-header">
+    <p class="page-eyebrow">Errore {{ codice }}</p>
+    <h1 class="page-title">{{ titolo }}</h1>
+</div>
+
+<div class="empty-state error-state">
+    <p class="error-state__code" aria-hidden="true">{{ codice }}</p>
+    <p class="empty-state__title">{{ spiegazione }}</p>
+    <div class="actions-row error-state__actions">
+        <a class="btn" href="{{ url_for('home') }}">Torna al sommario</a>
+        <a class="btn btn--ghost" href="{{ url_for('cerca') }}">Cerca nel registro</a>
+    </div>
+</div>
+
+{% endblock %}

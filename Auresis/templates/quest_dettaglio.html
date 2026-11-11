@@ -58,6 +58,7 @@
 </div>
 {% endif %}
 
+{% if not modalita_giocatrice %}
 <div class="actions-row">
     <a class="btn btn--ghost" href="{{ url_for('edita_quest', quest_id=quest.id) }}">Modifica</a>
     <a class="btn btn--ghost" href="{{ url_for('collega_npc_quest', quest_id=quest.id) }}">Collega personaggio</a>
@@ -65,5 +66,6 @@
         <button type="submit" class="btn btn--danger">Elimina</button>
     </form>
 </div>
+{% endif %}
 
 {% endblock %}

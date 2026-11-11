@@ -1,0 +1,23 @@
+name: Keep-alive
+
+# Una visita al giorno a /salute: sveglia il server e fa una query al database,
+# così il progetto Supabase gratuito non va in pausa per inattività.
+# Attivo solo se nel repository è impostata la variabile REGISTRO_URL
+# (Settings → Secrets and variables → Actions → Variables),
+# es. https://nome-servizio.onrender.com
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    if: ${{ vars.REGISTRO_URL != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Visita /salute
+        env:
+          REGISTRO_URL: ${{ vars.REGISTRO_URL }}
+        # il server gratuito può metterci un minuto a svegliarsi: si riprova
+        run: curl -fsS --retry 6 --retry-delay 20 --retry-all-errors --max-time 90 "${REGISTRO_URL%/}/salute"

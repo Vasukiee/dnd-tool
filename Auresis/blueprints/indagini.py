@@ -1052,11 +1052,16 @@ def _lavagna_corrente(indagine_id):
 def indagini_lavagna(indagine_id):
     """Stato della lavagna, per l'aggiornamento rapido mentre è aperta.
     Pubblico come stato-player: contiene solo indizi già scoperti."""
-    indagine = db.get_indagine(indagine_id)
-    if not indagine or _nascosta_alla_giocatrice(indagine):
-        return jsonify({"error": "non trovata"}), 404
-    cronologia, scoperti = _lavagna_corrente(indagine_id)
-    return jsonify(_lavagna_player(cronologia, scoperti))
+    # Interrogata ogni secondo da ogni schermo che ha la lavagna aperta: con
+    # la cache del polling il database la vede una volta al secondo in tutto.
+    def calcola():
+        indagine = db.get_indagine(indagine_id)
+        if not indagine or _nascosta_alla_giocatrice(indagine):
+            return jsonify({"error": "non trovata"}), 404
+        cronologia, scoperti = _lavagna_corrente(indagine_id)
+        return jsonify(_lavagna_player(cronologia, scoperti))
+
+    return _polling_in_cache(("lavagna", indagine_id, vista_ristretta()), calcola)
 
 
 # Spostare le carte e tendere o tagliare i fili è il gioco della lavagna, e lo

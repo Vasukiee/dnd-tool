@@ -222,4 +222,5 @@ def main():
 
 
 if __name__ == "__main__":
+    db.assicura_database_locale()
     main()

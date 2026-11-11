@@ -648,6 +648,12 @@
         if (document.querySelector('[data-list]')) {
             loadStaticScript('list-drawer.js');
         }
+        if (document.querySelector('form.form-grid')) {
+            loadStaticScript('form-guard.js');
+        }
+        if (document.querySelector('[data-visibility-toggle]')) {
+            loadStaticScript('visibility-toggle.js');
+        }
         if (document.querySelector('[data-relation-map]')) {
             loadStaticScript('relation-map.js');
         }

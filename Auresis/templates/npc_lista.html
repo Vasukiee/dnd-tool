@@ -67,7 +67,7 @@
             {% endif %}
         </div>
         {% if not modalita_giocatrice %}
-        <form action="{{ url_for('npc_toggle_visibile', npc_id=n.id) }}" class="card__visibility-form" method="post">
+        <form action="{{ url_for('npc_toggle_visibile', npc_id=n.id) }}" class="card__visibility-form" data-visibility-toggle method="post">
             <button type="submit" class="completata-toggle {% if n.visibile_giocatrice %}completata-toggle--attivo{% endif %}">
                 <span class="completata-toggle__check">{% if n.visibile_giocatrice %}✓{% endif %}</span>
                 {{ 'Mostrabile alla giocatrice' if n.visibile_giocatrice else 'Nascosto' }}

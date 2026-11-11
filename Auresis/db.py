@@ -21,6 +21,12 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 def is_sqlite():
     return not bool(DATABASE_URL)
 
+def percorso_sqlite():
+    """File del database locale. SQLITE_PATH lo sposta altrove (i test usano
+    un file temporaneo, così non toccano mai la campagna vera)."""
+    return os.environ.get("SQLITE_PATH") or os.path.join(os.path.dirname(__file__), "campagna.db")
+
+
 def get_storage_mode():
     """Ritorna 'disk' o 'db'. Se non settato, default: 'disk' per SQLite, 'db' per Postgres."""
     mode = os.environ.get("STORAGE_MODE")
@@ -239,8 +245,7 @@ def get_connection():
                 _timing.pool_s = getattr(_timing, "pool_s", 0.0) + (time.perf_counter() - t0)
         return _get_pg_connection()
     else:
-        db_path = os.path.join(os.path.dirname(__file__), "campagna.db")
-        conn = sqlite3.connect(db_path, factory=_ConnessioneSQLite,
+        conn = sqlite3.connect(percorso_sqlite(), factory=_ConnessioneSQLite,
                                detect_types=sqlite3.PARSE_DECLTYPES)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
@@ -457,6 +462,15 @@ def init_db():
     print(f"Database inizializzato ({'SQLite' if is_sqlite() else 'Postgres'}).")
 
 
+def assicura_database_locale():
+    """Per gli script da terminale: in locale crea o aggiorna il database
+    SQLite prima dell'uso, come fa app.py all'avvio. Senza, uno script lanciato
+    su una cartella appena clonata falliva con "no such table". Con Postgres
+    non fa nulla (lo schema lì si applica a mano)."""
+    if is_sqlite():
+        init_db()
+
+
 def _allinea_colonne_sqlite(conn, schema):
     """Aggiunge a un database SQLite esistente le colonne che schema.sql prevede
     ma il file non ha: CREATE TABLE IF NOT EXISTS non tocca le tabelle già create.
@@ -632,7 +646,11 @@ def ricerca_globale(testo, solo_visibili=False):
         condizioni = " OR ".join(f"{campo} ILIKE %s" for campo in campi)
         query = f"SELECT * FROM {tabella} WHERE ({condizioni})"
         if solo_visibili and colonna_visibilita:
-            query += f" AND {colonna_visibilita} = TRUE"
+            # Su Postgres la colonna è BOOLEAN per le indagini e INTEGER per
+            # le altre tabelle: il confronto sbagliato è un errore, che qui
+            # sotto azzerava in silenzio i risultati della giocatrice.
+            vero = "TRUE" if tabella == "indagini" else "1"
+            query += f" AND {colonna_visibilita} = {vero}"
         try:
             cur.execute(query, [like] * len(campi))
             righe = _dictify(cur.fetchall())
@@ -798,6 +816,22 @@ def get_locations_per_quest(quest_id):
     cur.close()
     conn.close()
     return rows
+
+def get_legami_quest():
+    """Tutti i legami incarico-luogo e incarico-personaggio in due query, per
+    la mappa relazioni (prima erano due query per ogni incarico).
+    Ritorna (luoghi, personaggi): liste di dict con quest_id e l'id collegato."""
+    assicura_quest_locations()
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT quest_id, location_id FROM quest_locations")
+    luoghi = _dictify(cur.fetchall())
+    cur.execute("SELECT quest_id, npc_id, ruolo_nella_quest FROM quest_npc")
+    personaggi = _dictify(cur.fetchall())
+    cur.close()
+    conn.close()
+    return luoghi, personaggi
+
 
 def get_quest_attive(location_id=None):
     """Quest attive, opzionalmente filtrate per location."""
@@ -1202,7 +1236,8 @@ def get_all_npc_full():
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
-        """SELECT npc.*, fazioni.nome as fazione_nome, locations.nome as location_nome
+        """SELECT npc.*, fazioni.nome as fazione_nome, locations.nome as location_nome,
+                  locations.visibile_giocatrice as location_visibile
            FROM npc
                     LEFT JOIN fazioni ON npc.fazione_id = fazioni.id
                     LEFT JOIN locations ON npc.location_attuale_id = locations.id
@@ -1218,7 +1253,8 @@ def get_npc_full(npc_id):
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(
-        """SELECT npc.*, fazioni.nome as fazione_nome, locations.nome as location_nome
+        """SELECT npc.*, fazioni.nome as fazione_nome, locations.nome as location_nome,
+                  locations.visibile_giocatrice as location_visibile
            FROM npc
                     LEFT JOIN fazioni ON npc.fazione_id = fazioni.id
                     LEFT JOIN locations ON npc.location_attuale_id = locations.id
@@ -1232,7 +1268,8 @@ def get_npc_full(npc_id):
         return None
     npc = dict(row)
     cur.execute(
-        """SELECT quest.id, quest.nome, quest.stato, quest_npc.ruolo_nella_quest
+        """SELECT quest.id, quest.nome, quest.stato, quest.visibile_giocatrice,
+                  quest_npc.ruolo_nella_quest
            FROM quest_npc JOIN quest ON quest_npc.quest_id = quest.id
            WHERE quest_npc.npc_id = %s""",
         (npc_id,)
@@ -1263,19 +1300,22 @@ def get_fazione_full(fazione_id):
         conn.close()
         return None
     fazione = dict(row)
-    cur.execute("SELECT id, nome, stato FROM npc WHERE fazione_id = %s", (fazione_id,))
+    cur.execute("SELECT id, nome, stato, visibile_giocatrice FROM npc WHERE fazione_id = %s ORDER BY nome", (fazione_id,))
     fazione["membri"] = _dictify(cur.fetchall())
-    cur.execute("SELECT id, nome FROM locations WHERE fazione_controllante_id = %s", (fazione_id,))
+    cur.execute("SELECT id, nome, visibile_giocatrice FROM locations WHERE fazione_controllante_id = %s ORDER BY nome", (fazione_id,))
     fazione["territori"] = _dictify(cur.fetchall())
     cur.close()
     conn.close()
     return fazione
 
 
-def get_all_quest_full():
+def get_all_quest_full(solo_luoghi_visibili=False):
+    """Con solo_luoghi_visibili=True (vista giocatrice) i nomi dei luoghi
+    ancora nascosti non compaiono tra quelli dell'incarico."""
     assicura_quest_locations()
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    filtro_luoghi = " AND locations.visibile_giocatrice = 1" if solo_luoghi_visibili else ""
     aggregazione_luoghi = "GROUP_CONCAT(locations.nome, ', ')" if is_sqlite() else "STRING_AGG(locations.nome, ', ' ORDER BY locations.nome)"
     cur.execute(
         f"""SELECT quest.*,
@@ -1283,7 +1323,7 @@ def get_all_quest_full():
                    {aggregazione_luoghi} as location_nomi
             FROM quest
             LEFT JOIN quest_locations ON quest_locations.quest_id = quest.id
-            LEFT JOIN locations ON quest_locations.location_id = locations.id
+            LEFT JOIN locations ON quest_locations.location_id = locations.id{filtro_luoghi}
             GROUP BY quest.id
             ORDER BY
                 CASE quest.stato WHEN 'attiva' THEN 0 ELSE 1 END,
@@ -1324,7 +1364,8 @@ def get_quest_full(quest_id):
     quest["location_ids"] = [l["id"] for l in quest["locations_collegate"]]
     quest["location_nomi"] = ", ".join(l["nome"] for l in quest["locations_collegate"])
     cur.execute(
-        """SELECT npc.id, npc.nome, npc.stato, quest_npc.ruolo_nella_quest
+        """SELECT npc.id, npc.nome, npc.stato, npc.visibile_giocatrice,
+                  quest_npc.ruolo_nella_quest
            FROM quest_npc JOIN npc ON quest_npc.npc_id = npc.id
            WHERE quest_npc.quest_id = %s""",
         (quest_id,)
@@ -1365,10 +1406,10 @@ def get_location_full(location_id):
         conn.close()
         return None
     location = dict(row)
-    cur.execute("SELECT id, nome, stato FROM npc WHERE location_attuale_id = %s", (location_id,))
+    cur.execute("SELECT id, nome, stato, visibile_giocatrice FROM npc WHERE location_attuale_id = %s ORDER BY nome", (location_id,))
     location["npc_presenti"] = _dictify(cur.fetchall())
     cur.execute(
-        """SELECT DISTINCT quest.id, quest.nome, quest.stato
+        """SELECT DISTINCT quest.id, quest.nome, quest.stato, quest.visibile_giocatrice
            FROM quest
            LEFT JOIN quest_locations ON quest_locations.quest_id = quest.id
            WHERE quest.location_id = %s OR quest_locations.location_id = %s
@@ -1504,24 +1545,33 @@ def get_home_dashboard_data(solo_visibili=False):
     filtro_npc_join = " AND npc.visibile_giocatrice = 1" if solo_visibili else ""
     filtro_quest_join = " AND quest.visibile_giocatrice = 1" if solo_visibili else ""
 
-    def valore(query):
-        cur.execute(query)
-        row = cur.fetchone()
-        return list(row.values())[0] if isinstance(row, dict) else row[0]
-
-    stats = {
-        "npc_totali": valore(f"SELECT COUNT(*) AS valore FROM npc WHERE 1=1{filtro_npc}"),
-        "npc_vivi": valore(f"SELECT COUNT(*) AS valore FROM npc WHERE stato = 'vivo'{filtro_npc}"),
-        "quest_attive": valore(f"SELECT COUNT(*) AS valore FROM quest WHERE stato = 'attiva'{filtro_quest}"),
-        "quest_completate": valore(f"SELECT COUNT(*) AS valore FROM quest WHERE stato = 'completata'{filtro_quest}"),
-        "fazioni_totali": valore("SELECT COUNT(*) AS valore FROM fazioni WHERE attiva = 1"),
-        "locations_totali": valore(f"SELECT COUNT(*) AS valore FROM locations{filtro_locations}"),
-        "sessioni_giocate": valore("SELECT COALESCE(MAX(sessione), 0) AS valore FROM eventi"),
+    # Tutti i conteggi in un'unica query: ogni query è un viaggio di rete
+    # verso il database, e qui erano dieci.
+    conteggi = {
+        "npc_totali": f"SELECT COUNT(*) FROM npc WHERE 1=1{filtro_npc}",
+        "npc_vivi": f"SELECT COUNT(*) FROM npc WHERE stato = 'vivo'{filtro_npc}",
+        "quest_attive": f"SELECT COUNT(*) FROM quest WHERE stato = 'attiva'{filtro_quest}",
+        "quest_completate": f"SELECT COUNT(*) FROM quest WHERE stato = 'completata'{filtro_quest}",
+        "fazioni_totali": "SELECT COUNT(*) FROM fazioni WHERE attiva = 1",
+        "locations_totali": f"SELECT COUNT(*) FROM locations{filtro_locations}",
+        "sessioni_giocate": "SELECT COALESCE(MAX(sessione), 0) FROM eventi",
+        "indagini_aperte_totale": f"SELECT COUNT(*) FROM indagini WHERE attiva = TRUE{filtro_indagini}",
+        "npc_critici_totale": f"""SELECT COUNT(*) FROM npc
+                                  WHERE stato = 'vivo'
+                                    AND COALESCE(livello_contaminazione, 0) > 0{filtro_npc}""",
     }
+    cur.execute("SELECT " + ", ".join(f"({query}) AS {nome}" for nome, query in conteggi.items()))
+    stats = dict(cur.fetchone())
+    indagini_aperte_totale = stats.pop("indagini_aperte_totale")
+    npc_critici_totale = stats.pop("npc_critici_totale")
+    quest_attive_totale = stats["quest_attive"]
 
     cur.execute("SELECT * FROM eventi ORDER BY sessione DESC, id DESC LIMIT 6")
     eventi_recenti = _dictify(cur.fetchall())
 
+    # In vista giocatrice i luoghi ancora nascosti non si nominano nemmeno
+    # accanto a incarichi e personaggi visibili.
+    filtro_luoghi = " AND locations.visibile_giocatrice = 1" if solo_visibili else ""
     aggregazione_luoghi = "GROUP_CONCAT(locations.nome, ', ')" if is_sqlite() else "STRING_AGG(locations.nome, ', ' ORDER BY locations.nome)"
     cur.execute(
         f"""SELECT quest.*,
@@ -1529,15 +1579,13 @@ def get_home_dashboard_data(solo_visibili=False):
                    {aggregazione_luoghi} AS location_nomi
             FROM quest
             LEFT JOIN quest_locations ON quest_locations.quest_id = quest.id
-            LEFT JOIN locations ON quest_locations.location_id = locations.id
+            LEFT JOIN locations ON quest_locations.location_id = locations.id{filtro_luoghi}
             WHERE quest.stato = 'attiva'{filtro_quest_join}
             GROUP BY quest.id
             ORDER BY CASE quest.tipo WHEN 'main' THEN 0 ELSE 1 END, quest.nome
             LIMIT 4"""
     )
     quest_attive = _dictify(cur.fetchall())
-    cur.execute(f"SELECT COUNT(*) AS valore FROM quest WHERE stato = 'attiva'{filtro_quest}")
-    quest_attive_totale = cur.fetchone()["valore"]
 
     cur.execute(
         f"""SELECT * FROM indagini
@@ -1546,25 +1594,17 @@ def get_home_dashboard_data(solo_visibili=False):
             LIMIT 4"""
     )
     indagini_aperte = _dictify(cur.fetchall())
-    cur.execute(f"SELECT COUNT(*) AS valore FROM indagini WHERE attiva = TRUE{filtro_indagini}")
-    indagini_aperte_totale = cur.fetchone()["valore"]
 
     cur.execute(
         f"""SELECT npc.*, locations.nome AS location_nome
             FROM npc
-            LEFT JOIN locations ON npc.location_attuale_id = locations.id
+            LEFT JOIN locations ON npc.location_attuale_id = locations.id{filtro_luoghi}
             WHERE npc.stato = 'vivo'
               AND COALESCE(npc.livello_contaminazione, 0) > 0{filtro_npc_join}
             ORDER BY COALESCE(npc.livello_contaminazione, 0) DESC, COALESCE(npc.ultima_apparizione_sessione, 0) DESC
             LIMIT 4"""
     )
     npc_critici = _dictify(cur.fetchall())
-    cur.execute(
-        f"""SELECT COUNT(*) AS valore FROM npc
-            WHERE stato = 'vivo'
-              AND COALESCE(livello_contaminazione, 0) > 0{filtro_npc}"""
-    )
-    npc_critici_totale = cur.fetchone()["valore"]
 
     cur.close()
     conn.close()
@@ -1653,20 +1693,68 @@ def upsert_npc(nome, **kwargs):
     return npc_id
 
 
-def update_quest(quest_id, nome, **kwargs):
+class NomeDuplicato(Exception):
+    """Il nome scelto appartiene già a un'altra voce della stessa tabella."""
+
+
+_TABELLE_CON_NOME = {"npc", "fazioni", "locations", "quest"}
+
+
+def _aggiorna_per_id(tabella, record_id, nome, kwargs):
+    """Aggiorna una voce individuandola per id, nome compreso.
+
+    Le upsert_* cercano per nome: usate per modificare una scheda, un cambio di
+    nome creava un doppione (o sovrascriveva la voce omonima) lasciando intatta
+    la scheda che si stava modificando. Solleva NomeDuplicato se il nuovo nome
+    è già di un'altra voce."""
+    if tabella not in _TABELLE_CON_NOME:
+        raise ValueError(f"Tabella non consentita: {tabella}")
     _valida_nomi_colonna(kwargs)
     _normalizza_valori(kwargs)
     conn = get_connection()
     cur = conn.cursor()
-    if kwargs:
-        set_clause = ", ".join(f"{k} = %s" for k in kwargs)
-        cur.execute(f"UPDATE quest SET nome = %s, {set_clause} WHERE id = %s", (nome, *kwargs.values(), quest_id))
-    else:
-        cur.execute("UPDATE quest SET nome = %s WHERE id = %s", (nome, quest_id))
-    conn.commit()
+    try:
+        cur.execute(f"SELECT id FROM {tabella} WHERE nome = %s AND id <> %s", (nome, record_id))
+        if cur.fetchone():
+            raise NomeDuplicato(nome)
+        set_clause = ", ".join(["nome = %s"] + [f"{k} = %s" for k in kwargs])
+        cur.execute(f"UPDATE {tabella} SET {set_clause} WHERE id = %s",
+                    (nome, *kwargs.values(), record_id))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    return record_id
+
+
+def update_npc(npc_id, nome, **kwargs):
+    return _aggiorna_per_id("npc", npc_id, nome, kwargs)
+
+
+def update_fazione(fazione_id, nome, **kwargs):
+    return _aggiorna_per_id("fazioni", fazione_id, nome, kwargs)
+
+
+def update_location(location_id, nome, **kwargs):
+    return _aggiorna_per_id("locations", location_id, nome, kwargs)
+
+
+def update_quest(quest_id, nome, **kwargs):
+    return _aggiorna_per_id("quest", quest_id, nome, kwargs)
+
+
+def esiste_nome(tabella, nome):
+    """True se in tabella c'è già una voce con questo nome."""
+    if tabella not in _TABELLE_CON_NOME:
+        raise ValueError(f"Tabella non consentita: {tabella}")
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(f"SELECT 1 FROM {tabella} WHERE nome = %s", (nome,))
+    trovato = cur.fetchone() is not None
     cur.close()
     conn.close()
-    return quest_id
+    return trovato
+
 
 def upsert_quest(nome, **kwargs):
     _valida_nomi_colonna(kwargs)

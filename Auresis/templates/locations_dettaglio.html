@@ -69,11 +69,13 @@
 </div>
 {% endif %}
 
+{% if not modalita_giocatrice %}
 <div class="actions-row">
     <a class="btn btn--ghost" href="{{ url_for('edita_location', location_id=location.id) }}">Modifica</a>
     <form method="POST" action="{{ url_for('elimina_location', location_id=location.id) }}" onsubmit="return confirm('Eliminare definitivamente questo luogo dal registro?');" style="display:inline;">
         <button type="submit" class="btn btn--danger">Elimina</button>
     </form>
 </div>
+{% endif %}
 
 {% endblock %}

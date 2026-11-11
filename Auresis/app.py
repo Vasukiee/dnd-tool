@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, make_response, abort
+from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash
 from werkzeug.utils import secure_filename
 
@@ -159,6 +160,71 @@ def _cache_statici(response):
     return response
 
 
+@app.after_request
+def _header_di_sicurezza(response):
+    """Header difensivi su ogni risposta: niente MIME sniffing, niente pagina
+    incorniciata da altri siti (clickjacking), referrer ridotto verso l'esterno
+    (gli URL del Registro non finiscono nei log di YouTube o dei font)."""
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return response
+
+
+_TITOLI_ERRORE = {
+    400: "Richiesta non valida",
+    403: "Accesso negato",
+    404: "Pagina non trovata",
+    405: "Azione non consentita",
+    413: "File troppo grande",
+    429: "Troppi tentativi",
+    500: "Qualcosa si è rotto",
+}
+_SPIEGAZIONI_ERRORE = {
+    400: "La richiesta non è arrivata integra. Se avevi la pagina aperta da molto, ricaricala e riprova.",
+    403: "Questa azione è riservata al master.",
+    404: "Nel Registro non c'è nulla a questo indirizzo.",
+    405: "Questa pagina non accetta l'azione richiesta.",
+    413: "Il file supera il limite di 16 MB.",
+    429: "Aspetta qualche minuto prima di riprovare.",
+    500: "L'errore è stato annotato nel log del server. I dati già salvati non sono stati toccati.",
+}
+
+
+def _vuole_json():
+    return request.is_json or request.accept_mimetypes.best == "application/json"
+
+
+@app.errorhandler(HTTPException)
+def _pagina_errore_http(errore):
+    codice = errore.code or 500
+    if _vuole_json():
+        return jsonify({"ok": False, "errore": errore.description or errore.name}), codice
+    try:
+        return render_template(
+            "errore.html", active=None, codice=codice,
+            titolo=_TITOLI_ERRORE.get(codice, errore.name),
+            spiegazione=_SPIEGAZIONI_ERRORE.get(codice, errore.description),
+        ), codice
+    except Exception:  # noqa: BLE001 - la pagina d'errore non deve mai fallire a sua volta
+        return errore.get_response()
+
+
+@app.errorhandler(Exception)
+def _pagina_errore_interno(errore):
+    if app.debug:
+        raise errore  # in debug resta il traceback interattivo di Werkzeug
+    app.logger.exception("Errore non gestito su %s %s", request.method, request.path)
+    if _vuole_json():
+        return jsonify({"ok": False, "errore": "Errore interno"}), 500
+    try:
+        return render_template("errore.html", active=None, codice=500,
+                               titolo=_TITOLI_ERRORE[500],
+                               spiegazione=_SPIEGAZIONI_ERRORE[500]), 500
+    except Exception:  # noqa: BLE001
+        return "Errore interno", 500
+
+
 _versioni_statici = {}
 
 
@@ -196,7 +262,38 @@ solo_master = richiedi_master
 
 
 def _int_or_none(value):
-    return int(value) if value else None
+    """Intero da un campo di form; vuoto o non numerico diventa None (un
+    valore scritto male non deve far cadere la pagina con un errore 500)."""
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _int_o(value, default=0):
+    numero = _int_or_none(value)
+    return default if numero is None else numero
+
+
+def _url_interno(url):
+    """Destinazione di un redirect presa dalla richiesta: solo percorsi di
+    questo sito. "//altro.sito" e "/\\altro.sito" iniziano con "/" ma il
+    browser li legge come un altro host (open redirect)."""
+    if not url or not url.startswith("/") or url.startswith("//") or "\\" in url:
+        return "/"
+    return url
+
+
+def _solo_visibili(voci):
+    return [v for v in voci or [] if v.get("visibile_giocatrice")]
+
+
+def _risposta_toggle_visibile(visibile, lista):
+    """Dopo un cambio di visibilità: JSON se la richiesta arriva da script
+    (la scheda si aggiorna sul posto), altrimenti si torna alla lista."""
+    if _vuole_json():
+        return jsonify({"ok": True, "visibile": bool(visibile)})
+    return redirect(url_for(lista))
 
 
 def _kwargs_da_form(form, campi, svuota=False):
@@ -247,10 +344,12 @@ def mappa_relazioni_json():
     locations = db.get_all_locations_full()
     fazioni = db.get_all_fazioni_full()
 
+    legami_luoghi, legami_npc = db.get_legami_quest()
+
     if solo_visibili:
-        npc_list = [n for n in npc_list if n.get("visibile_giocatrice")]
-        quest_list = [q for q in quest_list if q.get("visibile_giocatrice")]
-        locations = [l for l in locations if l.get("visibile_giocatrice")]
+        npc_list = _solo_visibili(npc_list)
+        quest_list = _solo_visibili(quest_list)
+        locations = _solo_visibili(locations)
 
     npc_ids = {n["id"] for n in npc_list}
     quest_ids = {q["id"] for q in quest_list}
@@ -296,12 +395,14 @@ def mappa_relazioni_json():
     for q in quest_list:
         add_node("quest", q["id"], q.get("nome"), url_for("dettaglio_quest", quest_id=q["id"]),
                  q.get("stato") or q.get("tipo") or "")
-        for l in db.get_locations_per_quest(q["id"]):
-            if l.get("id") in location_ids:
-                add_link(f"quest:{q['id']}", f"luogo:{l['id']}", "scenario", "luogo")
-        for n in db.get_npc_per_quest(q["id"]):
-            if n.get("id") in npc_ids:
-                add_link(f"quest:{q['id']}", f"npc:{n['id']}", "coinvolge", n.get("ruolo_nella_quest") or "coinvolge")
+
+    for legame in legami_luoghi:
+        if legame["quest_id"] in quest_ids and legame["location_id"] in location_ids:
+            add_link(f"quest:{legame['quest_id']}", f"luogo:{legame['location_id']}", "scenario", "luogo")
+    for legame in legami_npc:
+        if legame["quest_id"] in quest_ids and legame["npc_id"] in npc_ids:
+            add_link(f"quest:{legame['quest_id']}", f"npc:{legame['npc_id']}", "coinvolge",
+                     legame.get("ruolo_nella_quest") or "coinvolge")
 
     return jsonify({"nodes": nodes, "links": links})
 
@@ -323,7 +424,10 @@ def copioni_indice():
         s["completata"] = completate_map.get(s["numero"], False)
         s["is_template"] = (s["numero"] == SESSIONE_TEMPLATE_NUMERO)
 
-    return render_template("copioni_indice.html", active="copioni", sessioni=sessioni)
+    # Numero proposto per il prossimo copione: quello dopo l'ultimo esistente.
+    prossima_sessione = max([s["numero"] for s in sessioni], default=0) + 1
+    return render_template("copioni_indice.html", active="copioni", sessioni=sessioni,
+                           prossima_sessione=prossima_sessione)
 
 
 @app.route("/copioni/<int:numero_sessione>")
@@ -358,7 +462,10 @@ def copioni_dettaglio(numero_sessione):
 @app.route("/copioni/nuovo", methods=["POST"])
 @solo_master
 def nuovo_copione():
-    numero_sessione = int(request.form.get("numero_sessione", 0))
+    numero_sessione = _int_or_none(request.form.get("numero_sessione"))
+    if numero_sessione is None or numero_sessione < 0:
+        flash("Indica il numero della sessione.")
+        return redirect(url_for("copioni_indice"))
     esistente = copioni.get_testo_sessione(numero_sessione)
     if not esistente:
         titolo = f"Sessione {numero_sessione}: Nuovo Capitolo"
@@ -426,11 +533,34 @@ def copioni_toggle_completata(numero_sessione):
 
 # --- NPC ---
 
+def _nome_da_form():
+    """Nome della scheda, senza spazi ai bordi; se manca, 400 invece di un 500."""
+    nome = (request.form.get("nome") or "").strip()
+    if not nome:
+        abort(400, description="Il nome è obbligatorio.")
+    return nome
+
+
+def _contaminazione(valore):
+    """Livello di Auris Cancer, sempre dentro la scala 0-5."""
+    return max(0, min(5, _int_o(valore, 0)))
+
+
+def _messaggio_salvataggio(tipo, nome, esisteva, salvato="salvato"):
+    if esisteva:
+        return (f"{tipo} '{nome}' esisteva già: la scheda è stata aggiornata "
+                f"con i dati inseriti, senza creare un doppione.")
+    return f"{tipo} '{nome}' {salvato}."
+
+
 @app.route("/npc")
 def lista_npc():
     npc_list = db.get_all_npc_full()
     if vista_ristretta():
-        npc_list = [n for n in npc_list if n.get("visibile_giocatrice")]
+        npc_list = _solo_visibili(npc_list)
+        for n in npc_list:
+            if not n.get("location_visibile"):
+                n["location_nome"] = None
     return render_template("npc_lista.html", active="npc", npc_list=npc_list)
 
 
@@ -443,6 +573,11 @@ def dettaglio_npc(npc_id):
     if vista_ristretta() and not npc.get("visibile_giocatrice"):
         flash("Questo personaggio non è ancora disponibile.")
         return redirect(url_for("lista_npc"))
+    if vista_ristretta():
+        # Niente nomi di incarichi o luoghi che la giocatrice non conosce ancora.
+        npc["quest_collegate"] = _solo_visibili(npc["quest_collegate"])
+        if not npc.get("location_visibile"):
+            npc["location_nome"] = None
     return render_template("npc_dettaglio.html", active="npc", npc=npc)
 
 
@@ -454,15 +589,17 @@ def nuovo_npc():
             "ruolo", "stato", "relazione_pg", "descrizione_breve", "note_caratteriali", "note"
         ])
         if request.form.get("fazione_id"):
-            kwargs["fazione_id"] = int(request.form["fazione_id"])
+            kwargs["fazione_id"] = _int_or_none(request.form["fazione_id"])
         if request.form.get("location_attuale_id"):
-            kwargs["location_attuale_id"] = int(request.form["location_attuale_id"])
+            kwargs["location_attuale_id"] = _int_or_none(request.form["location_attuale_id"])
         if request.form.get("livello_contaminazione"):
-            kwargs["livello_contaminazione"] = int(request.form["livello_contaminazione"])
+            kwargs["livello_contaminazione"] = _contaminazione(request.form["livello_contaminazione"])
         if request.form.get("ultima_apparizione_sessione"):
-            kwargs["ultima_apparizione_sessione"] = int(request.form["ultima_apparizione_sessione"])
-        npc_id = db.upsert_npc(request.form["nome"], **kwargs)
-        flash(f"Personaggio '{request.form['nome']}' salvato.")
+            kwargs["ultima_apparizione_sessione"] = _int_or_none(request.form["ultima_apparizione_sessione"])
+        nome = _nome_da_form()
+        esisteva = db.esiste_nome("npc", nome)
+        npc_id = db.upsert_npc(nome, **kwargs)
+        flash(_messaggio_salvataggio("Personaggio", nome, esisteva))
         return redirect(url_for("dettaglio_npc", npc_id=npc_id))
 
     fazioni = db.get_all_fazioni_full()
@@ -484,10 +621,15 @@ def edita_npc(npc_id):
         ], svuota=True)
         kwargs["fazione_id"] = _int_or_none(request.form.get("fazione_id"))
         kwargs["location_attuale_id"] = _int_or_none(request.form.get("location_attuale_id"))
-        kwargs["livello_contaminazione"] = int(request.form.get("livello_contaminazione") or 0)
+        kwargs["livello_contaminazione"] = _contaminazione(request.form.get("livello_contaminazione"))
         kwargs["ultima_apparizione_sessione"] = _int_or_none(request.form.get("ultima_apparizione_sessione"))
-        db.upsert_npc(request.form["nome"], **kwargs)
-        flash(f"Personaggio '{request.form['nome']}' aggiornato.")
+        nome = _nome_da_form()
+        try:
+            db.update_npc(npc_id, nome, **kwargs)
+        except db.NomeDuplicato:
+            flash(f"Esiste già un altro personaggio di nome '{nome}': scegli un nome diverso.")
+            return redirect(url_for("edita_npc", npc_id=npc_id))
+        flash(f"Personaggio '{nome}' aggiornato.")
         return redirect(url_for("dettaglio_npc", npc_id=npc_id))
 
     fazioni = db.get_all_fazioni_full()
@@ -506,8 +648,9 @@ def elimina_npc(npc_id):
 @app.route("/npc/<int:npc_id>/toggle-visibile", methods=["POST"])
 @solo_master
 def npc_toggle_visibile(npc_id):
-    db.set_npc_visibile(npc_id, not db.get_npc_visibile(npc_id))
-    return redirect(url_for("lista_npc"))
+    visibile = not db.get_npc_visibile(npc_id)
+    db.set_npc_visibile(npc_id, visibile)
+    return _risposta_toggle_visibile(visibile, "lista_npc")
 
 
 # --- FAZIONI ---
@@ -524,6 +667,9 @@ def dettaglio_fazione(fazione_id):
     if not fazione:
         flash("Fazione non trovata.")
         return redirect(url_for("lista_fazioni"))
+    if vista_ristretta():
+        fazione["membri"] = _solo_visibili(fazione["membri"])
+        fazione["territori"] = _solo_visibili(fazione["territori"])
     return render_template("fazioni_dettaglio.html", active="fazioni", fazione=fazione)
 
 
@@ -533,9 +679,11 @@ def nuova_fazione():
     if request.method == "POST":
         kwargs = _kwargs_da_form(request.form, ["nome_popolare", "ideologia", "territorio", "stato_attuale", "note"])
         kwargs["relazione_pg"] = request.form.get("relazione_pg", "neutrale")
-        kwargs["attiva"] = int(request.form.get("attiva", 1))
-        db.upsert_fazione(request.form["nome"], **kwargs)
-        flash(f"Fazione '{request.form['nome']}' salvata.")
+        kwargs["attiva"] = _int_o(request.form.get("attiva"), 1)
+        nome = _nome_da_form()
+        esisteva = db.esiste_nome("fazioni", nome)
+        db.upsert_fazione(nome, **kwargs)
+        flash(_messaggio_salvataggio("Fazione", nome, esisteva, salvato="salvata"))
         return redirect(url_for("lista_fazioni"))
     return render_template("fazioni_form.html", active="fazioni", fazione=None)
 
@@ -551,9 +699,14 @@ def edita_fazione(fazione_id):
     if request.method == "POST":
         kwargs = _kwargs_da_form(request.form, ["nome_popolare", "ideologia", "territorio", "stato_attuale", "note"], svuota=True)
         kwargs["relazione_pg"] = request.form.get("relazione_pg", "neutrale")
-        kwargs["attiva"] = int(request.form.get("attiva", 1))
-        db.upsert_fazione(request.form["nome"], **kwargs)
-        flash(f"Fazione '{request.form['nome']}' aggiornata.")
+        kwargs["attiva"] = _int_o(request.form.get("attiva"), 1)
+        nome = _nome_da_form()
+        try:
+            db.update_fazione(fazione_id, nome, **kwargs)
+        except db.NomeDuplicato:
+            flash(f"Esiste già un'altra fazione di nome '{nome}': scegli un nome diverso.")
+            return redirect(url_for("edita_fazione", fazione_id=fazione_id))
+        flash(f"Fazione '{nome}' aggiornata.")
         return redirect(url_for("dettaglio_fazione", fazione_id=fazione_id))
 
     return render_template("fazioni_form.html", active="fazioni", fazione=fazione)
@@ -586,6 +739,9 @@ def dettaglio_location(location_id):
     if vista_ristretta() and not location.get("visibile_giocatrice"):
         flash("Questo luogo non è ancora disponibile.")
         return redirect(url_for("lista_locations"))
+    if vista_ristretta():
+        location["npc_presenti"] = _solo_visibili(location["npc_presenti"])
+        location["quest_collegate"] = _solo_visibili(location["quest_collegate"])
     return render_template("locations_dettaglio.html", active="locations", location=location)
 
 
@@ -595,9 +751,11 @@ def nuova_location():
     if request.method == "POST":
         kwargs = _kwargs_da_form(request.form, ["tipo", "descrizione_breve", "stato_attuale", "note"])
         if request.form.get("fazione_controllante_id"):
-            kwargs["fazione_controllante_id"] = int(request.form["fazione_controllante_id"])
-        db.upsert_location(request.form["nome"], **kwargs)
-        flash(f"Luogo '{request.form['nome']}' salvato.")
+            kwargs["fazione_controllante_id"] = _int_or_none(request.form["fazione_controllante_id"])
+        nome = _nome_da_form()
+        esisteva = db.esiste_nome("locations", nome)
+        db.upsert_location(nome, **kwargs)
+        flash(_messaggio_salvataggio("Luogo", nome, esisteva))
         return redirect(url_for("lista_locations"))
 
     fazioni = db.get_all_fazioni_full()
@@ -615,12 +773,17 @@ def edita_location(location_id):
     if request.method == "POST":
         kwargs = _kwargs_da_form(request.form, ["tipo", "descrizione_breve", "stato_attuale", "note"], svuota=True)
         kwargs["fazione_controllante_id"] = _int_or_none(request.form.get("fazione_controllante_id"))
-        db.upsert_location(request.form["nome"], **kwargs)
+        nome = _nome_da_form()
+        try:
+            db.update_location(location_id, nome, **kwargs)
+        except db.NomeDuplicato:
+            flash(f"Esiste già un altro luogo di nome '{nome}': scegli un nome diverso.")
+            return redirect(url_for("edita_location", location_id=location_id))
         errore_sfondo = _salva_sfondo_location_da_form(location_id)
         if errore_sfondo:
-            flash(f"Luogo '{request.form['nome']}' aggiornato, ma lo sfondo non è stato salvato: {errore_sfondo}")
+            flash(f"Luogo '{nome}' aggiornato, ma lo sfondo non è stato salvato: {errore_sfondo}")
             return redirect(url_for("edita_location", location_id=location_id))
-        flash(f"Luogo '{request.form['nome']}' aggiornato.")
+        flash(f"Luogo '{nome}' aggiornato.")
         return redirect(url_for("dettaglio_location", location_id=location_id))
 
     fazioni = db.get_all_fazioni_full()
@@ -680,17 +843,18 @@ def elimina_location(location_id):
 @app.route("/locations/<int:location_id>/toggle-visibile", methods=["POST"])
 @solo_master
 def location_toggle_visibile(location_id):
-    db.set_location_visibile(location_id, not db.get_location_visibile(location_id))
-    return redirect(url_for("lista_locations"))
+    visibile = not db.get_location_visibile(location_id)
+    db.set_location_visibile(location_id, visibile)
+    return _risposta_toggle_visibile(visibile, "lista_locations")
 
 
 # --- QUEST ---
 
 @app.route("/quest")
 def lista_quest():
-    quest_list = db.get_all_quest_full()
+    quest_list = db.get_all_quest_full(solo_luoghi_visibili=vista_ristretta())
     if vista_ristretta():
-        quest_list = [q for q in quest_list if q.get("visibile_giocatrice")]
+        quest_list = _solo_visibili(quest_list)
     return render_template("quest_lista.html", active="quest", quest_list=quest_list)
 
 
@@ -703,6 +867,9 @@ def dettaglio_quest(quest_id):
     if vista_ristretta() and not quest.get("visibile_giocatrice"):
         flash("Questo incarico non è ancora disponibile.")
         return redirect(url_for("lista_quest"))
+    if vista_ristretta():
+        quest["npc_coinvolti"] = _solo_visibili(quest["npc_coinvolti"])
+        quest["locations_collegate"] = _solo_visibili(quest["locations_collegate"])
     return render_template("quest_dettaglio.html", active="quest", quest=quest)
 
 
@@ -716,15 +883,18 @@ def nuova_quest():
         location_ids = request.form.getlist("location_ids")
         if not location_ids and request.form.get("location_id"):
             location_ids = [request.form["location_id"]]
+        location_ids = [i for i in map(_int_or_none, location_ids) if i is not None]
         if location_ids:
-            kwargs["location_id"] = int(location_ids[0])
+            kwargs["location_id"] = location_ids[0]
         if request.form.get("sessione_inizio"):
-            kwargs["sessione_inizio"] = int(request.form["sessione_inizio"])
+            kwargs["sessione_inizio"] = _int_or_none(request.form["sessione_inizio"])
         if request.form.get("sessione_fine"):
-            kwargs["sessione_fine"] = int(request.form["sessione_fine"])
-        quest_id = db.upsert_quest(request.form["nome"], **kwargs)
+            kwargs["sessione_fine"] = _int_or_none(request.form["sessione_fine"])
+        nome = _nome_da_form()
+        esisteva = db.esiste_nome("quest", nome)
+        quest_id = db.upsert_quest(nome, **kwargs)
         db.set_locations_per_quest(quest_id, location_ids)
-        flash(f"Incarico '{request.form['nome']}' salvato.")
+        flash(_messaggio_salvataggio("Incarico", nome, esisteva))
         return redirect(url_for("dettaglio_quest", quest_id=quest_id))
 
     locations = db.get_all_locations()
@@ -746,12 +916,18 @@ def edita_quest(quest_id):
         location_ids = request.form.getlist("location_ids")
         if not location_ids and request.form.get("location_id"):
             location_ids = [request.form["location_id"]]
-        kwargs["location_id"] = int(location_ids[0]) if location_ids else None
+        location_ids = [i for i in map(_int_or_none, location_ids) if i is not None]
+        kwargs["location_id"] = location_ids[0] if location_ids else None
         kwargs["sessione_inizio"] = _int_or_none(request.form.get("sessione_inizio"))
         kwargs["sessione_fine"] = _int_or_none(request.form.get("sessione_fine"))
-        updated_id = db.update_quest(quest_id, request.form["nome"], **kwargs)
-        db.set_locations_per_quest(updated_id, location_ids)
-        flash(f"Incarico '{request.form['nome']}' aggiornato.")
+        nome = _nome_da_form()
+        try:
+            db.update_quest(quest_id, nome, **kwargs)
+        except db.NomeDuplicato:
+            flash(f"Esiste già un altro incarico di nome '{nome}': scegli un nome diverso.")
+            return redirect(url_for("edita_quest", quest_id=quest_id))
+        db.set_locations_per_quest(quest_id, location_ids)
+        flash(f"Incarico '{nome}' aggiornato.")
         return redirect(url_for("dettaglio_quest", quest_id=quest_id))
 
     locations = db.get_all_locations()
@@ -769,8 +945,9 @@ def elimina_quest(quest_id):
 @app.route("/quest/<int:quest_id>/toggle-visibile", methods=["POST"])
 @solo_master
 def quest_toggle_visibile(quest_id):
-    db.set_quest_visibile(quest_id, not db.get_quest_visibile(quest_id))
-    return redirect(url_for("lista_quest"))
+    visibile = not db.get_quest_visibile(quest_id)
+    db.set_quest_visibile(quest_id, visibile)
+    return _risposta_toggle_visibile(visibile, "lista_quest")
 
 
 @app.route("/quest/<int:quest_id>/collega-npc", methods=["GET", "POST"])
@@ -782,7 +959,10 @@ def collega_npc_quest(quest_id):
         return redirect(url_for("lista_quest"))
 
     if request.method == "POST":
-        npc_id = int(request.form["npc_id"])
+        npc_id = _int_or_none(request.form.get("npc_id"))
+        if npc_id is None:
+            flash("Scegli un personaggio da collegare.")
+            return redirect(url_for("collega_npc_quest", quest_id=quest_id))
         ruolo = db.testo_o_null(request.form.get("ruolo_nella_quest"))
         db.link_npc_quest(quest_id, npc_id, ruolo_nella_quest=ruolo)
         flash("Personaggio collegato all'incarico.")
@@ -793,6 +973,16 @@ def collega_npc_quest(quest_id):
 
 
 # --- EVENTI ---
+
+def _evento_da_form():
+    """(sessione, riassunto) di un evento; (None, None) con un avviso se manca qualcosa."""
+    sessione = _int_or_none(request.form.get("sessione"))
+    riassunto = (request.form.get("riassunto") or "").strip()
+    if sessione is None or not riassunto:
+        flash("Servono il numero della sessione e un riassunto.")
+        return None, None
+    return sessione, riassunto
+
 
 @app.route("/eventi")
 def lista_eventi():
@@ -805,9 +995,12 @@ def lista_eventi():
 def nuovo_evento():
     if request.method == "POST":
         location_id = _int_or_none(request.form.get("location_id"))
+        sessione, riassunto = _evento_da_form()
+        if sessione is None:
+            return redirect(url_for("nuovo_evento"))
         db.add_evento(
-            sessione=int(request.form["sessione"]),
-            riassunto=request.form["riassunto"],
+            sessione=sessione,
+            riassunto=riassunto,
             conseguenze_attive=db.testo_o_null(request.form.get("conseguenze_attive")),
             location_id=location_id,
         )
@@ -827,10 +1020,13 @@ def edita_evento(evento_id):
         return redirect(url_for("lista_eventi"))
 
     if request.method == "POST":
+        sessione, riassunto = _evento_da_form()
+        if sessione is None:
+            return redirect(url_for("edita_evento", evento_id=evento_id))
         db.update_evento(
             evento_id,
-            sessione=int(request.form["sessione"]),
-            riassunto=request.form["riassunto"],
+            sessione=sessione,
+            riassunto=riassunto,
             conseguenze_attive=db.testo_o_null(request.form.get("conseguenze_attive")),
             location_id=_int_or_none(request.form.get("location_id")),
         )
@@ -902,8 +1098,12 @@ def lista_fatti():
 def nuovo_fatto():
     if request.method == "POST":
         sessione = _int_or_none(request.form.get("sessione"))
+        descrizione = (request.form.get("descrizione") or "").strip()
+        if not descrizione:
+            flash("Scrivi la verità da registrare.")
+            return redirect(url_for("nuovo_fatto"))
         db.add_fatto_accertato(
-            descrizione=request.form["descrizione"],
+            descrizione=descrizione,
             sessione=sessione,
             rilevanza=request.form.get("rilevanza", "media"),
         )
@@ -1075,7 +1275,7 @@ def pg_stato_page():
         kwargs = _kwargs_da_form(request.form, [
             "nome", "condizione_fisica", "ferite_attive", "equipaggiamento", "risorse", "abilita_acquisite", "note"
         ], svuota=True)
-        kwargs["sessione_corrente"] = int(request.form.get("sessione_corrente") or 0)
+        kwargs["sessione_corrente"] = _int_o(request.form.get("sessione_corrente"), 0)
         kwargs["location_attuale_id"] = _int_or_none(request.form.get("location_attuale_id"))
         db.set_pg_stato(**kwargs)
         flash("Stato del personaggio aggiornato.")
@@ -1100,7 +1300,9 @@ def toggle_modalita_giocatrice():
     else:
         session["modalita_giocatrice"] = True
         session.pop("sbloccato", None)
-    return redirect(request.referrer or url_for("home"))
+    provenienza = urlparse(request.referrer or "")
+    ritorno = provenienza.path + (f"?{provenienza.query}" if provenienza.query else "")
+    return redirect(_url_interno(ritorno))
 
 
 # Anti-forza-bruta sulla password master: massimo N tentativi falliti per IP
@@ -1123,14 +1325,10 @@ def _sblocco_in_lockout(ip):
 
 @app.route("/sblocca-modalita", methods=["GET", "POST"])
 def sblocca_modalita():
-    next_url = request.args.get("next") or "/"
-    if not next_url.startswith("/"):
-        next_url = "/"
+    next_url = _url_interno(request.args.get("next"))
 
     if request.method == "POST":
-        next_url = request.form.get("next") or "/"
-        if not next_url.startswith("/"):
-            next_url = "/"
+        next_url = _url_interno(request.form.get("next"))
         ip = request.remote_addr or "?"
         if _sblocco_in_lockout(ip):
             flash("Troppi tentativi falliti. Riprova tra qualche minuto.")
@@ -1206,7 +1404,7 @@ def audio_nuova():
                 categoria="",
                 tipo_sorgente="youtube",
                 youtube_id=request.form["youtube_id"],
-                timestamp_inizio=int(request.form.get("timestamp_inizio") or 0),
+                timestamp_inizio=_int_o(request.form.get("timestamp_inizio"), 0),
                 note=db.testo_o_null(request.form.get("note")),
                 location_id=request.form.get("location_id") or None,
                 quest_id=request.form.get("quest_id") or None,
@@ -1257,7 +1455,7 @@ def audio_modifica(traccia_id):
             campi["timestamp_inizio"] = 0
         else:
             campi["youtube_id"] = request.form["youtube_id"]
-            campi["timestamp_inizio"] = int(request.form.get("timestamp_inizio") or 0)
+            campi["timestamp_inizio"] = _int_o(request.form.get("timestamp_inizio"), 0)
             campi["file_path"] = None
         db.update_traccia_audio(traccia_id, **campi)
         _salva_tag_da_form(traccia_id, request.form.get("tag", ""))
@@ -1365,6 +1563,33 @@ def audio_json():
 @app.route("/ping")
 def ping():
     return '', 204
+
+
+@app.route("/salute")
+def salute():
+    """Controllo di salute che passa dal database, al contrario di /ping.
+
+    Serve a due cose: tenere attivo il progetto Supabase (il piano gratuito lo
+    mette in pausa dopo una settimana senza attività sul database) e misurare
+    quanto dista il database dal server: `db_ms` è il tempo di una query
+    minima, cioè il costo fisso che ogni query dell'app paga in rete."""
+    try:
+        conn = db.get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT 1")  # la prima può includere l'apertura della connessione
+        cur.fetchone()
+        t0 = time.perf_counter()
+        cur.execute("SELECT 1")
+        cur.fetchone()
+        db_ms = round((time.perf_counter() - t0) * 1000, 1)
+        cur.close()
+        conn.close()
+    except Exception:  # noqa: BLE001 - qualunque guasto del database è "non in salute"
+        app.logger.exception("Controllo di salute fallito")
+        return jsonify({"ok": False}), 503
+    risposta = jsonify({"ok": True, "db_ms": db_ms})
+    risposta.headers["Cache-Control"] = "no-store"
+    return risposta
 
 
 if __name__ == "__main__":

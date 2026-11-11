@@ -6753,3 +6753,72 @@ html.indagini-player-page.has-react-motion .main > * {
     content: ' ⏳';
     color: var(--gold);
 }
+
+/* ============================================================
+   Sezione: campi fuori da .form-field (sblocco, nuovo copione)
+   ============================================================ */
+
+.form-label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--bone-dim);
+    margin-bottom: 6px;
+}
+
+.form-input {
+    width: 100%;
+    background: var(--ink);
+    border: 1px solid var(--ink-line);
+    color: var(--bone);
+    padding: 10px 12px;
+    font-family: var(--font-body);
+    font-size: 0.92rem;
+    border-radius: 0;
+}
+
+.form-input:focus {
+    outline: 2px solid var(--gold);
+    outline-offset: 1px;
+    border-color: var(--gold);
+}
+
+/* ============================================================
+   Sezione: pagina d'errore
+   ============================================================ */
+
+.error-state {
+    max-width: 640px;
+    padding: 40px 28px 36px;
+}
+
+.error-state__code {
+    font-family: var(--font-display);
+    font-size: clamp(4rem, 14vw, 7rem);
+    line-height: 1;
+    color: var(--gold);
+    opacity: 0.35;
+    margin-bottom: 18px;
+}
+
+.error-state__actions {
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 24px;
+}
+
+/* ============================================================
+   Sezione: visibilità cambiata sul posto (senza ricaricare la lista)
+   ============================================================ */
+
+.completata-toggle[aria-busy="true"] {
+    opacity: 0.55;
+    cursor: progress;
+}
+
+.completata-toggle.is-errore {
+    border-color: var(--rust-bright);
+    color: var(--rust-bright);
+}

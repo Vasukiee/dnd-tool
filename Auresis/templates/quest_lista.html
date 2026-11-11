@@ -53,7 +53,7 @@
             {% endif %}
         </div>
         {% if not modalita_giocatrice %}
-        <form action="{{ url_for('quest_toggle_visibile', quest_id=q.id) }}" class="card__visibility-form"
+        <form action="{{ url_for('quest_toggle_visibile', quest_id=q.id) }}" class="card__visibility-form" data-visibility-toggle
               method="post">
             <button type="submit" class="completata-toggle {% if q.visibile_giocatrice %}completata-toggle--attivo{% endif %}">
                 <span class="completata-toggle__check">{% if q.visibile_giocatrice %}✓{% endif %}</span>

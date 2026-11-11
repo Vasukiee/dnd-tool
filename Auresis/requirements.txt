@@ -1,8 +1,7 @@
-flask
-gunicorn
-psycopg2-binary
-markdown
-beautifulsoup4
-python-dotenv
-requests
-Pillow
+flask>=3.0,<4
+gunicorn>=22
+psycopg2-binary>=2.9,<3
+markdown>=3.5,<4
+beautifulsoup4>=4.12,<5
+python-dotenv>=1.0,<2
+Pillow>=10

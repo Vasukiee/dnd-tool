@@ -474,7 +474,8 @@
 
     let pollInCorso = false;
     async function pollLavagna() {
-        if (pollInCorso || fase === "chiusa" || fase === "chiusura") return;
+        // scheda in secondo piano: niente richieste a vuoto (si riallinea al ritorno)
+        if (pollInCorso || document.hidden || fase === "chiusa" || fase === "chiusura") return;
         pollInCorso = true;
         try {
             const resp = await fetch(cfg.endpoint);

@@ -17,9 +17,12 @@ def minify_css(css: str) -> str:
 
 def ottimizza_e_minimizza_assets(app):
     """
-    Scansiona i file statici e genera le versioni minimizzate (.min.)
-    solo se il file originale è stato modificato più di recente o se il .min non esiste.
-    Viene chiamato al boot dell'app.
+    Genera le versioni minimizzate (.min.) dei file statici, al boot dell'app.
+
+    Il .min si riscrive solo se il suo contenuto è diverso da quello atteso.
+    Il confronto è sul contenuto e non sulle date dei file: dopo un `git clone`
+    o un deploy le date sono quelle del checkout, e un .min vecchio rimasto nel
+    repository risultava "aggiornato" pur non corrispondendo più al sorgente.
     """
     static_folder = app.static_folder
     if not static_folder or not os.path.isdir(static_folder):
@@ -39,28 +42,30 @@ def ottimizza_e_minimizza_assets(app):
         min_filename = f"{nome}.min{estensione}"
         min_path = os.path.join(static_folder, min_filename)
 
-        necessita_aggiornamento = True
-        if os.path.exists(min_path):
-            mtime_original = os.path.getmtime(original_path)
-            mtime_min = os.path.getmtime(min_path)
-            # Aggiungiamo un piccolo buffer per via della precisione filesystem
-            if mtime_min >= mtime_original - 1:
-                necessita_aggiornamento = False
+        with open(original_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        minimized_content = minify_css(content) if estensione == '.css' else content
 
-        if necessita_aggiornamento:
-            with open(original_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+        try:
+            with open(min_path, 'r', encoding='utf-8') as f:
+                if f.read() == minimized_content:
+                    continue
+        except OSError:
+            pass
 
-            if estensione == '.css':
-                minimized_content = minify_css(content)
-            else:
-                # Fallback, passa il contenuto com'è se non riconosciamo il tipo
-                minimized_content = content
-
-            with open(min_path, 'w', encoding='utf-8') as f:
+        # Scrittura atomica: con più worker gunicorn che partono insieme,
+        # nessuno deve poter servire un file scritto a metà.
+        tmp_path = f"{min_path}.{os.getpid()}.tmp"
+        try:
+            with open(tmp_path, 'w', encoding='utf-8') as f:
                 f.write(minimized_content)
+            os.replace(tmp_path, min_path)
+        except OSError as e:
+            # file system in sola lettura: si continua a servire il .min esistente
+            print(f"[ASSETS] Impossibile aggiornare {min_filename}: {e}")
+            continue
 
-            print(f"[ASSETS] Minimizzato: {filename} -> {min_filename}")
+        print(f"[ASSETS] Minimizzato: {filename} -> {min_filename}")
 
 
 SFONDO_LATO_MAX = 1920

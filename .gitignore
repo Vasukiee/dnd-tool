@@ -10,3 +10,5 @@ Auresis/.mcp.json
 Auresis/campagna.db
 Auresis/copioni/
 Auresis/static/scene_gifs/
+Auresis/static/sfondi_luoghi/
+.pytest_cache/

@@ -10,8 +10,9 @@
 {% if not modalita_giocatrice %}
 <div class="actions-row" style="margin-bottom: 28px;">
     <form method="post" action="{{ url_for('nuovo_copione') }}" style="display:flex; gap:12px; align-items:center;">
-        <label style="color:var(--bone-dim);">Nuova sessione:</label>
-        <input type="number" name="numero_sessione" min="1" placeholder="N°" style="width:80px;" required>
+        <label for="numero_sessione" style="color:var(--bone-dim);">Nuova sessione:</label>
+        <input class="form-input" type="number" id="numero_sessione" name="numero_sessione" min="1"
+               value="{{ prossima_sessione }}" placeholder="N°" style="width:96px;" required>
         <button type="submit" class="btn">+ Crea</button>
     </form>
 </div>
